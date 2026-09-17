@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="{{LANG}}" data-theme="light">
+<head><meta charset="utf-8"><title>{{TITLE}}</title>{{HEAD}}
+<style>
+  @page { size: 20in 11.25in; margin: 0; }      /* 1920x1080 @96dpi, 16:9 */
+  /* Print mode: slides.js (body.dw-pdf) paginates inside #slideFrame, then every .slide is
+     shown stacked as its own page. Override site.css's single-frame/one-at-a-time layout. */
+  body.dw-pdf .slide-frame { width: 1920px; height: auto; transform: none; overflow: visible; }
+  /* Pin each slide to a fixed page box + page break, but DON'T set display — slides.js adds
+     .active so site.css's .slide.active[data-layout] grid/flex layouts drive the columns. */
+  body.dw-pdf .slide { height: 1080px; margin: 0; break-after: page; }
+  body.dw-pdf .slide:last-child { break-after: avoid; }
+</style>
+</head>
+<body class="dw-print dw-pdf">
+<div id="slideFrame" class="slide-frame">{{CONTENT}}</div>
+{{PAGEDJS}}
+</body>
+</html>

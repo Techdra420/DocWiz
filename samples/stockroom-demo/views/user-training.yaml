@@ -1,0 +1,106 @@
+# User training — the slide-deck replacement.
+# Structured slide layouts (Slides v2): region content is markdown that may hold inline
+# ::: embed dw:chapter#anchor ::: live-linked blocks. All embeds link user-tagged
+# chapters only. Legacy single-content slides are kept to prove they still normalize.
+id: user-training
+title: User Training
+audience: user
+mode: slides
+slides:
+  # ── 1. section-header ──────────────────────────────────────────────────────────
+  # No regions expected for section-header (SlideLayout.RegionsFor returns []).
+  - layout: section-header
+    title: Stockroom — User Training
+    subtitle: Learn to receive goods, read the screens, and keep stock accurate
+
+  # ── 2. title-content ───────────────────────────────────────────────────────────
+  # body region: authored markdown (bullets) — pure custom content, no embed.
+  - layout: title-content
+    title: What You Will Learn
+    subtitle: This session covers security, startup, and daily operation
+    regions:
+      body: |
+        - **Security** — sign-in rules and session locks
+        - **Daily startup** — step-by-step station power-on
+        - **Receiving goods** — scanning items and confirming shelves
+        - **What to do on a mismatch** — quarantine shelf procedure
+
+  # ── 3. two-column ──────────────────────────────────────────────────────────────
+  # left region: authored markdown; right region: inline embed (live-linked) — both paths.
+  - layout: two-column
+    title: Security Rules & Functions
+    regions:
+      left: |
+        ## Before you start
+
+        - Personal account only, never shared
+        - Never leave a signed-in scanner unattended
+        - Never book on someone else's account
+        - Lock the screen before walking away
+      right: |
+        ::: embed dw:security-summary#security-functions width=80%
+        :::
+
+  # ── 4. big-media ───────────────────────────────────────────────────────────────
+  # media region: inline embed (live-linked), sized to 60% — exercises the embed path
+  # AND the linked-box width/reflow resize on its own.
+  - layout: big-media
+    title: User Screens
+    regions:
+      media: |
+        ::: embed dw:daily-operations#user-screens width=60%
+        :::
+
+  # ── 5. title-content — embeds the receiving-group (group embed fixture) ────────
+  - layout: title-content
+    title: Receiving Goods
+    subtitle: Scan, check, shelve — end-to-end steps
+    regions:
+      body: |
+        ::: embed dw:system-overview#receiving-group
+        :::
+
+  # ── legacy slides carried forward ──────────────────────────────────────────────
+  - include: system-overview#what-it-does
+  - include: security-summary#access-rules
+  - include: daily-operations#daily-startup
+  - title: Running the day
+    include: system-overview#receiving-workflow
+  - markdown: |
+      ## Questions?
+
+      Contact your team lead or the support desk.
+
+  - layout: title-content
+    title: Pagination fixture (long body)
+    regions:
+      body: |
+        This slide intentionally holds far more content than one 1920x1080 canvas can show, to
+        gate the auto-pagination engine. Each line below is a separate paragraph so the
+        paginator has many block boundaries to split on, and there is enough to force at least
+        a two-slide (ideally three-slide) split.
+
+        Paragraph 1 — lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod.
+        Paragraph 2 — tempor incididunt ut labore et dolore magna aliqua ut enim ad minim.
+        Paragraph 3 — veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea.
+        Paragraph 4 — commodo consequat duis aute irure dolor in reprehenderit in voluptate.
+        Paragraph 5 — velit esse cillum dolore eu fugiat nulla pariatur excepteur sint occaecat.
+        Paragraph 6 — cupidatat non proident, sunt in culpa qui officia deserunt mollit anim.
+        Paragraph 7 — id est laborum et dolorum fuga harum quidem rerum facilis est expedita.
+        Paragraph 8 — distinctio nam libero tempore cum soluta nobis est eligendi optio cumque.
+        Paragraph 9 — nihil impedit quo minus id quod maxime placeat facere possimus omnis.
+        Paragraph 10 — voluptas assumenda est omnis dolor repellendus temporibus autem quibusdam.
+        Paragraph 11 — itaque earum rerum hic tenetur a sapiente delectus ut aut reiciendis.
+        Paragraph 12 — voluptatibus maiores alias consequatur aut perferendis doloribus asperiores.
+        Paragraph 13 — repellat nam libero tempore cum soluta nobis est eligendi optio nihil.
+        Paragraph 14 — sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium.
+        Paragraph 15 — doloremque laudantium totam rem aperiam eaque ipsa quae ab illo inventore.
+        Paragraph 16 — veritatis et quasi architecto beatae vitae dicta sunt explicabo nemo enim.
+        Paragraph 17 — ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit sed quia.
+        Paragraph 18 — consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt neque.
+        Paragraph 19 — porro quisquam est qui dolorem ipsum quia dolor sit amet consectetur adipisci.
+        Paragraph 20 — velit sed quia non numquam eius modi tempora incidunt ut labore et dolore.
+        Paragraph 21 — magnam aliquam quaerat voluptatem ut enim ad minima veniam quis nostrum.
+        Paragraph 22 — exercitationem ullam corporis suscipit laboriosam nisi ut aliquid ex ea.
+        Paragraph 23 — commodi consequatur quis autem vel eum iure reprehenderit qui in ea voluptate.
+        Paragraph 24 — velit esse quam nihil molestiae consequatur vel illum qui dolorem eum fugiat.

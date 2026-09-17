@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>PM vendor smoke</title>
+<!-- Vendor health check (VENDORED.md upgrade procedure + headless sweeps): imports
+     every vendored ProseMirror module and mounts a one-paragraph editor. Title and
+     data-pm-smoke flip to OK only when the whole module graph loads and renders. -->
+<script type="importmap">
+{
+  "imports": {
+    "prosemirror-model": "/app/vendor/prosemirror/prosemirror-model/index.js",
+    "prosemirror-state": "/app/vendor/prosemirror/prosemirror-state/index.js",
+    "prosemirror-view": "/app/vendor/prosemirror/prosemirror-view/index.js",
+    "prosemirror-transform": "/app/vendor/prosemirror/prosemirror-transform/index.js",
+    "prosemirror-commands": "/app/vendor/prosemirror/prosemirror-commands/index.js",
+    "prosemirror-keymap": "/app/vendor/prosemirror/prosemirror-keymap/index.js",
+    "prosemirror-history": "/app/vendor/prosemirror/prosemirror-history/index.js",
+    "prosemirror-inputrules": "/app/vendor/prosemirror/prosemirror-inputrules/index.js",
+    "prosemirror-dropcursor": "/app/vendor/prosemirror/prosemirror-dropcursor/index.js",
+    "prosemirror-gapcursor": "/app/vendor/prosemirror/prosemirror-gapcursor/index.js",
+    "prosemirror-schema-list": "/app/vendor/prosemirror/prosemirror-schema-list/index.js",
+    "orderedmap": "/app/vendor/prosemirror/orderedmap/index.js",
+    "w3c-keyname": "/app/vendor/prosemirror/w3c-keyname/index.js",
+    "rope-sequence": "/app/vendor/prosemirror/rope-sequence/index.js"
+  }
+}
+</script>
+</head>
+<body>
+<div id="mount"></div>
+<script type="module">
+  try {
+    const { Schema } = await import('prosemirror-model');
+    const { EditorState } = await import('prosemirror-state');
+    const { EditorView } = await import('prosemirror-view');
+    await import('prosemirror-transform');
+    const { baseKeymap } = await import('prosemirror-commands');
+    const { keymap } = await import('prosemirror-keymap');
+    const { history } = await import('prosemirror-history');
+    await import('prosemirror-inputrules');
+    const { dropCursor } = await import('prosemirror-dropcursor');
+    const { gapCursor } = await import('prosemirror-gapcursor');
+    await import('prosemirror-schema-list');
+
+    const schema = new Schema({
+      nodes: {
+        doc: { content: 'paragraph+' },
+        paragraph: { content: 'text*', toDOM: () => ['p', 0], parseDOM: [{ tag: 'p' }] },
+        text: {},
+      },
+    });
+    const state = EditorState.create({
+      schema,
+      doc: schema.node('doc', null, [schema.node('paragraph', null, [schema.text('vendor graph loads')])]),
+      plugins: [history(), keymap(baseKeymap), dropCursor(), gapCursor()],
+    });
+    const view = new EditorView(document.getElementById('mount'), { state });
+    if (!view.dom.textContent.includes('vendor graph loads'))
+      throw new Error('editor mounted but content missing');
+    document.title = 'PM-OK';
+    document.documentElement.setAttribute('data-pm-smoke', 'ok');
+  } catch (e) {
+    document.title = 'PM-FAIL';
+    document.documentElement.setAttribute('data-pm-smoke', 'fail: ' + (e && e.message || e));
+  }
+</script>
+</body>
+</html>

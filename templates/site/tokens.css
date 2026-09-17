@@ -1,0 +1,141 @@
+/* ==========================================================================
+   DocWiz design tokens — complete drop-in replacement for templates/site/tokens.css
+   Tokens are the ONLY place colors live. :root = light, [data-theme="dark"] = dark.
+   Every existing --dw-* name is preserved; new tokens extend the set.
+   ========================================================================== */
+
+:root {
+  /* ---- Surfaces & text (light) ------------------------------------------ */
+  --dw-bg: #f3f5f7;            /* app/page canvas */
+  --dw-surface: #ffffff;       /* cards, panels, content column */
+  --dw-surface-2: #e9edf1;     /* inset wells: code blocks, table headers, inputs */
+  --dw-text: #1a2530;          /* 14.9:1 on surface — primary text */
+  --dw-muted: #51626f;         /* 6.3:1 on surface — secondary text, AA at any size */
+  --dw-faint: #5f6d78;         /* NEW — tertiary text (paths, timestamps, eyebrow labels); 4.9:1 on --dw-bg; never on --dw-surface-2 */
+  --dw-border: #d3dae1;        /* hairlines, dividers */
+  --dw-border-strong: #aebac5; /* NEW — input borders, table outer frame */
+
+  /* ---- Accent (light) ---------------------------------------------------- */
+  --dw-accent: #1f4e79;        /* 8.6:1 on white — links, primary actions */
+  --dw-accent-strong: #163a5b; /* NEW — hover/pressed of accent */
+  --dw-accent-contrast: #ffffff;
+  --dw-accent-bg: rgba(31, 78, 121, 0.08);
+  --dw-accent-surface: #eef2f6; /* NEW — OPAQUE audience-callout fill (alpha-free so contrast is real on any container); --dw-text 13:1, --dw-accent 7.8:1 */
+  --dw-accent-glow: rgba(31, 78, 121, 0.25);
+
+  /* ---- Semantic (light) — all pass 4.5:1 on white as text ---------------- */
+  --dw-ok: #2e7d32;
+  --dw-ok-bg: rgba(46, 125, 50, 0.10);     /* NEW */
+  --dw-warn: #8f5400;                       /* was #b26a00 (3.6:1, failed AA) */
+  --dw-warn-bg: rgba(143, 84, 0, 0.10);     /* NEW */
+  --dw-bad: #b3261e;
+  --dw-bad-bg: rgba(179, 38, 30, 0.08);     /* NEW */
+
+  /* ---- Chrome (always dark, both themes) --------------------------------- */
+  --dw-chrome: #16222e;
+  --dw-chrome-2: #1b2937;       /* NEW — raised chips on the dark chrome (project tile, nav cluster); defined by --dw-chrome-border, not luminance */
+  --dw-chrome-text: #dfe7ee;
+  --dw-chrome-muted: #8da0b2;   /* NEW — secondary text in the chrome bar */
+  --dw-chrome-border: #253443;  /* NEW — separators inside the chrome bar */
+  --dw-mark: #2f6cae;           /* NEW — brand-mark fill / Build button on chrome (white text 5.4:1) */
+
+  /* ---- Type -------------------------------------------------------------- */
+  --dw-font-ui: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --dw-font-mono: Consolas, ui-monospace, "SF Mono", Menlo, monospace;
+
+  --dw-fs-xs: 12px;    /* meta labels, footers, slide page-number */
+  --dw-fs-sm: 13px;    /* nav, badges, captions, form labels */
+  --dw-fs-md: 15px;    /* body — base reading size */
+  --dw-fs-lg: 17px;    /* h3, lead paragraphs */
+  --dw-fs-xl: 21px;    /* h2 */
+  --dw-fs-2xl: 27px;   /* h1 */
+  --dw-fs-3xl: 34px;   /* welcome hero, view titles */
+
+  --dw-lh-tight: 1.25; /* headings, buttons */
+  --dw-lh-snug: 1.4;   /* nav, table cells, captions */
+  --dw-lh-body: 1.65;  /* article prose */
+
+  --dw-w-regular: 400;
+  --dw-w-medium: 600;  /* Segoe UI Semibold — labels, h3, buttons */
+  --dw-w-bold: 700;    /* h1/h2, brand */
+
+  --dw-track-caps: 0.07em; /* letter-spacing for ALL-CAPS labels */
+
+  /* A4 sheet width (210mm ≈ 794px @96dpi): the article column reads like the
+     standard document page the handover replaces (stakeholder request
+     2026-06-12); article padding plays the role of the page margins. */
+  --dw-measure: 210mm;
+  /* Ceiling for the wide-table breakout (tables may exceed --dw-measure up to
+     this, then scroll horizontally). The viewport allowance beside it in
+     site.css stays screen-derived by design. */
+  --dw-breakout-max: 1200px;
+
+  /* ---- Slide scale (1920×1080 frame; scaled via transform) --------------- */
+  --dw-slide-title: 64px;
+  --dw-slide-h2: 44px;
+  --dw-slide-body: 30px;
+  --dw-slide-meta: 20px;
+
+  /* ---- Space (4px base) --------------------------------------------------- */
+  --dw-s1: 4px;
+  --dw-s2: 8px;
+  --dw-s3: 12px;
+  --dw-s4: 16px;
+  --dw-s5: 24px;
+  --dw-s6: 32px;
+  --dw-s7: 48px;
+  --dw-s8: 64px;
+
+  /* ---- Radius & elevation ------------------------------------------------- */
+  --dw-r0: 4px;   /* NEW — badges, small inputs */
+  --dw-r1: 6px;
+  --dw-r2: 10px;
+  --dw-shadow: 0 1px 3px rgba(16, 24, 32, 0.08);
+  --dw-shadow-2: 0 8px 28px rgba(16, 24, 32, 0.18);  /* NEW — dialogs, toasts */
+  --dw-focus-ring: 0 0 0 3px var(--dw-accent-glow);  /* NEW — every focusable */
+  --dw-backdrop: rgba(10, 15, 20, 0.55);             /* dialog ::backdrop, both themes */
+  --dw-overlay: rgba(8, 12, 16, 0.82);               /* focus/zoom overlay — denser than --dw-backdrop to fully dim content behind */
+
+  /* ---- Editing-chrome save affordance ------------------------------------ */
+  --dw-save-dot: #e0a92b;                  /* bright amber unsaved-dot (editing chrome only; brighter than --dw-warn by design) */
+  --dw-save-dot-halo: rgba(224, 169, 43, 0.22);
+}
+
+[data-theme="dark"] {
+  /* ---- Surfaces & text (dark) — designed pair, not a dimmed copy ---------- */
+  --dw-bg: #0f141a;
+  --dw-surface: #171e27;
+  --dw-surface-2: #11181f;      /* darker than surface: wells recede, cards rise */
+  --dw-text: #e6ebf0;           /* 13.7:1 on surface */
+  --dw-muted: #98a7b6;          /* 6.9:1 on surface */
+  --dw-faint: #8a99a8;          /* NEW — tertiary; 6.4:1 on dark --dw-bg */
+  --dw-border: #2b3744;
+  --dw-border-strong: #3e4d5d;
+
+  --dw-accent: #7fb2e0;         /* 7.4:1 on surface */
+  --dw-accent-strong: #a3c9ec;
+  --dw-accent-contrast: #0c1622;
+  --dw-accent-bg: rgba(127, 178, 224, 0.13);
+  --dw-accent-surface: #1b2632; /* NEW — OPAQUE audience-callout fill for dark; --dw-text ~12:1, --dw-accent ~6.9:1 */
+  --dw-accent-glow: rgba(127, 178, 224, 0.30);
+
+  --dw-ok: #79c47e;
+  --dw-ok-bg: rgba(121, 196, 126, 0.12);
+  --dw-warn: #d9a05b;
+  --dw-warn-bg: rgba(217, 160, 91, 0.12);
+  --dw-bad: #e5736c;
+  --dw-bad-bg: rgba(229, 115, 108, 0.12);
+
+  --dw-chrome: #0b1117;
+  --dw-chrome-2: #16222e;       /* NEW — same role as light; raised chip on the darker chrome */
+  --dw-chrome-text: #d3dde6;
+  --dw-chrome-muted: #7e92a5;
+  --dw-chrome-border: #1d2935;
+  --dw-mark: #2f6cae;           /* NEW — same on dark; sits on the dark chrome */
+
+  --dw-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
+  --dw-shadow-2: 0 10px 32px rgba(0, 0, 0, 0.55);
+
+  --dw-save-dot: #e8b84a;                  /* slightly lifted for the darker chrome; reads as the same gold */
+  --dw-save-dot-halo: rgba(232, 184, 74, 0.26);
+}

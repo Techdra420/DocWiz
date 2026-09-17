@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{DOCTITLE}} — {{CODE}}</title>
+<script>
+  (function () {
+    var t = localStorage.getItem('dw-theme');
+    if (!t) t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+<link rel="stylesheet" href="{{BASE}}_dw/tokens.css">
+<link rel="stylesheet" href="{{BASE}}_dw/site.css">
+</head>
+<body class="ext-frame-body">
+
+<header class="ext-strip" data-theme="dark">
+  <a class="ext-back" href="{{HOMEHREF}}">← Documentation</a>
+  <span class="ext-doc-title">{{DOCTITLE}}</span>
+</header>
+
+<iframe class="ext-frame" src="{{FRAMESRC}}" title="{{DOCTITLE}}"></iframe>
+
+<!-- Visual self-check probe (dev/verification only): inert unless the URL carries ?probe=1. -->
+<script src="{{BASE}}_dw/probe.js" defer></script>
+</body>
+</html>

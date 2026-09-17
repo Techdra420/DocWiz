@@ -1,0 +1,20 @@
+project: Stockroom Inventory System
+code: SR-DEMO-001
+customer: Example Customer
+version: 0.1.0
+language: en
+
+audiences:
+  - id: user
+    title: User
+  - id: support
+    title: Support
+  - id: admin
+    title: Administrator
+
+external:
+  # Paths to self-contained HTML documentation folders (each needs an index.html).
+  # Every non-null entry is embedded into the handover with its own tab.
+  api_reference: external/api-reference
+  release_notes: null
+  integration_guide: null

@@ -1,0 +1,43 @@
+# User training — a slide deck built from the handbook's own chapters.
+id: user-training
+title: User Training
+audience: user
+mode: slides
+slides:
+  - layout: section-header
+    title: User Training
+    subtitle: What the system does and how to use it every day
+
+  - layout: title-content
+    title: What You Will Learn
+    regions:
+      body: |
+        - **Purpose** — what the system does
+        - **Daily tasks** — the routine, step by step
+        - **Procedures** — where to find each task
+
+  - layout: title-content
+    title: Purpose
+    regions:
+      body: |
+        ::: embed dw:system-overview#purpose
+        :::
+
+  - layout: title-content
+    title: Daily Tasks
+    regions:
+      body: |
+        ::: embed dw:daily-operations#daily-tasks
+        :::
+
+  - layout: title-content
+    title: Procedures
+    regions:
+      body: |
+        ::: embed dw:daily-operations#procedures
+        :::
+
+  - markdown: |
+      ## Questions?
+
+      Contact your support team.

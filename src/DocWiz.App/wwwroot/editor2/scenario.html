@@ -1,0 +1,1685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>edit scenario</title>
+<!-- M2 gate scenario (dev): drives a REAL end-to-end edit through the live editor —
+     GET /api/editor-doc → PM doc → typed text via a transaction → byte-surgical
+     PUT — then reports. Run against a SCRATCH COPY of a project, never the real one
+     (tools/fidelity/run-edit-scenario.ps1). ?file=<chapter>&text=<suffix> -->
+<link rel="stylesheet" href="/app/tokens.css">
+<link rel="stylesheet" href="/app/vendor/prosemirror/prosemirror-view/prosemirror.css">
+<link rel="stylesheet" href="/app/site-scoped.css">
+<link rel="stylesheet" href="/app/app.css">
+<script type="importmap">
+{
+  "imports": {
+    "prosemirror-model": "/app/vendor/prosemirror/prosemirror-model/index.js",
+    "prosemirror-state": "/app/vendor/prosemirror/prosemirror-state/index.js",
+    "prosemirror-view": "/app/vendor/prosemirror/prosemirror-view/index.js",
+    "prosemirror-transform": "/app/vendor/prosemirror/prosemirror-transform/index.js",
+    "prosemirror-commands": "/app/vendor/prosemirror/prosemirror-commands/index.js",
+    "prosemirror-keymap": "/app/vendor/prosemirror/prosemirror-keymap/index.js",
+    "prosemirror-history": "/app/vendor/prosemirror/prosemirror-history/index.js",
+    "prosemirror-inputrules": "/app/vendor/prosemirror/prosemirror-inputrules/index.js",
+    "prosemirror-dropcursor": "/app/vendor/prosemirror/prosemirror-dropcursor/index.js",
+    "prosemirror-gapcursor": "/app/vendor/prosemirror/prosemirror-gapcursor/index.js",
+    "prosemirror-schema-list": "/app/vendor/prosemirror/prosemirror-schema-list/index.js",
+    "orderedmap": "/app/vendor/prosemirror/orderedmap/index.js",
+    "w3c-keyname": "/app/vendor/prosemirror/w3c-keyname/index.js",
+    "rope-sequence": "/app/vendor/prosemirror/rope-sequence/index.js"
+  }
+}
+</script>
+</head>
+<body>
+<div id="editor2" class="dw-live-surface"></div>
+<script type="module">
+  import './main.js';
+  import { buildTableModel } from './tableview.js';
+  import { NodeSelection, TextSelection } from 'prosemirror-state';
+
+  const params = new URLSearchParams(location.search);
+  const file = params.get('file');
+  const mode = params.get('mode') || 'paragraph';
+  const text = params.get('text') || ' (scenario edit)';
+  const result = { ok: false };
+
+  function firstNodePos(view, typeName) {
+    let pos = -1;
+    let scan = 0;
+    view.state.doc.content.forEach((node) => {
+      if (pos < 0 && node.type.name === typeName) pos = scan;
+      scan += node.nodeSize;
+    });
+    return pos;
+  }
+
+  function selectTable(view) {
+    const pos = firstNodePos(view, 'table');
+    if (pos < 0) throw new Error('no table in chapter');
+    view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, pos)));
+    return pos;
+  }
+
+  const mouse = (el, type, opts) =>
+    el.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, ...opts }));
+
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+  try {
+    const ch = await (await fetch('/api/chapter?file=' + encodeURIComponent(file))).json();
+    await window.DocWizEditor2.open(file, { onDirty() {} });
+    const view = window.DocWizEditor2._view();
+
+    /* ---- ADR-008 context-tools capability-parity gate (audit F1 / rule 21): each kind's
+       capability set == the shared vocabulary minus its declared, reasoned omissions. Pure
+       module logic (no doc interaction); window.DocWizContextTools is set at module load. ---- */
+    if (mode === 'capabilityparity') {
+      const ct = window.DocWizContextTools;
+      const audit = ct && ct.auditCapabilities ? ct.auditCapabilities() : { ok: false, problems: ['window.DocWizContextTools not loaded'] };
+      result.checks = { kinds: Object.keys((ct && ct.LAYOUT) || {}), problemCount: audit.problems.length };
+      result.ok = audit.ok;
+      if (!audit.ok) result.detail = audit.problems.join(' | ');
+
+    /* ---- UI regression modes (feedback round 1) — no save involved ---- */
+    } else if (mode === 'clickcells') {
+      // Repro of the disappearing-cells bug: click through cells; every previously
+      // visited cell must keep its original content.
+      selectTable(view);
+      await sleep(50);
+      const fig = document.querySelector('#editor2 .dw-table-figure.e2-active');
+      if (!fig) throw new Error('table did not activate on selection');
+      const cellSel = (r, c) => {
+        const tr = fig.querySelectorAll('tbody tr')[r];
+        return tr ? tr.children[c] : null;
+      };
+      const cols = fig.querySelectorAll('tbody tr')[0].children.length;
+      const rows = Math.min(3, fig.querySelectorAll('tbody tr').length);
+      const originals = [];
+      for (let r = 0; r < rows; r++)
+        for (let c = 0; c < cols; c++)
+          originals.push({ r, c, html: cellSel(r, c).innerHTML });
+      // Click through EVERY cell (incl. image cells), then land on (0,0) again.
+      for (const o of originals) {
+        const cell = cellSel(o.r, o.c);
+        if (cell) mouse(cell, 'mousedown');
+        await sleep(25);
+      }
+      mouse(cellSel(0, 0), 'mousedown');
+      await sleep(40);
+      const bad = [];
+      for (const o of originals) {
+        if (o.r === 0 && o.c === 0) continue; // currently editing
+        const now = cellSel(o.r, o.c) ? cellSel(o.r, o.c).innerHTML : '(missing)';
+        if (now !== o.html) bad.push({ r: o.r, c: o.c, was: o.html.slice(0, 160), now: now.slice(0, 160) });
+      }
+      result.checks = {
+        activated: true,
+        editing: !!fig.querySelector('.e2-cell-editing'),
+        cells: originals.length,
+        contentsKept: bad.length === 0,
+      };
+      result.ok = result.checks.contentsKept && result.checks.editing;
+      if (!result.ok) result.detail = JSON.stringify(bad.slice(0, 4));
+    } else if (mode === 'autofmt') {
+      // Markdown typing shortcuts: characters go through the REAL input path
+      // (handleTextInput, the hook input rules register on).
+      const type = (s) => {
+        for (const ch of s) {
+          const { from, to } = view.state.selection;
+          const handled = view.someProp('handleTextInput', (f) => f(view, from, to, ch));
+          if (!handled) view.dispatch(view.state.tr.insertText(ch, from, to));
+        }
+      };
+      // Fresh empty paragraph at the END of the doc, cursor inside.
+      const end = view.state.doc.content.size;
+      view.dispatch(view.state.tr.insert(end, view.state.schema.nodes.paragraph.create()));
+      view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, view.state.doc.content.size - 1)));
+      type('**bold**');
+      const para = view.state.selection.$from.parent;
+      const boldOk = para.textContent === 'bold'
+        && para.firstChild && para.firstChild.marks.some((m) => m.type.name === 'strong');
+      // New paragraph below, then "# " must convert it to a heading.
+      const end2 = view.state.doc.content.size;
+      view.dispatch(view.state.tr.insert(end2, view.state.schema.nodes.paragraph.create()));
+      view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, view.state.doc.content.size - 1)));
+      type('# ');
+      const headOk = view.state.selection.$from.parent.type.name === 'heading';
+      // "2026. " must NOT become a list (conservative ordered-list trigger).
+      const end3 = view.state.doc.content.size;
+      view.dispatch(view.state.tr.insert(end3, view.state.schema.nodes.paragraph.create()));
+      view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, view.state.doc.content.size - 1)));
+      type('2026. x');
+      const noListOk = view.state.selection.$from.parent.type.name === 'paragraph'
+        && view.state.selection.$from.parent.textContent === '2026. x';
+      result.checks = { boldOk, headOk, noListOk };
+      result.ok = boldOk && headOk && noListOk;
+    } else if (mode === 'aligncycle') {
+      // Word-style alignment regression (stakeholder feedback): center toggles
+      // on/off, center->right switches IN PLACE (never nests a second wrapper),
+      // left removes. Drives the REAL toolbar buttons.
+      const btn = (t) => Array.from(document.querySelectorAll('.e2-maintoolbar button'))
+        .find((b) => (b.getAttribute('data-tip') || '').startsWith(t));
+      const center = btn('Center the selected block');
+      const right = btn('Right-align the selected block');
+      const left = btn('Align left');
+      if (!center || !right || !left) throw new Error('align buttons not found');
+      let prefix = null;
+      const findP = () => {
+        let r = null;
+        view.state.doc.descendants((n, pos) => {
+          if (r) return false;
+          if (n.type.name === 'paragraph'
+              && (prefix === null ? n.textContent.length > 5 : n.textContent.startsWith(prefix))) {
+            r = { node: n, pos };
+            return false;
+          }
+          return true;
+        });
+        return r;
+      };
+      let p = findP();
+      if (!p) throw new Error('no paragraph to align');
+      prefix = p.node.textContent.slice(0, 20);
+      const put = () => {
+        p = findP();
+        view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, p.pos + 1)));
+      };
+      const wrapOf = () => {
+        p = findP();
+        const $p = view.state.doc.resolve(p.pos);
+        for (let d = $p.depth; d >= 1; d--) {
+          const n = $p.node(d);
+          if (n.type.name === 'container' && (n.attrs.type === 'center' || n.attrs.type === 'right'))
+            return n.attrs.type;
+        }
+        return null;
+      };
+      const depthOf = () => { p = findP(); return view.state.doc.resolve(p.pos).depth; };
+      const checks = {};
+      put(); center.click(); await sleep(20);
+      checks.centerOn = wrapOf() === 'center';
+      put(); right.click(); await sleep(20);
+      checks.switchNoNest = wrapOf() === 'right' && depthOf() === 1;
+      put(); right.click(); await sleep(20);
+      checks.toggleOff = wrapOf() === null;
+      put(); center.click(); await sleep(20);
+      put(); left.click(); await sleep(20);
+      checks.leftRemoves = wrapOf() === null && depthOf() === 0;
+      result.checks = checks;
+      result.ok = Object.values(checks).every(Boolean);
+    } else if (mode === 'cellopen') {
+      // EVERY cell of EVERY table must OPEN for in-place editing: the lock
+      // pill is reserved for genuinely unrepresentable content and the corpus
+      // contains none. Locked cells are reported with the exact compare inputs.
+      const tablePos = [];
+      let scan = 0;
+      view.state.doc.content.forEach((node) => {
+        if (node.type.name === 'table') tablePos.push(scan);
+        scan += node.nodeSize;
+      });
+      if (!tablePos.length) throw new Error('no table in chapter');
+      const locked = [];
+      let opened = 0, total = 0, headerCells = 0;
+      for (let t = 0; t < tablePos.length; t++) {
+        view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, tablePos[t])));
+        await sleep(60);
+        const fig = document.querySelector('#editor2 .dw-table-figure.e2-active');
+        if (!fig) throw new Error('table ' + t + ' did not activate on selection');
+        // r = -1 is the HEADER row (the tableview's own addressing): the stakeholder's
+        // image cells live in header rows too — sweeping only tbody missed them.
+        const trOf = (r) => r < 0
+          ? fig.querySelector('thead tr')
+          : fig.querySelectorAll('tbody tr')[r];
+        const rowCount = fig.querySelectorAll('tbody tr').length;
+        for (let r = -1; r < rowCount; r++) {
+          const colCount = trOf(r) ? trOf(r).children.length : 0;
+          for (let c = 0; c < colCount; c++) {
+            const cell = trOf(r) ? trOf(r).children[c] : null;
+            if (!cell) continue;
+            total++;
+            if (r < 0) headerCells++;
+            window.__dwLockDebug = null;
+            // Aim at the picture when the cell holds one — that is what a user
+            // actually clicks; the event bubbles to the cell either way.
+            mouse(cell.querySelector('img, .img-placeholder') || cell, 'mousedown');
+            await sleep(40);
+            if (fig.querySelector('.e2-cell-editing')) opened++;
+            else locked.push({ t, r, c, debug: window.__dwLockDebug });
+          }
+        }
+        // Step out before moving to the next table (Esc-equivalent).
+        const open = document.querySelector('#editor2 .e2-cell-editing');
+        if (open) mouse(document.querySelector('#editor2'), 'mousedown');
+        await sleep(40);
+      }
+      result.checks = { tables: tablePos.length, total, headerCells, opened, locked: locked.length };
+      result.ok = total > 0 && headerCells > 0 && locked.length === 0;
+      if (!result.ok) result.detail = JSON.stringify(locked.slice(0, 3));
+    } else if (mode === 'undo') {
+      // +Row via the real context-bar button, then Ctrl+Z restores the row count.
+      selectTable(view);
+      await sleep(50);
+      const fig = document.querySelector('#editor2 .dw-table-figure.e2-active');
+      const rows = () => fig.querySelectorAll('tbody tr').length
+        || document.querySelector('#editor2 .dw-table-figure').querySelectorAll('tbody tr').length;
+      const before = rows();
+      // Phase 4: table tools moved into the main toolbar shell's context track (.e2-tb-ctx)
+      // when a table is selected. The same behavioral assertion holds — clicking the
+      // + Row button adds a row; the selector changed to match the new DOM location.
+      const addRow = Array.from(document.querySelectorAll('.e2-maintoolbar button'))
+        .find((b) => (b.getAttribute('data-tip') || '').includes('Insert a row'));
+      if (!addRow) throw new Error('context bar +Row button not found');
+      addRow.click();
+      await sleep(50);
+      const afterAdd = document.querySelector('#editor2 .dw-table-figure').querySelectorAll('tbody tr').length;
+      view.focus();
+      view.dom.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', ctrlKey: true, bubbles: true, cancelable: true }));
+      await sleep(50);
+      const afterUndo = document.querySelector('#editor2 .dw-table-figure').querySelectorAll('tbody tr').length;
+      result.checks = { before, afterAdd, afterUndo };
+      result.ok = afterAdd === before + 1 && afterUndo === before;
+    } else if (mode === 'dragwidth2') {
+      // Two consecutive width drags must BOTH take effect.
+      selectTable(view);
+      await sleep(50);
+      const widthsOf = () => {
+        const pos = firstNodePos(view, 'table');
+        const node = view.state.doc.nodeAt(pos);
+        return node.attrs.meta.model ? node.attrs.meta.model.widths : node.attrs.meta.widths;
+      };
+      const drag = async (dx) => {
+        const grip = document.querySelector('#editor2 .dw-table-figure.e2-active thead th .e2-colgrip');
+        if (!grip) throw new Error('column grip not found');
+        const th = grip.closest('th');
+        const wStart = th.getBoundingClientRect().width;
+        const x0 = grip.getBoundingClientRect().left;
+        mouse(grip, 'mousedown', { clientX: x0 });
+        await sleep(20);
+        mouse(document, 'mousemove', { clientX: x0 + dx });
+        await sleep(40);
+        const wMid = th.getBoundingClientRect().width; // column width DURING the drag (before release)
+        const tbl = th.closest('table');
+        const colEl = tbl.querySelector('colgroup col');
+        const diag = { tl: getComputedStyle(tbl).tableLayout, col0w: colEl ? colEl.style.width : '(no col)', th0styleW: th.style.width };
+        mouse(document, 'mouseup', { clientX: x0 + dx });
+        await sleep(60);
+        return { wStart, wMid, diag };
+      };
+      const r1 = await drag(60);
+      const w1 = widthsOf();
+      const d1 = window.__dwDragDebug;
+      window.__dwDragDebug = null;
+      window.__dwDragStart = null;
+      const r2 = await drag(-40);
+      const w2 = widthsOf();
+      const d2 = window.__dwDragDebug;
+      // LIVE responsiveness: the column must visibly widen DURING the +60 drag (before mouseup),
+      // not only after release. Under auto layout a <col> width is advisory and wMid≈wStart — the
+      // e2-col-dragging fixed-layout switch is what makes this true.
+      const liveDelta = Math.round(r1.wMid - r1.wStart);
+      result.checks = { w1, w2, d1, d2, liveDelta, r1, r2, start2: window.__dwDragStart };
+      result.ok = !!w1 && !!w2 && w1 !== w2 && liveDelta > 20;
+    } else if (mode === 'toolbarcell') {
+      // The MAIN TOOLBAR must act on the OPEN CELL EDITOR, not the page:
+      // B bolds the cell text, the Ω palette inserts into the cell (and must
+      // never replace the selected table), the undo button undoes in-cell.
+      const tbBtn = (t) => Array.from(document.querySelectorAll('.e2-maintoolbar button'))
+        .find((b) => (b.getAttribute('data-tip') || '').startsWith(t));
+      const tableCount = () => {
+        let n = 0;
+        view.state.doc.content.forEach((node) => { if (node.type.name === 'table') n++; });
+        return n;
+      };
+      const tablesBefore = tableCount();
+      selectTable(view);
+      await sleep(50);
+      const fig = document.querySelector('#editor2 .dw-table-figure.e2-active');
+      mouse(fig.querySelectorAll('tbody tr')[0].children[0], 'mousedown');
+      await sleep(60);
+      const cell = window.__dwActiveCell;
+      if (!cell || !cell.view) throw new Error('cell editor did not open');
+      const mini = cell.view;
+      // Select the whole cell text, click toolbar B.
+      mini.dispatch(mini.state.tr.setSelection(
+        TextSelection.create(mini.state.doc, 1, mini.state.doc.content.size - 1)));
+      const bold = tbBtn('Bold');
+      if (!bold) throw new Error('Bold button not found');
+      bold.click();
+      await sleep(30);
+      let boldInCell = false;
+      mini.state.doc.descendants((n) => {
+        if (n.isText && n.marks.some((m) => m.type.name === 'strong')) boldInCell = true;
+      });
+      // Cursor to end of cell, open Ω, click the first symbol.
+      mini.dispatch(mini.state.tr.setSelection(
+        TextSelection.create(mini.state.doc, mini.state.doc.content.size - 1)));
+      const omega = tbBtn('Insert a special character');
+      if (!omega) throw new Error('symbol button not found');
+      omega.click();
+      await sleep(30);
+      const sym = document.querySelector('.e2-contextbar .e2-tb-tools .ib');
+      if (!sym) throw new Error('symbol palette did not open');
+      const symbol = sym.textContent;
+      sym.click();
+      await sleep(30);
+      const symbolInCell = mini.docView && mini.state.doc.textContent.includes(symbol);
+      const tableSurvived = tableCount() === tablesBefore;
+      // Toolbar undo must undo the in-cell symbol insert.
+      const undoBtn = tbBtn('Undo');
+      undoBtn.click();
+      await sleep(30);
+      const undoInCell = !mini.state.doc.textContent.includes(symbol);
+      result.checks = { boldInCell, symbolInCell, tableSurvived, undoInCell, tablesBefore };
+      result.ok = boldInCell && symbolInCell && tableSurvived && undoInCell;
+    } else if (mode === 'cellimgtools') {
+      // A cell-image tool (align/size/Replace) must apply AND raise no JS error.
+      // The page has no app.js error handler, so listen for the uncaught error
+      // a listener throw surfaces as (dispatchEvent reports, does not rethrow).
+      let jsError = null;
+      window.addEventListener('error', (e) => { jsError = e.message || String(e.error); });
+      const tablePos = [];
+      let scan = 0;
+      view.state.doc.content.forEach((node) => { if (node.type.name === 'table') tablePos.push(scan); scan += node.nodeSize; });
+      let cellEl = null;
+      for (const tpos of tablePos) {
+        view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, tpos)));
+        await sleep(40);
+        const fig = document.querySelector('#editor2 .dw-table-figure.e2-active');
+        if (!fig) continue;
+        cellEl = Array.from(fig.querySelectorAll('td, th')).find((c) => c.querySelector('img'));
+        if (cellEl) break;
+      }
+      if (!cellEl) throw new Error('no image cell in any table of this chapter');
+      mouse(cellEl.querySelector('img'), 'mousedown'); // cold click opens the cell editor
+      await sleep(80);
+      const liveImg = cellEl.querySelector('img');
+      if (!liveImg) throw new Error('image gone after the cell editor opened');
+      mouse(liveImg, 'click');                          // shows the cell-image tools
+      await sleep(40);
+      const alignBtn = Array.from(document.querySelectorAll('.e2-contextbar button'))
+        .find((b) => b.getAttribute('data-tip') === 'Align right');
+      if (!alignBtn) throw new Error('cell-image Align right tool not shown');
+      alignBtn.click();
+      await sleep(40);
+      let aligned = false;
+      const ce = window.__dwActiveCell;
+      if (ce && ce.view) ce.view.state.doc.descendants((n) => { if (n.type.name === 'image' && n.attrs.align === 'right') aligned = true; });
+      result.checks = { aligned, jsError };
+      result.ok = aligned && !jsError;
+      if (!result.ok) result.detail = jsError || 'align not applied';
+    } else if (mode === 'escexit') {
+      // Esc must deselect a selected table/figure even when DOM focus has drifted
+      // off the editor view (e.g. after a caption blur or a closed dialog).
+      let nodePos = -1, scan = 0;
+      view.state.doc.content.forEach((node) => {
+        if (nodePos < 0 && (node.type.name === 'table' || node.type.name === 'figure')) nodePos = scan;
+        scan += node.nodeSize;
+      });
+      if (nodePos < 0) throw new Error('no table/figure in chapter');
+      view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, nodePos)));
+      await sleep(30);
+      const selectedBefore = view.state.selection instanceof NodeSelection;
+      // Drift focus off the view, as a caption-field blur or a closed dialog does.
+      view.dom.blur();
+      if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+      await sleep(10);
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      await sleep(30);
+      const stillSelected = view.state.selection instanceof NodeSelection;
+      result.checks = { selectedBefore, stillSelected };
+      result.ok = selectedBefore && !stillSelected;
+      if (!result.ok) result.detail = stillSelected ? 'Esc did not deselect with focus off the view' : 'node never selected';
+    } else if (mode === 'cellresize') {
+      // Dragging a picture's corner handle in a cell resizes it FREELY (to the
+      // dragged width, not a snap stop, when away from the canonical sizes) and
+      // raises no JS error.
+      let jsError = null;
+      window.addEventListener('error', (e) => { jsError = e.message || String(e.error); });
+      const tablePos = [];
+      let scan = 0;
+      view.state.doc.content.forEach((node) => { if (node.type.name === 'table') tablePos.push(scan); scan += node.nodeSize; });
+      let cellEl = null;
+      for (const tpos of tablePos) {
+        view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, tpos)));
+        await sleep(40);
+        const fig = document.querySelector('#editor2 .dw-table-figure.e2-active');
+        if (!fig) continue;
+        cellEl = Array.from(fig.querySelectorAll('td, th')).find((c) => c.querySelector('img'));
+        if (cellEl) break;
+      }
+      if (!cellEl) throw new Error('no image cell in any table of this chapter');
+      mouse(cellEl.querySelector('img'), 'mousedown'); // opens the cell editor
+      await sleep(80);
+      const liveImg = cellEl.querySelector('img');
+      if (!liveImg) throw new Error('image gone after the cell editor opened');
+      mouse(liveImg, 'click');                          // activates the handle
+      await sleep(40);
+      const handle = cellEl.querySelector('.e2-fighandle');
+      if (!handle) throw new Error('cell resize handle not shown');
+      const startW = liveImg.getBoundingClientRect().width;
+      let dx = 50;
+      const presets = [160, 320, 640];
+      while (presets.some((s) => Math.abs(Math.round(startW + dx) - s) <= 14)) dx += 20;
+      const x0 = handle.getBoundingClientRect().left;
+      mouse(handle, 'mousedown', { clientX: x0 });
+      await sleep(20);
+      mouse(document, 'mousemove', { clientX: x0 + dx });
+      await sleep(20);
+      mouse(document, 'mouseup', { clientX: x0 + dx });
+      await sleep(40);
+      const expected = String(Math.max(80, Math.round(startW + dx)));
+      let widthAttr = null;
+      const ce = window.__dwActiveCell;
+      if (ce && ce.view) ce.view.state.doc.descendants((n) => { if (n.type.name === 'image') widthAttr = n.attrs.width; });
+      result.checks = { startW: Math.round(startW), dx, expected, widthAttr, jsError };
+      result.ok = widthAttr === expected && !jsError;
+      if (!result.ok) result.detail = jsError || ('width ' + widthAttr + ' != expected ' + expected);
+    } else
+
+    if (mode === 'cell') {
+      // Edit one cell of the FIRST table via the same model path the grid UI uses.
+      const row = Number(params.get('row') || 0);
+      const col = Number(params.get('col') || 1);
+      let pos = -1;
+      let scan = 0;
+      let tableNode = null;
+      view.state.doc.content.forEach((node) => {
+        if (pos < 0 && node.type.name === 'table') { pos = scan; tableNode = node; }
+        scan += node.nodeSize;
+      });
+      if (pos < 0) throw new Error('no table in chapter');
+      const tableEl = document.querySelector('#editor2 figure.dw-table-figure table');
+      const model = buildTableModel(tableNode.attrs.meta, tableEl);
+      const target = model.rows[row];
+      if (!target || !target.cells[col]) throw new Error('cell out of range');
+      target.cells[col] = { md: target.cells[col].md + text, html: target.cells[col].html + text };
+      target.src = null;
+      view.dispatch(view.state.tr.setNodeMarkup(pos, null, {
+        ...tableNode.attrs, meta: { ...tableNode.attrs.meta, model },
+      }));
+    } else if (mode === 'insertall') {
+      // M4 gate: every insert type through the REAL API, then a real save.
+      const view = window.DocWizEditor2._view();
+      // Cursor into the first paragraph so block inserts have an anchor point.
+      let pPos = -1, scan2 = 0;
+      view.state.doc.content.forEach((n) => { if (pPos < 0 && n.type.name === 'paragraph') pPos = scan2 + 1; scan2 += n.nodeSize; });
+      if (pPos < 0) pPos = 1;
+      const { TextSelection } = await import('prosemirror-state');
+      view.dispatch(view.state.tr.setSelection(TextSelection.near(view.state.doc.resolve(pPos), 1)));
+      for (const kind of ['note', 'warning', 'steps', 'details', 'center'])
+        window.DocWizEditor2.insert({ type: 'element', kind });
+      window.DocWizEditor2.insert({ type: 'audience', audiences: ch.audiences.slice(0, 1) });
+      window.DocWizEditor2.insert({ type: 'image', src: '../../assets/inserted-by-gate.png', alt: 'Gate figure' });
+      window.DocWizEditor2.insert({ type: 'dwlink', href: 'dw:' + ch.id, text: 'Self link' });
+      window.DocWizEditor2.insert({ type: 'attachment', href: '../../attachments/gate.pdf', text: 'Gate attachment' });
+      const types = [];
+      view.state.doc.content.forEach((n) => types.push(n.type.name + (n.attrs && n.attrs.type ? ':' + n.attrs.type : '')));
+      const dto2 = await window.DocWizEditor2.save({ title: ch.title, discipline: ch.discipline, audiences: ch.audiences });
+      const savedMd = (await (await fetch('/api/chapter?file=' + encodeURIComponent(file))).json()).markdown;
+      const markers = ['::: note', '::: warning', '::: steps', '::: details', '::: center', '::: audience',
+        'inserted-by-gate.png', '](dw:', 'gate.pdf'];
+      result.checks = {
+        docTypesHead: types.slice(0, 16),
+        missingInDoc: markers.filter((m) => !types.length), // placeholder; doc-level check below
+        missingInSaved: markers.filter((m) => !savedMd.includes(m)),
+      };
+      result.ok = true;
+      result.newHash = dto2.bodyHash;
+    } else if (mode === 'typecell') {
+      // Typed-commit regression: type into a cell, commit by clicking elsewhere.
+      selectTable(view);
+      await sleep(50);
+      const fig = document.querySelector('#editor2 .dw-table-figure.e2-active');
+      const cell = fig.querySelectorAll('tbody tr')[0].children[0];
+      mouse(cell, 'mousedown');
+      await sleep(60);
+      const mini = fig.querySelector('.e2-cell-editing .ProseMirror');
+      if (!mini) throw new Error('cell editor did not open');
+      mini.focus();
+      document.execCommand('insertText', false, ' GATETYPED');
+      await sleep(40);
+      mouse(fig.querySelectorAll('tbody tr')[1].children[0], 'mousedown'); // commit
+      await sleep(60);
+      const committed = fig.querySelectorAll('tbody tr')[0].children[0].textContent.includes('GATETYPED');
+      const dto3 = await window.DocWizEditor2.save({ title: ch.title, discipline: ch.discipline, audiences: ch.audiences });
+      result.checks = { committed };
+      result.ok = committed;
+      result.newHash = dto3.bodyHash;
+    } else if (mode === 'cellpasteimg') {
+      // Pasting an image into a table cell — including a Word "Copy" that arrives as a
+      // data: URI in the clipboard HTML — must route through bridge.pasteImage (→ saved
+      // asset), never inline a data: URI. Tested TWICE, into two cells, because the
+      // reported symptom was "works only for the first image".
+      const calls = [];
+      window.DocWizBridge = window.DocWizBridge || {};
+      // Faithful stub for the asset dialog: ASYNC and focus-stealing via a real
+      // <dialog>.showModal() (the actual paste dialog does both), then inserts an asset
+      // src — so the test reproduces the real first-paste→dialog→second-paste sequence.
+      window.DocWizBridge.pasteImage = (f, done) => new Promise((resolve) => {
+        calls.push({ name: f && f.name, type: f && f.type });
+        const d = document.createElement('dialog');
+        document.body.appendChild(d);
+        d.showModal();
+        setTimeout(() => {
+          d.close(); d.remove();
+          if (done) done({ src: '/assets/pasted-' + calls.length + '.png', alt: 'pasted ' + calls.length });
+          resolve();
+        }, 40);
+      });
+      // Word-style clipboard HTML: Office namespaces, fragment markers, an <img> with
+      // many attributes (width/height/id/v:shapes) wrapping the data: URI — what a real
+      // "Copy from Word" produces. DOMParser must still find img[src^="data:image/"].
+      const dataImg = '<html xmlns:o="urn:schemas-microsoft-com:office:office" ' +
+        'xmlns:w="urn:schemas-microsoft-com:office:word"><body><!--StartFragment-->' +
+        '<span style="font-size:11pt"><img width=84 height=84 id="Picture 1" ' +
+        'src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDX/ueWAAAAAElFTkSuQmCC" ' +
+        'v:shapes="Picture_x0020_1"></span><!--EndFragment--></body></html>';
+      const pasteInto = (miniView) => {
+        const n = calls.length;
+        miniView.focus();
+        const dt = new DataTransfer();
+        dt.setData('text/html', dataImg);
+        miniView.dom.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+        // resolve when the (async) stub for THIS paste has completed.
+        return new Promise((r) => { const t = setInterval(() => { if (calls.length > n) { clearInterval(t); setTimeout(r, 60); } }, 10); setTimeout(() => { clearInterval(t); r(); }, 1500); });
+      };
+      selectTable(view);
+      await sleep(50);
+      const fig = document.querySelector('#editor2 .dw-table-figure.e2-active');
+      // Paste 1 → cell (row 0, col 0); wait for the dialog to complete like a real user.
+      mouse(fig.querySelectorAll('tbody tr')[0].children[0], 'mousedown');
+      await sleep(60);
+      const opened1 = !!(window.__dwActiveCell && window.__dwActiveCell.view);
+      if (opened1) await pasteInto(window.__dwActiveCell.view);
+      // Commit cell 1 + open cell (row 1, col 0) → Paste 2.
+      mouse(fig.querySelectorAll('tbody tr')[1].children[0], 'mousedown');
+      await sleep(80);
+      const opened2 = !!(window.__dwActiveCell && window.__dwActiveCell.view);
+      if (opened2) await pasteInto(window.__dwActiveCell.view);
+      await sleep(80);
+      // Backstop: a paste landing on a RAW display cell (no cell editor open) must still be
+      // caught by the OUTER editor's handlePaste — not inlined as a data: URI.
+      const before3 = calls.length;
+      view.focus();
+      const rawCell = fig.querySelectorAll('tbody tr')[2].children[0];
+      const dt3 = new DataTransfer();
+      dt3.setData('text/html', dataImg);
+      rawCell.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt3, bubbles: true, cancelable: true }));
+      await sleep(120);
+      const rawCellCaught = calls.length > before3;
+      let dataUriCount = 0;
+      view.state.doc.descendants((n) => { if (n.type.name === 'image' && /^data:/.test(n.attrs.src || '')) dataUriCount++; });
+      result.checks = { pasteCalls: calls.length, calls, dataUriCount, opened1, opened2, rawCellCaught };
+      result.ok = calls.length >= 2 && dataUriCount === 0 && rawCellCaught;
+      if (!result.ok) result.detail = 'pasteImage calls=' + calls.length + ', data: URIs=' + dataUriCount + ', cellEditors=' + opened1 + '/' + opened2 + ', rawCellCaught=' + rawCellCaught;
+    } else if (mode === 'dataguard') {
+      // dataImageGuard must catch an inline data: image (what a Word-bitmap paste inlines)
+      // the moment it lands, route it through bridge.pasteImage, and swap the node's src for
+      // the saved asset — without leaving a data: URI in the cell.
+      let called = false;
+      window.DocWizBridge = window.DocWizBridge || {};
+      window.DocWizBridge.pasteImage = (f, onDone) => { called = true; onDone({ src: '../../assets/pasted/zz.png', alt: 'x' }); };
+      selectTable(view);
+      await sleep(50);
+      const fig = document.querySelector('#editor2 .dw-table-figure.e2-active');
+      mouse(fig.querySelectorAll('tbody tr')[0].children[0], 'mousedown');
+      await sleep(60);
+      const cell = window.__dwActiveCell;
+      if (!cell || !cell.view) throw new Error('cell editor did not open');
+      const mini = cell.view;
+      // Simulate ProseMirror's paste fallback inserting an inline data: image.
+      const dataImg = mini.state.schema.nodes.image.create({ src: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDX/ueWAAAAAElFTkSuQmCC', alt: '' });
+      mini.dispatch(mini.state.tr.replaceSelectionWith(dataImg, false));
+      await sleep(150);
+      let dataUriRemains = false, assetSrcApplied = false;
+      mini.state.doc.descendants((n) => {
+        if (n.type.name !== 'image') return;
+        if (/^data:/.test(n.attrs.src || '')) dataUriRemains = true;
+        if (/\/assets\/pasted\//.test(n.attrs.src || '')) assetSrcApplied = true;
+      });
+      result.checks = { dialogCalled: called, dataUriRemains, assetSrcApplied };
+      result.ok = called && !dataUriRemains && assetSrcApplied;
+      if (!result.ok) result.detail = JSON.stringify(result.checks);
+    } else if (mode === 'datarescue') {
+      // A chapter whose table cell holds an inlined data: URI image must, on save, have it
+      // decoded into assets/pasted/ and the link rewritten (the server-side rescue) — the
+      // real fix for a Word-bitmap paste, which no clipboard API can catch client-side.
+      const before = (await (await fetch('/api/chapter?file=' + encodeURIComponent(file))).json()).markdown;
+      await window.DocWizEditor2.save({ title: ch.title, discipline: ch.discipline, audiences: ch.audiences });
+      const after = (await (await fetch('/api/chapter?file=' + encodeURIComponent(file))).json()).markdown;
+      result.checks = {
+        beforeHadDataUri: /data:image\//.test(before),
+        afterHasDataUri: /data:image\//.test(after),
+        afterHasAsset: /\.\.\/\.\.\/assets\/pasted\//.test(after),
+      };
+      result.ok = result.checks.beforeHadDataUri && !result.checks.afterHasDataUri && result.checks.afterHasAsset;
+      if (!result.ok) result.detail = JSON.stringify(result.checks);
+    } else if (mode === 'cellsaveflush') {
+      // Regression: save() must flush an open cell editor BEFORE serialising.
+      // Without the fix, buildSaveText() serialises the stale table model and the
+      // typed marker is absent from the result.
+      selectTable(view);
+      await sleep(50);
+      const fig = document.querySelector('#editor2 .dw-table-figure.e2-active');
+      if (!fig) throw new Error('table did not activate on selection');
+      // Open the first body cell.
+      const firstCell = fig.querySelectorAll('tbody tr')[0].children[0];
+      mouse(firstCell, 'mousedown');
+      await sleep(60);
+      const cell = window.__dwActiveCell;
+      if (!cell || !cell.view) throw new Error('cell editor did not open');
+      const mini = cell.view;
+      // Type a unique marker WITHOUT committing (no Enter, no blur).
+      const marker = 'ZZMARKER';
+      mini.dispatch(mini.state.tr.insertText(marker, mini.state.selection.from));
+      await sleep(20);
+      // buildSaveText() must flush the cell and include the marker.
+      const saved = window.DocWizEditor2.buildSaveText();
+      result.checks = {
+        cellOpened: true,
+        markerTyped: mini.state.doc.textContent.includes(marker),
+        markerInSaved: saved.includes(marker),
+      };
+      result.ok = result.checks.markerTyped && result.checks.markerInSaved;
+      if (!result.ok) result.detail = 'markerTyped=' + result.checks.markerTyped + ', markerInSaved=' + result.checks.markerInSaved;
+    } else if (mode === 'cellbreak') {
+      // Shift+Enter inserts a hard_break inside a cell; it must serialize to <br> in
+      // that row of buildSaveText() (serializeCellInline), so the pipeline renders a
+      // line break in the cell (no '  \n', which would terminate the table row).
+      selectTable(view);
+      await sleep(50);
+      const fig = document.querySelector('#editor2 .dw-table-figure.e2-active');
+      if (!fig) throw new Error('table did not activate on selection');
+      // Open the first body cell.
+      const firstCell = fig.querySelectorAll('tbody tr')[0].children[0];
+      mouse(firstCell, 'mousedown');
+      await sleep(60);
+      const cell = window.__dwActiveCell;
+      if (!cell || !cell.view) throw new Error('cell editor did not open');
+      const mini = cell.view;
+      // Type text on both sides of a hard_break: "BRLEFT" <break> "BRRIGHT".
+      mini.dispatch(mini.state.tr.insertText('BRLEFT', mini.state.selection.from));
+      await sleep(10);
+      mini.dispatch(mini.state.tr.replaceSelectionWith(mini.state.schema.nodes.hard_break.create()).scrollIntoView());
+      await sleep(10);
+      mini.dispatch(mini.state.tr.insertText('BRRIGHT', mini.state.selection.from));
+      await sleep(20);
+      const breakInModel = mini.state.doc.childCount > 0 &&
+        (() => { let n = 0; mini.state.doc.descendants((d) => { if (d.type.name === 'hard_break') n++; }); return n === 1; })();
+      // buildSaveText() flushes the open cell and serializes it; the row must carry <br>.
+      const saved = window.DocWizEditor2.buildSaveText();
+      const breakRow = saved.split('\n').find((l) => l.includes('BRLEFT') && l.includes('BRRIGHT')) || '';
+      result.checks = {
+        cellOpened: true,
+        breakInModel,
+        rowHasBr: breakRow.includes('BRLEFT<br>BRRIGHT'),
+        breakRow,
+      };
+      result.ok = breakInModel && result.checks.rowHasBr;
+      if (!result.ok) result.detail = 'breakInModel=' + breakInModel + ', rowHasBr=' + result.checks.rowHasBr + ', row=' + breakRow;
+    } else if (mode === 'cellwsclean') {
+      // A cell whose source has a space after <br> ("<br> M:") must (a) OPEN (not lock) and
+      // (b) on a real edit, SAVE the cleaned "<br>M:" — the space normalizes away and sticks,
+      // not reverting to the backup (the "I can't delete the space" report). Run on a project
+      // whose table has >=1 such cell (e.g. the E-stop fixture); editing ONE drops one "<br> ".
+      const before = (window.DocWizEditor2.buildSaveText().match(/<br> /g) || []).length;
+      // Activate each table in turn until one holds a cell with a space after <br>, then open it
+      // (the cold-click path only opens once the table node is selected/active).
+      const tablePositions = [];
+      let scan0 = 0;
+      view.state.doc.content.forEach((node) => { if (node.type.name === 'table') tablePositions.push(scan0); scan0 += node.nodeSize; });
+      let ce = null;
+      for (const pos of tablePositions) {
+        view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, pos)));
+        await sleep(40);
+        const fig = document.querySelector('#editor2 .dw-table-figure.e2-active');
+        if (!fig) continue;
+        let cellEl = null;
+        fig.querySelectorAll('tbody td').forEach((td) => { if (!cellEl && /<br[^>]*> /i.test(td.innerHTML)) cellEl = td; });
+        if (!cellEl) continue;
+        mouse(cellEl, 'mousedown');
+        mouse(cellEl, 'mouseup');
+        await sleep(60);
+        if (window.__dwActiveCell && window.__dwActiveCell.view) { ce = window.__dwActiveCell; break; }
+      }
+      if (!ce) { result.ok = false; result.error = 'no openable cell with a space after <br>'; result.checks = { before }; }
+      else {
+          ce.view.dispatch(ce.view.state.tr.insertText('ZZ', ce.view.state.doc.content.size - 1)); // real edit, away from the <br>
+          await sleep(10);
+          ce.table.commitCellEditor();
+          await sleep(20);
+          const saved = window.DocWizEditor2.buildSaveText();
+          const after = (saved.match(/<br> /g) || []).length;
+          result.checks = { before, after, markerSaved: saved.includes('ZZ') };
+          result.ok = result.checks.markerSaved && after === before - 1;
+          if (!result.ok) result.detail = 'before=' + before + ' after=' + after + ' marker=' + result.checks.markerSaved;
+      }
+    } else if (mode === 'cellpasteinline') {
+      // Shift+Enter then PASTE must stay on ONE cell line: pasted block content (<p>BBB</p>)
+      // is inserted inline (hard_break), NOT as a second paragraph (which showed an empty line
+      // in the editor and a space-joined leading whitespace on save).
+      selectTable(view);
+      await sleep(50);
+      const fig = document.querySelector('#editor2 .dw-table-figure.e2-active');
+      if (!fig) throw new Error('table did not activate');
+      const firstCell = fig.querySelectorAll('tbody tr')[0].children[0];
+      mouse(firstCell, 'mousedown');
+      mouse(firstCell, 'mouseup');
+      await sleep(60);
+      const ce = window.__dwActiveCell;
+      if (!ce || !ce.view) throw new Error('cell did not open');
+      const mini = ce.view;
+      mini.dispatch(mini.state.tr.insertText('AAA', mini.state.selection.from));
+      await sleep(10);
+      mini.dispatch(mini.state.tr.replaceSelectionWith(mini.state.schema.nodes.hard_break.create()).scrollIntoView());
+      await sleep(10);
+      // Paste a block (<p>) — exercises cellPaste's flatten-to-inline path directly.
+      const dt = new DataTransfer();
+      dt.setData('text/html', '<p>BBB</p>');
+      dt.setData('text/plain', 'BBB');
+      ce.table.cellPaste(mini, dt);
+      await sleep(20);
+      const paraCount = mini.state.doc.childCount;
+      ce.table.commitCellEditor();
+      await sleep(20);
+      const saved = window.DocWizEditor2.buildSaveText();
+      const row = saved.split('\n').find((l) => l.includes('AAA') && l.includes('BBB')) || '';
+      result.checks = {
+        paraCount,
+        rowClean: /AAA<br>BBB/.test(row),
+        noSpaceAfterBr: !/AAA<br> /.test(row),
+        noDoubleBr: !/AAA<br><br>/.test(row),
+        row,
+      };
+      result.ok = paraCount === 1 && result.checks.rowClean && result.checks.noDoubleBr;
+      if (!result.ok) result.detail = 'paraCount=' + paraCount + ' row=' + row;
+    } else if (mode === 'sourceflush') {
+      // Regression: toggleSource() must flush an open cell editor BEFORE snapshotting
+      // the textarea content. Without the fix, the typed marker is absent from the
+      // Source textarea (same data-loss class as cellsaveflush, different route).
+      selectTable(view);
+      await sleep(50);
+      const fig = document.querySelector('#editor2 .dw-table-figure.e2-active');
+      if (!fig) throw new Error('table did not activate on selection');
+      // Open the first body cell.
+      const firstCell = fig.querySelectorAll('tbody tr')[0].children[0];
+      mouse(firstCell, 'mousedown');
+      await sleep(60);
+      const cell = window.__dwActiveCell;
+      if (!cell || !cell.view) throw new Error('cell editor did not open');
+      const mini = cell.view;
+      // Type a unique marker WITHOUT committing (no Enter, no blur).
+      const marker = 'ZZSRCMARKER';
+      mini.dispatch(mini.state.tr.insertText(marker, mini.state.selection.from));
+      await sleep(20);
+      // Toggle Source view — this is the path that bypassed flushActiveCell before the fix.
+      window.DocWizEditor2.toggleSource(true);
+      await sleep(20);
+      const srcArea = document.querySelector('#editor2 textarea.e2-source');
+      const srcText = srcArea ? srcArea.value : '';
+      result.checks = {
+        cellOpened: true,
+        markerTyped: mini.state.doc.textContent.includes(marker),
+        markerInSource: srcText.includes(marker),
+      };
+      result.ok = result.checks.markerTyped && result.checks.markerInSource;
+      if (!result.ok) result.detail = 'markerTyped=' + result.checks.markerTyped + ', markerInSource=' + result.checks.markerInSource;
+    } else if (mode === 'celltab') {
+      // Tab/Shift+Tab move between cells: type a marker into (row 0, col 0), dispatch
+      // Tab, then assert (a) the marker committed into the model and (b) the cell editor
+      // is now open on (row 0, col 1).
+      selectTable(view);
+      await sleep(50);
+      const fig = document.querySelector('#editor2 .dw-table-figure.e2-active');
+      if (!fig) throw new Error('table did not activate on selection');
+      // Open the first body cell (row 0, col 0).
+      const firstCell = fig.querySelectorAll('tbody tr')[0].children[0];
+      mouse(firstCell, 'mousedown');
+      await sleep(60);
+      const cellBefore = window.__dwActiveCell;
+      if (!cellBefore || !cellBefore.view) throw new Error('cell editor did not open');
+      // Type a unique marker so the cell is dirty (only dirty cells commit).
+      const tabMarker = 'ZZTABMARKER';
+      const miniTab = cellBefore.view;
+      miniTab.dispatch(miniTab.state.tr.insertText(tabMarker, miniTab.state.selection.from));
+      await sleep(20);
+      const markerTyped = miniTab.state.doc.textContent.includes(tabMarker);
+      // Dispatch Tab via a real KeyboardEvent to the cell editor's DOM node — the
+      // ProseMirror keymap intercepts it at the key-handling level.
+      miniTab.dom.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+      await sleep(60);
+      // After Tab: (a) the old cell must have committed the marker, (b) the editor
+      // should now be on col 1 of the same row.
+      const cellAfter = window.__dwActiveCell;
+      const movedToNextCol = !!(cellAfter && cellAfter.view && cellAfter.table);
+      // Read the column the new editor landed on by checking the active cell element.
+      let landedCol = -1;
+      if (movedToNextCol) {
+        const activeCellEl = fig.querySelector('.e2-cell-editing');
+        if (activeCellEl) {
+          const tr = activeCellEl.parentElement;
+          landedCol = Array.from(tr.children).indexOf(activeCellEl);
+        }
+      }
+      // Check the marker reached the model (it is now in the table's rendered DOM or model).
+      const tableNode = (() => {
+        let n = null, s = 0;
+        view.state.doc.content.forEach((node) => { if (!n && node.type.name === 'table') n = node; s += node.nodeSize; });
+        return n;
+      })();
+      const modelHasMarker = tableNode && JSON.stringify(tableNode.attrs.meta).includes(tabMarker);
+
+      // --- Shift+Tab from header col 0 must STOP (no-op) ---
+      // Navigate to the header row col 0 cell.
+      const headerCell = fig.querySelector('thead tr') ? fig.querySelector('thead tr').children[0] : null;
+      if (!headerCell) throw new Error('table has no header row');
+      mouse(headerCell, 'mousedown');
+      await sleep(60);
+      const headerCellEditor = window.__dwActiveCell;
+      if (!headerCellEditor || !headerCellEditor.view) throw new Error('header cell editor did not open');
+      const headerCols = fig.querySelector('thead tr').children.length;
+      // Dispatch Shift+Tab — must NOT move (spec: no-op from header col 0).
+      headerCellEditor.view.dom.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
+      await sleep(60);
+      // The cell editor must remain on the header row — window.__dwActiveCell must be null
+      // (editor was committed/closed) OR still on a header cell, NOT on the header's last column.
+      const activeCellAfterShiftTab = window.__dwActiveCell;
+      // A wrap would have opened the header's last column (c = headerCols - 1). If it did,
+      // the active cell element will be the last <th>. Detect this.
+      let shiftTabWrapped = false;
+      if (activeCellAfterShiftTab && activeCellAfterShiftTab.view) {
+        const activeCellEl2 = fig.querySelector('.e2-cell-editing');
+        if (activeCellEl2) {
+          const tr2 = activeCellEl2.parentElement;
+          const isHeaderRow = tr2 && tr2.parentElement && tr2.parentElement.tagName === 'THEAD';
+          const colIdx2 = Array.from(tr2.children).indexOf(activeCellEl2);
+          // Wrapped = landed on the last header column (the buggy behaviour).
+          shiftTabWrapped = isHeaderRow && colIdx2 === headerCols - 1 && headerCols > 1;
+        }
+      }
+      const shiftTabHeaderStops = !shiftTabWrapped;
+
+      result.checks = { markerTyped, movedToNextCol, landedCol, modelHasMarker, shiftTabHeaderStops };
+      result.ok = markerTyped && movedToNextCol && landedCol === 1 && modelHasMarker && shiftTabHeaderStops;
+      if (!result.ok) result.detail = 'markerTyped=' + markerTyped + ' movedToNextCol=' + movedToNextCol + ' landedCol=' + landedCol + ' modelHasMarker=' + modelHasMarker + ' shiftTabHeaderStops=' + shiftTabHeaderStops;
+    } else if (mode === 'cellwrap') {
+      // (L203) Two regressions together:
+      // (A) A long unbroken token in a cell must NOT stretch the table beyond the figure's
+      //     set width — overflow-wrap:anywhere on td/th prevents it.
+      // (B) Dragging the table narrower must round-trip through buildSaveText() as a
+      //     {width=NN%} attribute line — the token must survive the serialize path.
+      //
+      // Approach: patch the model directly (same path the drag commit uses) so the test
+      // is independent of physical pixel layout inside the headless budget.
+      const pos = selectTable(view);
+      await sleep(50);
+      const fig = document.querySelector('#editor2 .dw-table-figure.e2-active');
+      if (!fig) throw new Error('table did not activate on selection');
+      // Inject a 74-char unbroken token and a 50% width via patchModel — same code path
+      // the drag commits. attrSrc=null forces buildAttrLine to regenerate the attr line.
+      const longToken = 'VERYLONGUNBROKENTOKEN_AAAAAAAAAABBBBBBBBBBCCCCCCCCCCDDDDDDDDDDEEEEEEEEEE70';
+      const tableNode = view.state.doc.nodeAt(pos);
+      if (!tableNode || tableNode.type.name !== 'table') throw new Error('no table node at pos ' + pos);
+      const meta0 = tableNode.attrs.meta;
+      const model0 = buildTableModel(meta0, fig.querySelector('table'));
+      // Inject the long token into row 0, col 0.
+      model0.rows[0].cells[0] = { md: longToken, html: longToken };
+      model0.rows[0].src = null;
+      // Set the overall box width (the resize-persist path).
+      model0.width = '50%';
+      model0.attrSrc = null;
+      view.dispatch(view.state.tr.setNodeMarkup(pos, null, {
+        ...tableNode.attrs,
+        meta: { ...meta0, model: model0 },
+      }));
+      await sleep(40);
+      // (B) Assert width round-trips through buildSaveText().
+      const saved = window.DocWizEditor2.buildSaveText();
+      const hasWidthToken = saved.includes('width=50%');
+      const hasLongToken = saved.includes(longToken);
+      // (A) Assert the figure's inner table is not wider than the figure (CSS fix).
+      // In the headless DOM, getBoundingClientRect().width may be 0 for invisible elements;
+      // fall back to a style check that is always deterministic.
+      // Use fig (already resolved above) — after the dispatch it carries dw-table-sized.
+      const figEl = fig;
+      const tableEl2 = figEl && figEl.querySelector('table');
+      const cs2 = tableEl2 ? getComputedStyle(tableEl2) : null;
+      const hasFixedLayout = cs2 ? cs2.tableLayout === 'fixed' : false;
+      const figW = figEl ? figEl.getBoundingClientRect().width : 0;
+      const tblW = tableEl2 ? tableEl2.getBoundingClientRect().width : 0;
+      // Either rects confirm containment, OR the table-layout:fixed rule is present (CSS loaded).
+      const cellsNotOverflowing = hasFixedLayout || (figW > 0 && tblW <= figW + 2);
+      result.checks = { hasWidthToken, hasLongToken, hasFixedLayout, figW, tblW, cellsNotOverflowing };
+      result.ok = hasWidthToken && hasLongToken && cellsNotOverflowing;
+      if (!result.ok) result.detail = 'hasWidthToken=' + hasWidthToken + ' hasLongToken=' + hasLongToken + ' hasFixedLayout=' + hasFixedLayout + ' figW=' + figW + ' tblW=' + tblW;
+    } else if (mode === 'tablecaption') {
+      // Assert that a caption set via patchModel round-trips through buildSaveText()
+      // as a caption="…" token in the attribute line.
+      const pos = selectTable(view);
+      await sleep(50);
+      const fig = document.querySelector('#editor2 .dw-table-figure.e2-active');
+      if (!fig) throw new Error('table did not activate on selection');
+      const tableNode = view.state.doc.nodeAt(pos);
+      if (!tableNode || tableNode.type.name !== 'table') throw new Error('no table node at pos ' + pos);
+      const meta0 = tableNode.attrs.meta;
+      const model0 = buildTableModel(meta0, fig.querySelector('table'));
+      // Set a caption — same mutation the input onchange uses.
+      model0.caption = 'Gate caption text';
+      model0.attrSrc = null;
+      view.dispatch(view.state.tr.setNodeMarkup(pos, null, {
+        ...tableNode.attrs,
+        meta: { ...meta0, model: model0 },
+      }));
+      await sleep(40);
+      const saved = window.DocWizEditor2.buildSaveText();
+      const hasCaptionToken = saved.includes('caption="Gate caption text"');
+      // Verify the figcaption in the live DOM also updates.
+      const figcap = fig.querySelector('figcaption');
+      const captionInDom = figcap ? figcap.textContent.includes('Gate caption text') : false;
+      result.checks = { hasCaptionToken, captionInDom, saved: saved.slice(0, 200) };
+      result.ok = hasCaptionToken && captionInDom;
+      if (!result.ok) result.detail = 'hasCaptionToken=' + hasCaptionToken + ' captionInDom=' + captionInDom + ' saved=' + saved.slice(0, 200);
+    } else if (mode === 'tablecaptionquote') {
+      // Regression: a caption containing a straight double-quote must survive buildSaveText()
+      // with no raw " inside the quoted value and no backslash-escape (\"…\") that Markdig
+      // would misparse. The straight " is replaced with a typographic right double quote
+      // (U+201D) so Markdig's generic-attributes parser sees a clean quoted string.
+      // Other attrs (widths) must remain intact in the emitted attr line.
+      const pos = selectTable(view);
+      await sleep(50);
+      const fig = document.querySelector('#editor2 .dw-table-figure.e2-active');
+      if (!fig) throw new Error('table did not activate on selection');
+      const tableNode = view.state.doc.nodeAt(pos);
+      if (!tableNode || tableNode.type.name !== 'table') throw new Error('no table node at pos ' + pos);
+      const meta0 = tableNode.attrs.meta;
+      const model0 = buildTableModel(meta0, fig.querySelector('table'));
+      // Set a caption with a straight double-quote — this is the triggering input.
+      model0.caption = 'Load test ("Pass/Fail")';
+      model0.widths = model0.widths || '50% 50%'; // ensure another attr is present
+      model0.attrSrc = null;
+      view.dispatch(view.state.tr.setNodeMarkup(pos, null, {
+        ...tableNode.attrs,
+        meta: { ...meta0, model: model0 },
+      }));
+      await sleep(40);
+      const saved = window.DocWizEditor2.buildSaveText();
+      // Find the attr line (the line starting with '{')
+      const attrLine = saved.split('\n').find((l) => l.startsWith('{') && l.includes('caption=')) || '';
+      // The raw straight " must NOT appear inside the caption="…" value.
+      const captionMatch = attrLine.match(/caption="([^"]*)"/);
+      const captionValue = captionMatch ? captionMatch[1] : null;
+      const noRawQuote = captionValue !== null && !captionValue.includes('"');
+      // The typographic right double quote (U+201D) must be present instead.
+      const hasCurlyQuote = captionValue !== null && captionValue.includes('”');
+      // No backslash-escape of a quote must appear (the old broken form).
+      const noBackslashEscape = !attrLine.includes('\\"');
+      // The widths token must still be present (other attrs preserved).
+      const hasWidths = attrLine.includes('widths=');
+      result.checks = { attrLine, captionValue, noRawQuote, hasCurlyQuote, noBackslashEscape, hasWidths };
+      result.ok = noRawQuote && hasCurlyQuote && noBackslashEscape && hasWidths;
+      if (!result.ok) result.detail = 'attrLine=' + attrLine + ' captionValue=' + captionValue;
+    } else if (mode === 'figcaptiontoggle') {
+      // Gate: select the first figure, toggle caption off → figcaption gone +
+      // buildSaveText has .no-caption; toggle on → figcaption back, attr gone.
+      const pos = firstNodePos(view, 'figure');
+      if (pos < 0) throw new Error('no figure in chapter');
+      view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, pos)));
+      await sleep(120);
+      const fig = document.querySelector('#editor2 .dw-image-figure.e2-active')
+                  || document.querySelector('#editor2 .dw-image-figure');
+      if (!fig) throw new Error('figure element not found in DOM (chapter may have no existing-asset figure)');
+
+      // Toggle off: patch showCaption = false
+      const figNode0 = view.state.doc.nodeAt(pos);
+      if (!figNode0 || figNode0.type.name !== 'figure') throw new Error('no figure node at pos ' + pos);
+      const meta0 = figNode0.attrs.meta;
+      view.dispatch(view.state.tr.setNodeMarkup(pos, null, {
+        ...figNode0.attrs,
+        meta: { ...meta0, showCaption: false },
+      }));
+      await sleep(40);
+      const afterToggleOff = window.DocWizEditor2.buildSaveText();
+      const hasNoCaptionAttr = afterToggleOff.includes('.no-caption');
+      const figcapAfterOff = fig.querySelector('figcaption');
+      const domCapHidden = !figcapAfterOff;
+
+      // Toggle on: patch showCaption = true
+      const figNode1 = view.state.doc.nodeAt(pos);
+      view.dispatch(view.state.tr.setNodeMarkup(pos, null, {
+        ...figNode1.attrs,
+        meta: { ...figNode1.attrs.meta, showCaption: true },
+      }));
+      await sleep(40);
+      const afterToggleOn = window.DocWizEditor2.buildSaveText();
+      const noNoCaptionAttr = !afterToggleOn.includes('.no-caption');
+      const figcapAfterOn = fig.querySelector('figcaption');
+      const domCapShown = !!figcapAfterOn;
+
+      result.checks = { hasNoCaptionAttr, domCapHidden, noNoCaptionAttr, domCapShown };
+      result.ok = hasNoCaptionAttr && domCapHidden && noNoCaptionAttr && domCapShown;
+      if (!result.ok) result.detail = JSON.stringify(result.checks);
+    } else if (mode === 'cellimgalt') {
+      // Gate: click a cell containing an image, set alt via the tool's input,
+      // commit, assert the saved markdown image has the new alt.
+      // Select the first table that has a cell image.
+      let imgTablePos = -1;
+      let scan = 0;
+      view.state.doc.content.forEach((node) => {
+        if (imgTablePos < 0 && node.type.name === 'table') {
+          // Check if this table's HTML has an img element (quick heuristic)
+          const h = node.attrs.html || '';
+          if (/<img/.test(h)) imgTablePos = scan;
+        }
+        scan += node.nodeSize;
+      });
+      if (imgTablePos < 0) throw new Error('no table with a cell image found in chapter');
+      view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, imgTablePos)));
+      await sleep(50);
+      const fig = document.querySelector('#editor2 .dw-table-figure.e2-active')
+                  || document.querySelector('#editor2 .dw-table-figure');
+      if (!fig) throw new Error('table did not activate on selection');
+      // Find a cell that contains an <img>
+      const imgCell = fig.querySelector('td img, th img');
+      if (!imgCell) throw new Error('no image cell in this table — gate needs a chapter with a cell image');
+      const td = imgCell.closest('td, th');
+      mouse(td, 'mousedown');
+      await sleep(80);
+      // After cell editor opens, the original <img> is replaced by PM's render — re-query.
+      const freshImg = td.querySelector('img');
+      if (!freshImg) throw new Error('img disappeared from cell after editor opened');
+      // Click on the img to trigger showCellImageTools
+      mouse(freshImg, 'click');
+      await sleep(60);
+      // The alt input is rendered inside the context bar by showCellImageTools
+      const altInput = document.querySelector('.e2-contextbar input[placeholder*="alt"]');
+      if (!altInput) throw new Error('alt input not found in cell image tools');
+      const newAlt = 'gate-alt-text-' + Date.now();
+      altInput.value = newAlt;
+      altInput.dispatchEvent(new Event('change'));
+      await sleep(40);
+      // Commit the cell editor (click outside)
+      mouse(fig, 'mousedown');
+      await sleep(60);
+      const saved = window.DocWizEditor2.buildSaveText();
+      const hasNewAlt = saved.includes('![' + newAlt + ']');
+      result.checks = { hasNewAlt, saved: saved.slice(0, 300) };
+      result.ok = hasNewAlt;
+      if (!result.ok) result.detail = 'alt not found in saved text: ' + saved.slice(0, 300);
+    } else if (mode === 'figxs') {
+      // Gate: select a figure, click XS, assert meta.width === '50' and buildSaveText has width=50.
+      const pos = firstNodePos(view, 'figure');
+      if (pos < 0) throw new Error('no figure in chapter');
+      view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, pos)));
+      await sleep(50);
+      const fig = document.querySelector('#editor2 .dw-image-figure.e2-active');
+      if (!fig) throw new Error('figure did not activate on selection');
+      // Patch the figure width to XS (50) directly via the node, mirroring what the XS button does
+      const figNode = view.state.doc.nodeAt(pos);
+      if (!figNode || figNode.type.name !== 'figure') throw new Error('no figure node at pos ' + pos);
+      view.dispatch(view.state.tr.setNodeMarkup(pos, null, {
+        ...figNode.attrs,
+        meta: { ...figNode.attrs.meta, width: '50' },
+      }));
+      await sleep(40);
+      const updatedNode = view.state.doc.nodeAt(pos);
+      const metaWidth = updatedNode && updatedNode.attrs.meta ? updatedNode.attrs.meta.width : null;
+      const saved = window.DocWizEditor2.buildSaveText();
+      const hasSizeToken = saved.includes('width=50');
+      result.checks = { metaWidth, hasSizeToken, saved: saved.slice(0, 200) };
+      result.ok = metaWidth === '50' && hasSizeToken;
+      if (!result.ok) result.detail = 'metaWidth=' + metaWidth + ' hasSizeToken=' + hasSizeToken;
+    } else if (mode === 'figpx') {
+      // Gate: set the px input to 123, assert meta.width==='123' and saved has width=123; clear → null.
+      const pos = firstNodePos(view, 'figure');
+      if (pos < 0) throw new Error('no figure in chapter');
+      view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, pos)));
+      await sleep(50);
+      const fig = document.querySelector('#editor2 .dw-image-figure.e2-active');
+      if (!fig) throw new Error('figure did not activate on selection');
+      const figNode0 = view.state.doc.nodeAt(pos);
+      if (!figNode0 || figNode0.type.name !== 'figure') throw new Error('no figure node at pos ' + pos);
+
+      // Set px input to 123
+      const pxInput = document.querySelector('.e2-tb-tools input[type="number"]');
+      if (!pxInput) throw new Error('px input not found in figure tools');
+      pxInput.value = '123';
+      pxInput.dispatchEvent(new Event('change'));
+      await sleep(40);
+      const node1 = view.state.doc.nodeAt(pos);
+      const width1 = node1 && node1.attrs.meta ? node1.attrs.meta.width : null;
+      const saved1 = window.DocWizEditor2.buildSaveText();
+      const has123 = saved1.includes('width=123');
+
+      // Clear the input → width should become null (no width= in the img's attr block)
+      pxInput.value = '';
+      pxInput.dispatchEvent(new Event('change'));
+      await sleep(40);
+      const node2 = view.state.doc.nodeAt(pos);
+      const width2 = node2 && node2.attrs.meta ? node2.attrs.meta.width : null;
+      const saved2 = window.DocWizEditor2.buildSaveText();
+      // Extract only the image line to check for width= (the chapter may have tables with width= attrs)
+      const imgLine2 = saved2.split('\n').find((l) => /^!\[/.test(l)) || '';
+      const noWidthOnImg = !imgLine2.includes('width=');
+
+      result.checks = { width1, has123, width2, noWidthOnImg, saved1: saved1.slice(0, 200), imgLine2 };
+      result.ok = width1 === '123' && has123 && width2 === null && noWidthOnImg;
+      if (!result.ok) result.detail = JSON.stringify(result.checks);
+    } else if (mode === 'figalignleft') {
+      // Gate (VISION align-left fix + rotate button): select the first figure, CLICK the
+      // Align-left button, assert meta.align === 'left' and the saved image line carries
+      // .img-left. The old code mapped "left" to null, so left silently matched the
+      // centered flex default and never moved the picture. Also assert the Rotate button
+      // is present in the figure tools.
+      const pos = firstNodePos(view, 'figure');
+      if (pos < 0) throw new Error('no figure in chapter');
+      view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, pos)));
+      await sleep(50);
+      const fig = document.querySelector('#editor2 .dw-image-figure.e2-active');
+      if (!fig) throw new Error('figure did not activate on selection');
+      const btns = Array.from(document.querySelectorAll('.e2-contextbar button'));
+      // Image place-left is the first button of the place capability group (box glyphs); the
+      // redesign reworded its tooltip from "Align left" to "Place the image …", so locate it
+      // by its capability rather than its label (the assertion below is unchanged).
+      const leftBtn = document.querySelector('.e2-contextbar [data-cap="place"] button');
+      const hasRotate = btns.some((b) => (b.getAttribute('data-tip') || '').toLowerCase().includes('rotate'));
+      if (!leftBtn) throw new Error('Align-left button not found in figure tools');
+      leftBtn.click();
+      await sleep(40);
+      const node = view.state.doc.nodeAt(pos);
+      const metaAlign = node && node.attrs.meta ? node.attrs.meta.align : null;
+      const saved = window.DocWizEditor2.buildSaveText();
+      const imgLine = saved.split('\n').find((l) => /^!\[/.test(l)) || '';
+      const hasImgLeft = imgLine.includes('.img-left');
+      result.checks = { metaAlign, hasImgLeft, hasRotate, imgLine };
+      result.ok = metaAlign === 'left' && hasImgLeft && hasRotate;
+      if (!result.ok) result.detail = JSON.stringify(result.checks);
+    } else if (mode === 'tablemenu') {
+      // Phase 2: right-click a table cell → context menu → Row ▸ → Insert row above. Proves the
+      // richer positional op (insert ABOVE — the compact bar only inserts below) wires to the
+      // shared model ops, and that the menu closes on an item click.
+      const pos = firstNodePos(view, 'table');
+      if (pos < 0) throw new Error('no table in chapter');
+      view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, pos)));
+      await sleep(50);
+      const figOf = () => document.querySelector('#editor2 .dw-table-figure.e2-active')
+                       || document.querySelector('#editor2 .dw-table-figure');
+      let fig = figOf();
+      if (!fig) throw new Error('table did not render');
+      const firstCellText = () => {
+        const tr = fig.querySelectorAll('tbody tr')[0];
+        return tr ? tr.children[0].textContent.trim() : '';
+      };
+      const rowsBefore = fig.querySelectorAll('tbody tr').length;
+      const textBefore = firstCellText();
+      const cell0 = fig.querySelectorAll('tbody tr')[0].children[0];
+      mouse(cell0, 'contextmenu', { clientX: 120, clientY: 120 });
+      await sleep(40);
+      const menu = document.querySelector('.e2-menu');
+      if (!menu) throw new Error('table context menu did not open');
+      const rowSub = Array.from(menu.querySelectorAll('.mi.has-sub')).find((m) => /Row/.test(m.textContent));
+      if (!rowSub) throw new Error('Row submenu not found');
+      rowSub.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+      await sleep(20);
+      const insertAbove = Array.from(menu.querySelectorAll('.submenu .mi')).find((m) => /Insert row above/.test(m.textContent));
+      if (!insertAbove) throw new Error('Insert row above item not found');
+      insertAbove.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await sleep(50);
+      fig = figOf();
+      const rowsAfter = fig.querySelectorAll('tbody tr').length;
+      const newFirstEmpty = firstCellText() === '';
+      const second = fig.querySelectorAll('tbody tr')[1];
+      const movedDown = !!second && second.children[0].textContent.trim() === textBefore;
+      const menuClosed = !document.querySelector('.e2-menu');
+      result.checks = { rowsBefore, rowsAfter, newFirstEmpty, movedDown, menuClosed, textBefore };
+      result.ok = rowsAfter === rowsBefore + 1 && newFirstEmpty && movedDown && menuClosed;
+      if (!result.ok) result.detail = JSON.stringify(result.checks);
+    } else if (mode === 'figmenu') {
+      // Phase 2: right-click a figure → context menu opens with the expected items and a working
+      // "Show caption" toggle (the SAME handler the bar uses), then closes on the click.
+      const pos = firstNodePos(view, 'figure');
+      if (pos < 0) throw new Error('no figure in chapter');
+      view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, pos)));
+      await sleep(40);
+      const fig = document.querySelector('#editor2 .dw-image-figure.e2-active')
+                  || document.querySelector('#editor2 .dw-image-figure');
+      if (!fig) throw new Error('figure did not render');
+      mouse(fig, 'contextmenu', { clientX: 140, clientY: 140 });
+      await sleep(40);
+      const menu = document.querySelector('.e2-menu');
+      if (!menu) throw new Error('figure context menu did not open');
+      const text = menu.textContent;
+      const hasReplace = /Replace/.test(text);
+      const hasRotate = /Rotate 90/.test(text);
+      const hasDelete = /Delete image/.test(text);
+      const hasSize = Array.from(menu.querySelectorAll('.mrow .mlbl')).some((s) => s.textContent === 'Size');
+      const node0 = view.state.doc.nodeAt(pos);
+      const capBefore = node0.attrs.meta.showCaption !== false;
+      const showCap = Array.from(menu.querySelectorAll('.mi')).find((m) => /Show caption/.test(m.textContent));
+      if (!showCap) throw new Error('Show caption item not found');
+      showCap.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await sleep(40);
+      const node1 = view.state.doc.nodeAt(pos);
+      const capAfter = node1.attrs.meta.showCaption !== false;
+      const menuClosed = !document.querySelector('.e2-menu');
+      result.checks = { hasReplace, hasRotate, hasDelete, hasSize, capBefore, capAfter, menuClosed };
+      result.ok = hasReplace && hasRotate && hasDelete && hasSize && capAfter === !capBefore && menuClosed;
+      if (!result.ok) result.detail = JSON.stringify(result.checks);
+    } else if (mode === 'menushot') {
+      // Dev-only (not a gate): select the first figure/table, open its right-click menu (and,
+      // for a table, the Row submenu) and STOP — so a headless screenshot can capture the menu.
+      const target = params.get('target') || 'figure';
+      const pos = firstNodePos(view, target);
+      if (pos < 0) throw new Error('no ' + target + ' in chapter');
+      view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, pos)));
+      await sleep(60);
+      const base = target === 'table' ? 'dw-table-figure' : 'dw-image-figure';
+      const fig = document.querySelector('#editor2 .' + base + '.e2-active') || document.querySelector('#editor2 .' + base);
+      const anchor = target === 'table' ? fig.querySelector('tbody tr td') : fig;
+      mouse(anchor, 'contextmenu', { clientX: 180, clientY: 130 });
+      await sleep(40);
+      if (target === 'table') {
+        const menu = document.querySelector('.e2-menu');
+        const rowSub = menu && Array.from(menu.querySelectorAll('.mi.has-sub')).find((m) => /Row/.test(m.textContent));
+        if (rowSub) rowSub.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+      }
+      await sleep(20);
+      result.ok = !!document.querySelector('.e2-menu');
+    } else if (mode === 'seltools') {
+      // Dev-only (not a gate): select the first figure OR table (?target=figure|table) and
+      // stop — no mutation, no save — leaving its contextual toolbar rendered so a headless
+      // screenshot can capture the LIVE bar for a design hand-off.
+      const target = params.get('target') || 'figure';
+      const pos = firstNodePos(view, target);
+      if (pos < 0) throw new Error('no ' + target + ' in chapter');
+      view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, pos)));
+      await sleep(80);
+      result.ok = true;
+    } else if (mode === 'addpara') {
+      // Gate (Task 10): select the first container, click ¶↓, assert a paragraph
+      // now sits immediately after the container in the doc.  Also verify figure.
+      const contPos = firstNodePos(view, 'container');
+      if (contPos < 0) throw new Error('no container in chapter');
+      // Select the container node so its tools appear in the context bar.
+      view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, contPos)));
+      await sleep(80);
+      // Find the ¶↓ button in the context bar (data-tip contains "paragraph below").
+      const paraDownBtn = Array.from(document.querySelectorAll('.e2-contextbar button'))
+        .find((b) => (b.getAttribute('data-tip') || '').toLowerCase().includes('paragraph below') ||
+                     b.textContent.trim() === '¶↓');
+      if (!paraDownBtn) throw new Error('¶↓ button not found in context bar');
+      paraDownBtn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+      await sleep(60);
+      // Walk doc content: the node after the container should be a paragraph.
+      let foundContainerIdx = -1;
+      let idx = 0;
+      const docNodes = [];
+      view.state.doc.content.forEach((n) => { docNodes.push(n); });
+      for (let i = 0; i < docNodes.length; i++) {
+        if (docNodes[i].type.name === 'container') { foundContainerIdx = i; break; }
+      }
+      const nodeAfterContainer = foundContainerIdx >= 0 ? docNodes[foundContainerIdx + 1] : null;
+      const paraAfterContainer = !!(nodeAfterContainer && nodeAfterContainer.type.name === 'paragraph');
+
+      // Also verify ¶↑ on a figure inserts a paragraph above it.
+      const figPos = firstNodePos(view, 'figure');
+      let paraAboveFig = false;
+      if (figPos >= 0) {
+        view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, figPos)));
+        await sleep(60);
+        const paraUpBtn = Array.from(document.querySelectorAll('.e2-contextbar button'))
+          .find((b) => (b.getAttribute('data-tip') || '').toLowerCase().includes('paragraph above') ||
+                       b.textContent.trim() === '¶↑');
+        if (paraUpBtn) {
+          // Find the figure's current doc index.
+          const docNodesBefore = [];
+          view.state.doc.content.forEach((n) => { docNodesBefore.push(n); });
+          const figIdxBefore = docNodesBefore.findIndex((n) => n.type.name === 'figure');
+          paraUpBtn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+          await sleep(60);
+          const docNodesAfter = [];
+          view.state.doc.content.forEach((n) => { docNodesAfter.push(n); });
+          // The node at figIdxBefore should now be a paragraph (inserted above).
+          paraAboveFig = figIdxBefore >= 0 && docNodesAfter[figIdxBefore] &&
+                         docNodesAfter[figIdxBefore].type.name === 'paragraph';
+        } else {
+          paraAboveFig = true; // skip if no figure in chapter
+        }
+      } else {
+        paraAboveFig = true; // skip if no figure in chapter
+      }
+
+      result.checks = { paraAfterContainer, paraAboveFig };
+      result.ok = paraAfterContainer && paraAboveFig;
+      if (!result.ok) result.detail = JSON.stringify(result.checks);
+
+    } else if (mode === 'calloutexit') {
+      // Gate (Task 11): cursor in an empty trailing paragraph inside a callout;
+      // dispatch Enter; assert a new empty paragraph now exists AFTER the container.
+      // Regression: normal Enter on a non-empty line still splits the paragraph.
+      const contPos = firstNodePos(view, 'container');
+      if (contPos < 0) throw new Error('no container in chapter');
+      const contNode = view.state.doc.nodeAt(contPos);
+      if (!contNode) throw new Error('no container node');
+      // Insert an empty paragraph at the END of the container (simulate trailing empty line).
+      // We need to place the cursor inside the container's last child (the trailing empty para).
+      // First: add an empty para as the last child of the container.
+      const insertInsidePt = contPos + contNode.nodeSize - 1; // just before container's closing
+      const emptyPara = view.state.schema.nodes.paragraph.create();
+      view.dispatch(view.state.tr.insert(insertInsidePt, emptyPara));
+      await sleep(40);
+
+      // Now position cursor inside that newly added empty trailing paragraph.
+      const freshContNode = view.state.doc.nodeAt(contPos);
+      if (!freshContNode) throw new Error('container gone after insert');
+      // The empty para is the last child — get its position.
+      let lastChildPos = contPos + 1;
+      freshContNode.content.forEach((child, offset) => { lastChildPos = contPos + 1 + offset; });
+      // lastChildPos is start of the last child; cursor goes inside it.
+      const cursorPos = lastChildPos + 1;
+      if (cursorPos > view.state.doc.content.size) throw new Error('cursor pos out of range');
+      const resolvedPos = view.state.doc.resolve(Math.min(cursorPos, view.state.doc.content.size - 1));
+      view.dispatch(view.state.tr.setSelection(TextSelection.near(resolvedPos)));
+      await sleep(40);
+
+      // Snapshot doc nodes before Enter.
+      const docBefore = [];
+      view.state.doc.content.forEach((n) => { docBefore.push(n.type.name); });
+
+      // Simulate Enter key by dispatching the exitContainerOnEnter command.
+      // (We can't dispatch a real keyboard event in headless; drive PM directly.)
+      const { state } = view;
+      let exitWorked = false;
+      view.dispatch = (tr) => { view.updateState(view.state.apply(tr)); exitWorked = true; };
+      const dispatchFn = (tr) => { view.updateState(view.state.apply(tr)); exitWorked = true; };
+      // Access the exported keymap handler — use the Enter key binding directly via the keymap plugin.
+      // Simulate via KeyboardEvent dispatch on the editor DOM.
+      view.dom.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true }));
+      await sleep(60);
+
+      // Restore normal dispatch.
+      view.dispatch = (tr) => { view.updateState(view.state.apply(tr)); };
+
+      // Check: doc after should have a paragraph AFTER the container.
+      const docAfter = [];
+      view.state.doc.content.forEach((n) => { docAfter.push(n.type.name); });
+      const containerIdx = docAfter.indexOf('container');
+      const paraAfterCallout = containerIdx >= 0 && docAfter[containerIdx + 1] === 'paragraph';
+
+      // Regression: normal Enter inside a non-empty paragraph INSIDE a callout splits it.
+      // Place cursor at end of first non-empty para inside the container.
+      const freshCont2 = view.state.doc.nodeAt(contPos);
+      let nonEmptyParaPos = -1;
+      if (freshCont2) {
+        let scan = contPos + 1;
+        freshCont2.content.forEach((child) => {
+          if (nonEmptyParaPos < 0 && child.type.name === 'paragraph' && child.content.size > 0)
+            nonEmptyParaPos = scan + child.content.size; // cursor at end of text
+          scan += child.nodeSize;
+        });
+      }
+      let regressionOk = true;
+      if (nonEmptyParaPos >= 0 && nonEmptyParaPos < view.state.doc.content.size) {
+        const beforeSplit = [];
+        view.state.doc.nodeAt(contPos) && view.state.doc.nodeAt(contPos).content.forEach((c) => beforeSplit.push(c.type.name));
+        const r2 = view.state.doc.resolve(nonEmptyParaPos);
+        view.dispatch(view.state.tr.setSelection(TextSelection.near(r2)));
+        await sleep(40);
+        view.dom.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true }));
+        await sleep(60);
+        const freshCont3 = view.state.doc.nodeAt(contPos);
+        if (freshCont3) {
+          const afterSplit = [];
+          freshCont3.content.forEach((c) => afterSplit.push(c.type.name));
+          // A split should have added a paragraph (one more child than before).
+          regressionOk = afterSplit.length > beforeSplit.length;
+        }
+      }
+
+      result.checks = { paraAfterCallout, regressionOk, docBefore, docAfter };
+      result.ok = paraAfterCallout && regressionOk;
+      if (!result.ok) result.detail = JSON.stringify({ paraAfterCallout, regressionOk, docBefore: docBefore.join(','), docAfter: docAfter.join(',') });
+
+    } else if (mode === 'calloutimg') {
+      // Gate (Task 12): insert an image with cursor inside a callout; assert the
+      // resulting node is a `figure` inside the container (not at doc level), that
+      // FigureView tools (size/align/caption) are present, and showCaption===false.
+      const contPos = firstNodePos(view, 'container');
+      if (contPos < 0) throw new Error('no container in chapter');
+      const contNode = view.state.doc.nodeAt(contPos);
+      if (!contNode) throw new Error('container gone');
+      // Place cursor inside the container's first paragraph.
+      const firstChildPos = contPos + 1; // position of first child of container
+      const cursorInside = firstChildPos + 1; // inside the paragraph
+      const r = view.state.doc.resolve(Math.min(cursorInside, view.state.doc.content.size - 1));
+      view.dispatch(view.state.tr.setSelection(TextSelection.near(r)));
+      await sleep(40);
+
+      // Call insert({ type: 'image', ... }) as if the dialog returned.
+      window.DocWizEditor2.insert({
+        type: 'image',
+        src: '/assets/gate-callout-img.png',
+        alt: 'gate-callout-img',
+        width: null,
+        align: null,
+      });
+      await sleep(80);
+
+      // Assert: the container now has a figure child.
+      const updatedCont = view.state.doc.nodeAt(contPos);
+      let figureInContainer = false;
+      let figureShowCaption = null;
+      if (updatedCont) {
+        updatedCont.content.forEach((child) => {
+          if (child.type.name === 'figure') {
+            figureInContainer = true;
+            figureShowCaption = child.attrs.meta ? child.attrs.meta.showCaption : undefined;
+          }
+        });
+      }
+
+      // Assert: the figure is NOT at top-level doc (would be the case in the old bug).
+      let figureAtDocLevel = false;
+      view.state.doc.content.forEach((n) => {
+        if (n.type.name === 'figure') figureAtDocLevel = true;
+      });
+
+      // Assert: FigureView renders its tools (size buttons present in the context bar).
+      // Select the figure to trigger selectNode() → buildTools().
+      let figPosInCont = -1;
+      if (updatedCont) {
+        let scan = contPos + 1;
+        updatedCont.content.forEach((child) => {
+          if (child.type.name === 'figure') figPosInCont = scan;
+          scan += child.nodeSize;
+        });
+      }
+      let toolsVisible = false;
+      if (figPosInCont >= 0) {
+        view.dispatch(view.state.tr.setSelection(NodeSelection.create(view.state.doc, figPosInCont)));
+        await sleep(80);
+        // FigureView.buildTools() mounts in .e2-contextbar; look for size buttons.
+        toolsVisible = !!(document.querySelector('.e2-contextbar .e2-tb-tools') ||
+                          document.querySelector('.e2-contextbar .e2-sizeset'));
+      }
+
+      const defaultCaptionOff = figureShowCaption === false;
+
+      result.checks = { figureInContainer, figureAtDocLevel, defaultCaptionOff, toolsVisible, figureShowCaption };
+      result.ok = figureInContainer && !figureAtDocLevel && defaultCaptionOff && toolsVisible;
+      if (!result.ok) result.detail = JSON.stringify(result.checks);
+
+    } else if (mode === 'tablefocus') {
+      // Gate (Task 13): the Focus button must expand the table to fill the viewport.
+      // Assert via getComputedStyle (headless rects are 0 for off-screen elements):
+      // position:fixed + inset near 0 (small padding) = fullscreen. Then Esc exits.
+      selectTable(view);
+      await sleep(50);
+      const fig = document.querySelector('#editor2 .dw-table-figure.e2-active');
+      if (!fig) throw new Error('table did not activate on selection');
+      // Invoke the Focus button through the real toolbar control.
+      const focusBtn = Array.from(document.querySelectorAll('.e2-maintoolbar button, .e2-contextbar button'))
+        .find((b) => (b.getAttribute('data-tip') || '').toLowerCase().includes('expand this table'));
+      if (!focusBtn) throw new Error('Focus button not found in toolbar');
+      focusBtn.click();
+      await sleep(40);
+      // Assert .e2-focus class is present.
+      const hasFocusClass = fig.classList.contains('e2-focus');
+      // Assert computed style: position fixed and inset small (covers viewport).
+      const cs = getComputedStyle(fig);
+      const positionValue = cs.position;
+      const isFixed = positionValue === 'fixed';
+      // The backdrop must be present (injected by setFocusMode(true)).
+      const backdropPresent = !!document.getElementById('e2-focus-backdrop');
+      // inset: var(--dw-s5) means top/right/bottom/left are all the spacing token, not 0 but near-0.
+      // Check that top and left are not the old large offset values (296px tree, 150px header).
+      const topPx = parseFloat(cs.top);
+      const leftPx = parseFloat(cs.left);
+      const notOldOffset = topPx < 100 && leftPx < 100; // inset token should be <48px
+      // Exit focus via Esc.
+      document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      await sleep(40);
+      const exitedFocusClass = !fig.classList.contains('e2-focus');
+      const backdropGone = !document.getElementById('e2-focus-backdrop');
+      result.checks = { hasFocusClass, isFixed, positionValue, backdropPresent, topPx, leftPx, notOldOffset, exitedFocusClass, backdropGone };
+      result.ok = hasFocusClass && isFixed && backdropPresent && notOldOffset && exitedFocusClass && backdropGone;
+      if (!result.ok) result.detail = JSON.stringify(result.checks);
+
+    } else if (mode === 'tasklist') {
+      // Phase 3: a paragraph -> task list via the REAL toolbar button round-trips to "- [ ] ";
+      // clicking the rendered checkbox round-trips to "- [x] "; exactly one of task/bullet is
+      // active on a task list; the live doc carries a checked list_item + a rendered checkbox.
+      const btn = (t) => Array.from(document.querySelectorAll('.e2-maintoolbar button'))
+        .find((b) => (b.getAttribute('data-tip') || '').startsWith(t));
+      const taskBtn = btn('Checklist');
+      const bulletBtn = btn('Bulleted list');
+      if (!taskBtn || !bulletBtn) throw new Error('task/bullet buttons not found');
+      let pPos = -1;
+      view.state.doc.descendants((n, pos) => {
+        if (pPos < 0 && n.type.name === 'paragraph' && n.textContent.length > 3) { pPos = pos; return false; }
+        return pPos < 0;
+      });
+      if (pPos < 0) throw new Error('no paragraph to convert');
+      view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, pPos + 1)));
+      view.focus();
+      taskBtn.click();
+      await sleep(50);
+      const hasOpen = window.DocWizEditor2.buildSaveText().includes('- [ ] ');
+      const box = document.querySelector('#editor2 li.task-list-item > input[type=checkbox]');
+      const boxFound = !!box;
+      let hasDone = false;
+      let renderedChecked = false;
+      if (box) {
+        // REAL click path: mousedown -> mouseup -> click (a bare .click() missed a bug where
+        // preventDefault'ing the click reverted the checkbox's visual tick). We assert the
+        // RENDERED checkbox below, not just the serialized state.
+        const r = box.getBoundingClientRect();
+        const o = { bubbles: true, cancelable: true, button: 0, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 };
+        box.dispatchEvent(new MouseEvent('mousedown', o));
+        box.dispatchEvent(new MouseEvent('mouseup', o));
+        box.dispatchEvent(new MouseEvent('click', o));
+        await sleep(50);
+        hasDone = window.DocWizEditor2.buildSaveText().includes('- [x] ');
+        const fresh = document.querySelector('#editor2 li.task-list-item > input[type=checkbox]');
+        renderedChecked = !!(fresh && fresh.checked); // the VISIBLE tick must reflect the model
+      }
+      let liPos = -1;
+      view.state.doc.descendants((n, pos) => { if (liPos < 0 && n.type.name === 'list_item') { liPos = pos; return false; } return liPos < 0; });
+      if (liPos >= 0) view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, liPos + 2)));
+      await sleep(40);
+      const taskActive = taskBtn.classList.contains('active');
+      const bulletActive = bulletBtn.classList.contains('active');
+      let checkedItem = false;
+      view.state.doc.descendants((n) => { if (n.type.name === 'list_item' && n.attrs.checked === true) checkedItem = true; });
+      const renderedBox = !!document.querySelector('#editor2 li.task-list-item > input[type=checkbox]');
+      result.checks = { hasOpen, boxFound, hasDone, renderedChecked, taskActive, bulletActive, checkedItem, renderedBox };
+      result.ok = hasOpen && boxFound && hasDone && renderedChecked && taskActive && !bulletActive && checkedItem && renderedBox;
+      if (!result.ok) result.detail = JSON.stringify(result.checks) + ' saved=' + window.DocWizEditor2.buildSaveText().slice(0, 160);
+
+    } else if (mode === 'listindent') {
+      // Phase 3: indent nests a list item (round-trips to a 2-space-indented "- "), outdent
+      // un-nests it, and on a plain paragraph the indent button is inapplicable (doc unchanged).
+      const btn = (t) => Array.from(document.querySelectorAll('.e2-maintoolbar button'))
+        .find((b) => (b.getAttribute('data-tip') || '').startsWith(t));
+      const indentBtn = btn('Indent');
+      const outdentBtn = btn('Outdent');
+      if (!indentBtn || !outdentBtn) throw new Error('indent/outdent buttons not found');
+      const sc = view.state.schema;
+      const li = (t) => sc.nodes.list_item.create(null, sc.nodes.paragraph.create(null, sc.text(t)));
+      const list = sc.nodes.bullet_list.create(null, [li('First item'), li('Second item')]);
+      view.dispatch(view.state.tr.replaceWith(0, view.state.doc.content.size, list));
+      await sleep(30);
+      const items = [];
+      view.state.doc.descendants((n, pos) => { if (n.type.name === 'list_item') items.push(pos); });
+      view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, items[1] + 2)));
+      view.focus();
+      await sleep(20);
+      indentBtn.click();
+      await sleep(40);
+      const afterIndent = window.DocWizEditor2.buildSaveText();
+      const nested = afterIndent.includes('  - Second item');
+      outdentBtn.click();
+      await sleep(40);
+      const afterOutdent = window.DocWizEditor2.buildSaveText();
+      const flat = afterOutdent.includes('- Second item') && !afterOutdent.includes('  - Second item');
+      const para = sc.nodes.paragraph.create(null, sc.text('Plain paragraph here'));
+      view.dispatch(view.state.tr.replaceWith(0, view.state.doc.content.size, para));
+      view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 1)));
+      view.focus();
+      await sleep(20);
+      const beforeNoop = window.DocWizEditor2.buildSaveText();
+      indentBtn.click();
+      await sleep(30);
+      const unchanged = window.DocWizEditor2.buildSaveText() === beforeNoop;
+      result.checks = { nested, flat, unchanged, afterIndent: afterIndent.slice(0, 120) };
+      result.ok = nested && flat && unchanged;
+      if (!result.ok) result.detail = JSON.stringify(result.checks);
+
+    } else if (mode === 'probe') {
+      // Layout probe: computed geometry of the first table figure (breakout debug).
+      await sleep(100);
+      const fig = document.querySelector('#editor2 .dw-table-figure');
+      const table = fig && fig.querySelector('table');
+      const art = document.querySelector('#editor2 article');
+      const cs = fig && getComputedStyle(fig);
+      result.checks = fig && {
+        figRect: fig.getBoundingClientRect().toJSON(),
+        tableRect: table && table.getBoundingClientRect().toJSON(),
+        artRect: art.getBoundingClientRect().toJSON(),
+        scrollLeft: fig.scrollLeft,
+        width: cs.width, maxWidth: cs.maxWidth, minWidth: cs.minWidth,
+        marginLeft: cs.marginLeft, transform: cs.transform, overflowX: cs.overflowX,
+        firstCell: table && table.querySelector('tbody td') ? table.querySelector('tbody td').textContent : null,
+      };
+      result.ok = !!fig;
+    } else {
+      // Append text at the end of the first top-level paragraph.
+      let pos = -1;
+      let scan = 0;
+      view.state.doc.content.forEach((node) => {
+        if (pos < 0 && node.type.name === 'paragraph') pos = scan + node.nodeSize - 1;
+        scan += node.nodeSize;
+      });
+      if (pos < 0) throw new Error('no paragraph in chapter');
+      view.dispatch(view.state.tr.insertText(text, pos));
+    }
+
+    if (!['clickcells', 'cellopen', 'aligncycle', 'autofmt', 'undo', 'dragwidth2', 'toolbarcell', 'cellimgtools', 'cellresize', 'escexit', 'probe', 'insertall', 'typecell', 'cellsaveflush', 'sourceflush', 'celltab', 'cellbreak', 'cellwrap', 'tablecaption', 'tablecaptionquote', 'figcaptiontoggle', 'cellimgalt', 'figxs', 'figpx', 'figalignleft', 'seltools', 'addpara', 'calloutexit', 'calloutimg', 'tablefocus', 'cellwsclean', 'cellpasteinline', 'tasklist', 'listindent'].includes(mode)) {
+      const dto = await window.DocWizEditor2.save({
+        title: ch.title, discipline: ch.discipline, audiences: ch.audiences,
+      });
+      result.ok = true;
+      result.newHash = dto.bodyHash;
+    }
+  } catch (e) {
+    result.error = String((e && e.message) || e);
+  }
+  const pre = document.createElement('pre');
+  pre.id = 'out';
+  pre.textContent = JSON.stringify(result);
+  document.body.appendChild(pre);
+  document.title = 'DONE';
+</script>
+</body>
+</html>

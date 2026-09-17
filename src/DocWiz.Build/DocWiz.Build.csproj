@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\DocWiz.Core\DocWiz.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Expose internals (PrintHtmlBuilder.Absolutize seam) to the test project so the
+         characterization test can pin the asset/attachment prefix derivation. -->
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
+      <_Parameter1>DocWiz.Core.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Handover site templates live at repo root (templates/site/) and are embedded
+         so the published single exe needs no loose files. -->
+    <EmbeddedResource Include="..\..\templates\site\**" LinkBase="Site" />
+    <EmbeddedResource Include="..\..\templates\print\**" LinkBase="Print" />
+  </ItemGroup>
+
+</Project>

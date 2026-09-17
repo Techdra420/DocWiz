@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DocWiz Editor</title>
+<!-- No-flash theme guard: set data-theme before first paint from the saved choice,
+     else the OS preference. The same 3 lines as the handover templates (base/slides.html);
+     the #themeBtn toggle behaviour is the shared /app/site.js, loaded at the end of body. -->
+<script>
+  (function () {
+    var t = localStorage.getItem('dw-theme');
+    if (!t) t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+<link rel="icon" type="image/svg+xml" href="/app/brand/docwiz.svg">
+<link rel="stylesheet" href="/app/tokens.css">
+<link rel="stylesheet" href="/app/vendor/prosemirror/prosemirror-view/prosemirror.css">
+<link rel="stylesheet" href="/app/site-scoped.css">
+<link rel="stylesheet" href="/app/app.css">
+<!-- Vendored ProseMirror (ADR-007): bare specifiers resolve to the embedded ESM
+     dists — see vendor/VENDORED.md. Must precede any module script. -->
+<script type="importmap">
+{
+  "imports": {
+    "prosemirror-model": "/app/vendor/prosemirror/prosemirror-model/index.js",
+    "prosemirror-state": "/app/vendor/prosemirror/prosemirror-state/index.js",
+    "prosemirror-view": "/app/vendor/prosemirror/prosemirror-view/index.js",
+    "prosemirror-transform": "/app/vendor/prosemirror/prosemirror-transform/index.js",
+    "prosemirror-commands": "/app/vendor/prosemirror/prosemirror-commands/index.js",
+    "prosemirror-keymap": "/app/vendor/prosemirror/prosemirror-keymap/index.js",
+    "prosemirror-history": "/app/vendor/prosemirror/prosemirror-history/index.js",
+    "prosemirror-inputrules": "/app/vendor/prosemirror/prosemirror-inputrules/index.js",
+    "prosemirror-dropcursor": "/app/vendor/prosemirror/prosemirror-dropcursor/index.js",
+    "prosemirror-gapcursor": "/app/vendor/prosemirror/prosemirror-gapcursor/index.js",
+    "prosemirror-schema-list": "/app/vendor/prosemirror/prosemirror-schema-list/index.js",
+    "orderedmap": "/app/vendor/prosemirror/orderedmap/index.js",
+    "w3c-keyname": "/app/vendor/prosemirror/w3c-keyname/index.js",
+    "rope-sequence": "/app/vendor/prosemirror/rope-sequence/index.js"
+  }
+}
+</script>
+</head>
+<body>
+
+<header data-theme="dark">
+  <!-- Left: brand mark + name/sublabel -->
+  <div class="hd-brand">
+    <div class="hd-brand-mark" aria-hidden="true"><img src="/app/brand/docwiz.svg" alt="" width="30" height="30"></div>
+    <div class="hd-brand-text">
+      <span class="hd-brand-name">DocWiz</span><span class="hd-brand-sub">EDITOR</span>
+    </div>
+  </div>
+
+  <!-- Divider -->
+  <div class="hd-div" aria-hidden="true"></div>
+
+  <!-- Project block (hidden when no project mounted) -->
+  <div class="hd-proj" id="projBlock" hidden>
+    <div class="hd-proj-ico" aria-hidden="true">
+      <!-- folder icon -->
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a1 1 0 0 1 1-1h4l2 2h9a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg>
+    </div>
+    <div class="hd-proj-text">
+      <span class="hd-proj-name" id="projName"></span>
+      <span class="hd-proj-meta"><span class="hd-proj-code" id="projCode"></span><span class="hd-live-dot" aria-label="live"></span><span class="hd-proj-live">live</span></span>
+    </div>
+    <span class="hd-tpl-badge" id="tplBadge" hidden
+      data-tip="You are editing the template master itself. Every change is saved straight into the template — new projects created from it will start from this content.">Editing template</span>
+  </div>
+
+  <!-- Spacer -->
+  <div class="hd-spacer"></div>
+
+  <!-- Grouped ghost nav cluster (hidden on welcome). On a narrow window the whole cluster
+       collapses into the "More" dropdown — the SAME buttons relocated by CSS, so there is no
+       second copy to keep in sync (ADR-008). -->
+  <div class="hd-nav-wrap" id="navWrap" hidden>
+    <button id="moreBtn" type="button" class="hd-more-btn" aria-haspopup="true" aria-expanded="false"
+      data-tip="More project actions — open the project folder, add or import chapters, and the save-as options.">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>
+      More
+    </button>
+    <div class="hd-nav-cluster" id="navCluster">
+    <button id="homeBtn" type="button" class="hd-cbtn"
+      data-tip="Close this project and go back to the start screen to open another one. Saved work stays in the project folder.">
+      <!-- grid icon -->
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 9h16M9 9v11"/></svg>
+      Projects
+    </button>
+    <button id="openFolderBtn" type="button" class="hd-cbtn"
+      data-tip="Open the project folder in Windows Explorer — where all chapters, images and attachments live.">
+      <!-- folder-open icon -->
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8a1 1 0 0 1 1-1h3.6l1.8 2H19a1 1 0 0 1 1 1v1H4z"/><path d="M3.7 11h16.6l-1.9 7.2a1 1 0 0 1-1 .8H6.6a1 1 0 0 1-1-.8z"/></svg>
+      Open folder
+    </button>
+    <button id="newChapterBtn" type="button" class="hd-cbtn"
+      data-tip="Create a new chapter from a template and place it into a section of the documentation.">
+      <!-- doc-plus icon -->
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V9z"/><path d="M14 3v6h6"/><path d="M9 13h6M12 10v6"/></svg>
+      New chapter
+    </button>
+    <button id="saveAsBtn" type="button" class="hd-cbtn"
+      data-tip="Save a copy of this whole project into another folder and switch to working on the copy. The original is left untouched.">
+      <!-- copy icon -->
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>
+      Save as…
+    </button>
+    <button id="saveAsTemplateBtn" type="button" class="hd-cbtn"
+      data-tip="Save this project as a reusable template. It is copied into your Templates folder so you and your colleagues can start new projects from it.">
+      <!-- grid icon -->
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 9h16M9 9v11"/></svg>
+      Save as template
+    </button>
+    <button id="importDocxBtn" type="button" class="hd-cbtn"
+      data-tip="Import a Word (.docx) document: pick which of its sections to add as chapters, then set who each chapter is for.">
+      <!-- doc-import icon -->
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V9z"/><path d="M14 3v6h6"/><path d="M12 18v-6M9.5 14.5 12 12l2.5 2.5"/></svg>
+      Import…
+    </button>
+    <button id="convertEmfBtn" type="button" class="hd-cbtn" hidden
+      data-tip="Convert this project's Word vector images (EMF/WMF) to PNG so they display in the editor and handover. Originals are moved to _emf-originals/ (kept, not shipped).">
+      <!-- image-convert icon -->
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="1.5"/><path d="m3 13 5-5 4 4 3-3 6 6"/><path d="M16 21h5m-2.5-2.5L21 21l-2.5 2.5"/></svg>
+      <span id="convertEmfLabel">Convert EMF…</span>
+    </button>
+    <button id="exportPdfBtn" type="button" class="hd-cbtn" data-tip="Export the manual, chapters, and/or views as PDF or single-file HTML (runs in the background).">
+      <!-- export icon -->
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6"/></svg>
+      Export…
+    </button>
+    </div>
+  </div>
+
+  <!-- Right cluster -->
+  <div class="hd-right">
+    <button id="checkBtn" type="button" class="hd-check-btn"
+      data-tip="Validate the whole project: broken links, missing images, unknown audiences, dangling view references.">
+      <!-- check icon -->
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5"/></svg>
+      Check
+    </button>
+
+    <div class="hd-build-meta" id="buildMeta" hidden
+      data-tip="When this DocWiz program was built. If you report a problem, mention this date — an older build may not have the latest fixes.">
+      <span class="hd-build-label">build</span>
+      <span id="buildStamp" class="hd-build-stamp"></span>
+    </div>
+
+    <button id="buildBtn" type="button" class="hd-build-btn"
+      data-tip="Generate the offline handover website (manual + all audience views) from the current content. Saves your open chapter first.">
+      <!-- upload icon -->
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      Build
+    </button>
+
+    <a id="handoverLink" href="/handover" target="_blank" class="hd-cbtn hd-ghost-btn" hidden
+      data-tip="Open the generated handover website in a new browser tab.">
+      <!-- external-link icon -->
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+      <span class="hd-btn-label">Handover</span>
+    </a>
+    <a id="packageLink" href="/api/package" class="hd-cbtn hd-ghost-btn" hidden
+      data-tip="Download the whole handover as a single .zip to hand over or archive.">
+      <!-- download icon -->
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      <span class="hd-btn-label">Download .zip</span>
+    </a>
+
+    <button id="quitBtn" type="button" class="hd-quit-btn"
+      data-tip="Stop the editor. Everything you saved stays in the project folder.">
+      <!-- power icon -->
+      <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
+    </button>
+  </div>
+
+  <!-- Native window controls (custom title bar). Hidden by default; app.js reveals them
+       (html.dw-native) only inside the DocWiz app window, where they message the WebView2 host.
+       In a browser tab the browser's own controls apply, so these stay hidden. data-nodrag keeps
+       the header-drag handler from treating this area as a move grip. -->
+  <div class="hd-winctl" id="winCtl" data-nodrag>
+    <button type="button" class="hd-wbtn" id="winMin" tabindex="-1" aria-label="Minimize"
+      data-tip="Minimize the DocWiz window.">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="12" x2="18" y2="12"/></svg>
+    </button>
+    <button type="button" class="hd-wbtn" id="winMax" tabindex="-1" aria-label="Maximize"
+      data-tip="Maximize the DocWiz window, or restore it to a window.">
+      <svg class="ic-max" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="1.5"/></svg>
+      <svg class="ic-restore" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="8" width="10" height="10" rx="1.5"/><path d="M9 8V7a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-1"/></svg>
+    </button>
+    <button type="button" class="hd-wbtn hd-wbtn-close" id="winClose" tabindex="-1" aria-label="Close"
+      data-tip="Close DocWiz. Your saved work stays in the project folder.">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+</header>
+
+<section id="welcomeScreen" hidden>
+  <div class="welcome-canvas">
+    <div class="welcome-wrap">
+
+      <!-- Hero -->
+      <div class="welcome-hero">
+        <div class="welcome-hero-mark" aria-hidden="true">
+          <img src="/app/brand/docwiz.svg" alt="" width="32" height="32">
+        </div>
+        <div class="welcome-hero-text">
+          <h1>DocWiz</h1>
+          <p>Audience-aware documentation for delivered systems — one source of truth,
+             generated manuals, trainings, and handovers.</p>
+        </div>
+      </div>
+
+      <!-- Two-column grid -->
+      <div class="welcome-cols">
+
+        <!-- LEFT: start + templates -->
+        <div class="welcome-col-left">
+          <div class="welcome-eyebrow">Start</div>
+          <div class="welcome-stack">
+            <button class="acard primary" id="wOpenBtn"
+              data-tip="Opens the Windows folder picker — choose your existing DocWiz project folder to continue where you left off.">
+              <span class="acard-ico">
+                <!-- folder-open icon -->
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M4 8a1 1 0 0 1 1-1h3.6l1.8 2H19a1 1 0 0 1 1 1v1H4z"/>
+                  <path d="M3.7 11h16.6l-1.9 7.2a1 1 0 0 1-1 .8H6.6a1 1 0 0 1-1-.8z"/>
+                </svg>
+              </span>
+              <span class="acard-body">
+                <span class="acard-title">Open project…</span>
+                <span class="acard-desc">Opens the Windows folder picker — choose your DocWiz project folder.</span>
+              </span>
+              <svg class="acard-chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+            </button>
+            <button class="acard" id="wNewBtn" data-template="blank"
+              data-tip="Opens the Windows folder picker — pick an empty folder and DocWiz creates the project structure for you.">
+              <span class="acard-ico">
+                <!-- folder-plus icon -->
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M4 7a1 1 0 0 1 1-1h3.6l1.8 2H19a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/>
+                  <path d="M12 11.5v5M9.5 14h5"/>
+                </svg>
+              </span>
+              <span class="acard-body">
+                <span class="acard-title">New blank project…</span>
+                <span class="acard-desc">Pick an empty folder in the Windows picker — the structure is created for you.</span>
+              </span>
+              <svg class="acard-chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+            </button>
+            <button class="acard" id="wImportBtn"
+              data-tip="Pick an empty folder, then a Word (.docx) document — DocWiz creates a new project and turns the document into chapters you choose.">
+              <span class="acard-ico">
+                <!-- doc-import icon -->
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V9z"/>
+                  <path d="M14 3v6h6"/>
+                  <path d="M12 18v-6M9.5 14.5 12 12l2.5 2.5"/>
+                </svg>
+              </span>
+              <span class="acard-body">
+                <span class="acard-title">New project from Word…</span>
+                <span class="acard-desc">Pick an empty folder, then a .docx — its sections become chapters you pick.</span>
+              </span>
+              <svg class="acard-chev" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
+            </button>
+          </div>
+
+          <div class="welcome-eyebrow welcome-eyebrow-gap">Start from template</div>
+          <div id="wTemplates"></div>
+          <p class="welcome-hint" id="wHint"></p>
+        </div>
+
+        <!-- RIGHT: recent projects -->
+        <div class="welcome-col-right">
+          <div class="welcome-recent-head">
+            <div class="welcome-eyebrow">Recent projects</div>
+            <div class="welcome-search" data-tip="Filter recent projects by name, code, or path.">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="11" cy="11" r="6"/>
+                <path d="M20 20l-3.6-3.6"/>
+              </svg>
+              <input id="wSearch" type="search" placeholder="Search projects…" spellcheck="false"
+                data-tip="Type to filter recent projects by name, code, or folder path.">
+            </div>
+          </div>
+          <div id="wRecent"></div>
+          <p class="welcome-error" id="wError" hidden></p>
+        </div>
+
+      </div><!-- /welcome-cols -->
+      <div class="welcome-settings" id="wSettings" hidden>
+        <span class="welcome-settings-label">Open the editor in</span>
+        <div class="welcome-settings-toggle" role="group">
+          <button type="button" id="wModeApp" class="wmode"
+            data-tip="Open the editor in its own DocWiz window (no browser). Read/present and the handover still open in your browser. Applies next time you launch.">DocWiz window</button>
+          <button type="button" id="wModeBrowser" class="wmode"
+            data-tip="Open DocWiz as a tab in your default web browser. Applies next time you launch.">Browser tab</button>
+        </div>
+        <span class="welcome-settings-note" id="wModeNote"></span>
+      </div>
+
+    </div><!-- /welcome-wrap -->
+  </div><!-- /welcome-canvas -->
+</section>
+
+<div class="shell" id="editorShell">
+  <aside id="tree"></aside>
+
+  <main id="main">
+    <section id="welcome">
+      <h1>Welcome</h1>
+      <p>Pick a chapter on the left to edit it, or create a new one. <b>Views</b>
+         (trainings, handover decks) have their own visual editor; the
+         <b>project manifest</b> is edited as YAML.</p>
+      <p>Editing: the chapter opens as <b>the real page</b> — click into text and
+         type. Click a table or image to select it; its tools appear in the bar
+         under the banner. Esc steps out. <b>Reading view</b> opens the saved
+         chapter exactly as the handover will render it.</p>
+      <p><b>Tables:</b> click a cell to edit it in place. Rows, columns, alignment
+         and column widths live in the selected table's tool bar. Saving writes
+         only what you changed — untouched lines keep their exact bytes.</p>
+    </section>
+
+    <section id="chapterEditor" hidden>
+      <div class="chapterbar">
+        <!-- ID chip: mono #-accent slug, read-only -->
+        <div class="cb-id-chip" id="fmId" aria-label="Chapter ID"
+          data-tip="The chapter's stable identifier. Links and views reference it, so it is fixed at creation and can never change — renaming the title is always safe instead.">
+          <span class="cb-id-hash" aria-hidden="true">#</span>
+          <span class="cb-id-slug"></span>
+        </div>
+
+        <!-- Title input -->
+        <input id="fmTitle" class="cb-title-input" type="text" placeholder="Chapter title"
+          data-tip="The chapter title shown in the navigation tree and as the page heading. Safe to change any time.">
+
+        <!-- Discipline custom dropdown wrapped with tag icon -->
+        <div class="cb-sel-wrap" id="fmDisciplineWrap"
+          data-tip="Which kind of chapter this is (setup, operations, troubleshooting, …). Also selects the structure template when creating new chapters.">
+          <!-- tag icon -->
+          <svg class="cb-sel-ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+          <!-- Hidden input keeps the .value contract for app.js read/write paths -->
+          <input type="hidden" id="fmDiscipline">
+          <!-- Custom dropdown trigger + popup are injected by app.js buildDisciplineDropdown() -->
+          <div id="fmDisciplineDropdown"></div>
+        </div>
+
+        <!-- Segmented audience multi-toggle -->
+        <div id="fmAudiences" class="cb-aud-set"
+          data-tip="Who this chapter is for. It only appears in the generated views of the checked audiences — the full manual always contains everything."></div>
+
+        <!-- Action group (pushed right) -->
+        <div class="cb-actions">
+          <div class="cb-div" aria-hidden="true"></div>
+
+          <span id="status" class="cb-status"></span>
+
+          <!-- Save (primary, --dw-accent) with amber unsaved dot -->
+          <button id="saveBtn" type="button" class="cb-save-btn"
+            data-tip="Save this chapter to its Markdown file (Ctrl+S).">
+            <!-- save dot (amber; local chrome value — see CSS comment) -->
+            <span class="cb-save-dot" aria-hidden="true"></span>
+            <!-- save icon -->
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+            Save
+          </button>
+
+          <!-- Kebab popup holding Delete chapter -->
+          <div class="cb-kebab-wrap">
+            <button type="button" class="cb-kebab-btn" id="cbKebabBtn" aria-haspopup="true" aria-expanded="false"
+              data-tip="More chapter actions.">
+              <!-- vertical dots (kebab) -->
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+            </button>
+            <div class="cb-kebab-menu" id="cbKebabMenu" role="menu">
+              <button id="chDeleteBtn" type="button" class="cb-kebab-item cb-kebab-danger" role="menuitem"
+                data-tip="Delete this chapter file. Refused while other chapters or views still link to it, so nothing ends up broken.">
+                <!-- trash icon -->
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
+                Delete chapter
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="split">
+        <div id="editor2" class="dw-live-surface dw-zoomable"></div>
+      </div>
+    </section>
+
+    <section id="yamlEditor" hidden>
+      <div class="fm">
+        <b id="yamlPath"></b>
+        <button id="yamlSaveBtn" type="button" class="primary"
+          data-tip="Save this YAML file. Run Check afterwards — view references are validated against the chapters.">Save</button>
+        <span id="yamlStatus"></span>
+      </div>
+      <textarea id="yamlText" spellcheck="false"></textarea>
+    </section>
+
+    <section id="viewEditor" hidden>
+      <div class="fm">
+        <label data-tip="The view's title, shown as its tab in the handover.">Title <input id="vTitle"></label>
+        <label data-tip="Who this view is for. Included sections are filtered to this audience — admin-only blocks won't show in a user view.">Audience <select id="vAudience"></select></label>
+        <label data-tip="Slides = a click-through presentation (the PowerPoint replacement). Document = one tidy filtered page.">Mode
+          <select id="vMode">
+            <option value="slides">Slides (presentation)</option>
+            <option value="document">Document (page)</option>
+          </select></label>
+        <button id="vSaveBtn" type="button" class="primary" data-tip="Save this view to its file.">Save</button>
+        <button id="vReadBtn" type="button" data-tip="Open the deck the way your audience sees it — full-screen-ready slides, one at a time. This is the present/handover view; editing happens on the surface below.">Read / present</button>
+        <button id="vExportBtn" type="button" data-tip="Export this view as a single self-contained .html file — emailable, opens in any browser. Save first.">Export single file</button>
+        <button id="vDuplicateBtn" type="button" data-tip="Save, then copy this view with all its slides — build the next training or handover from a structure that already works.">Duplicate</button>
+        <button id="vDeleteBtn" type="button" data-tip="Delete this view (its file is removed).">Delete view</button>
+        <span id="vStatus"></span>
+      </div>
+      <div class="toolbelt">
+        <button id="vAddSlide" type="button"
+          data-tip="Add a slide after the last one — pick a layout (title + content, two columns, big media, or a section divider). You fill in its content on the slide itself.">+ Add slide</button>
+        <span class="vhint">This is the slide canvas — every slide shown full-size, laid out exactly as your audience sees it. Use “Read / present” for the click-through deck.</span>
+      </div>
+      <!-- Slides mode lays out a left organization panel (the slide list — navigate,
+           reorder, delete) beside the slide canvas; document mode hides the panel and
+           shows the filtered-page iframe full width. The canvas is rendered in THIS
+           (parent) document, like the chapter editor's #editor2.dw-live-surface: site.css
+           applies inside .dw-live-surface via the /app/site-scoped.css @scope wrapper. The
+           slide canvas follows the editor page theme (no pinned data-theme — Rule 16). app.js
+           injects the RenderSlides fragment into #vEditSurface and marks each .slide .active. 7b
+           mounts per-zone editors in here (one document — no cross-document ProseMirror).
+           Document mode swaps in the #vDocSurface iframe instead (a filtered page). -->
+      <div id="vEditLayout" class="vedit-layout">
+        <!-- PowerPoint-style slide organization panel: a vertical list of slides to
+             navigate, reorder (▲▼) and delete. Built by app.js renderSlidePanel(). -->
+        <aside id="vPanel" class="vpanel" aria-label="Slides">
+          <div class="vpanel-head">Slides</div>
+          <div id="vPanelList" class="vpanel-list" role="list"></div>
+          <button id="vPanelAdd" type="button" class="vpanel-add"
+            data-tip="Add a slide after the last one — pick a layout, then fill in its content on the slide itself.">+ Add slide</button>
+        </aside>
+        <div id="vSurface" class="vsurface">
+          <div id="vEditSurface" class="dw-live-surface dw-slide-edit"></div>
+          <iframe id="vDocSurface" class="vedit-surface" title="Document view — the filtered page, exactly like the final handover" hidden></iframe>
+        </div>
+      </div>
+    </section>
+
+    <!-- Documentation packages (Handover artifacts): manage the handover's external HTML
+         doc tabs, e.g. a generated API site → the API Reference tab. Cards are
+         rendered by app.js openDocs() from /api/external-docs. -->
+    <section id="viewDocs" class="dw-artifacts" hidden>
+      <div class="dwa-head">
+        <div class="dwa-htext">
+          <div class="dwa-title">Documentation packages</div>
+          <div class="dwa-desc">Self-contained HTML documentation bundled as tabs in the handover —
+            e.g. a generated API site. Each package becomes its own tab readers can open offline.</div>
+        </div>
+        <button id="addPkgBtn" type="button" class="dwa-btn dwa-btn-primary"
+          data-tip="Add a folder of HTML documentation (with an index.html or handover.html) as a tab in the handover — e.g. a generated API reference.">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+          Add package
+        </button>
+      </div>
+      <div id="pkgList" class="dwa-pkg-list"></div>
+      <div id="pkgEmpty" class="dwa-empty" hidden>
+        <div class="dwa-em-title">No documentation packages yet</div>
+        <div class="dwa-em-desc">Add a generated API site to give administrators an API Reference tab in the
+          handover. Packages are bundled offline alongside your chapters and attachments.</div>
+        <button type="button" class="dwa-btn dwa-btn-primary" onclick="document.getElementById('addPkgBtn').click()">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+          Add documentation package
+        </button>
+      </div>
+      <div class="dwa-foot"><span class="dwa-mono">external/&lt;key&gt;/</span> · bundled into handover tabs at build time</div>
+    </section>
+
+    <!-- Attachments manager (Handover artifacts): files in attachments/ that appear on the
+         handover's Attachments tab. Rendered by app.js openAttach(). -->
+    <section id="viewAttach" class="dw-artifacts" hidden>
+      <div class="dwa-head">
+        <div class="dwa-htext">
+          <div class="dwa-title">Attachments</div>
+          <div class="dwa-desc">Files in <span class="dwa-mono">attachments/</span> — PDFs, datasheets and
+            binaries that appear on the handover Attachments tab and can be linked from chapters.</div>
+        </div>
+        <button id="attachUploadBtn" type="button" class="dwa-btn dwa-btn-secondary"
+          data-tip="Upload a file into the project's attachments/ folder.">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 16V5M8 9l4-4 4 4"/><path d="M5 18.5h14"/></svg>
+          Upload
+        </button>
+        <input id="attachFile" type="file" hidden>
+      </div>
+      <div id="attachList" class="dwa-pkg-list"></div>
+      <div id="attachEmpty" class="dwa-empty" hidden>
+        <div class="dwa-em-title">No attachments yet</div>
+        <div class="dwa-em-desc">Upload PDFs, datasheets or other documents — they ship on the handover's
+          Attachments tab and can be linked from any chapter.</div>
+        <button type="button" class="dwa-btn dwa-btn-secondary" onclick="document.getElementById('attachUploadBtn').click()">Upload a file</button>
+      </div>
+    </section>
+
+    <!-- Settings (interactive docwiz.yaml editor + app preferences). Rail + content pane.
+         Fields are bound/saved by app.js openSettings(); writes via /api/settings-project
+         (project) and /api/settings (app prefs, immediate). -->
+    <section id="setPane" hidden>
+      <nav class="set-rail">
+        <div class="set-rail-scroll" id="setRail">
+          <div class="set-grp">Project</div>
+          <div class="set-item active" data-sec="general">General</div>
+          <div class="set-item" data-sec="audiences">Audiences</div>
+          <div class="set-item" data-sec="output">Handover output</div>
+          <div class="set-grp">Preferences</div>
+          <div class="set-item" data-sec="application">Application</div>
+          <div class="set-grp">Advanced</div>
+          <div class="set-item" data-sec="raw">Raw YAML</div>
+          <div class="set-grp">Coming soon</div>
+          <div class="set-item soon">Branding<span class="soon-badge">Soon</span></div>
+          <div class="set-item soon">Localization<span class="soon-badge">Soon</span></div>
+          <div class="set-item soon">Export<span class="soon-badge">Soon</span></div>
+          <div class="set-item soon">Integrations<span class="soon-badge">Soon</span></div>
+          <div class="set-item soon">Search<span class="soon-badge">Soon</span></div>
+        </div>
+      </nav>
+      <div class="set-pane-body">
+        <div class="set-topbar">
+          <div class="set-crumb">Settings<span class="sep">›</span><b id="crumbSec">General</b></div>
+          <div class="grow"></div>
+          <button class="dwa-btn dwa-btn-secondary dwa-btn-sm" id="setBack" type="button">Back to editor</button>
+          <div class="save-state">
+            <span class="dirty-dot"></span>
+            <button class="dwa-btn btn-save" id="setSave" type="button">Save</button>
+          </div>
+        </div>
+        <div class="set-body">
+          <div class="set-content">
+
+            <div class="set-section active" id="secGeneral">
+              <div class="set-sec-head"><div class="set-sec-title">General</div>
+                <div class="set-sec-desc">Project metadata written to <span class="dwa-mono">docwiz.yaml</span>. Shown on the handover cover and chrome.</div></div>
+              <div class="fcard">
+                <div class="frow"><div class="fl"><div class="ftitle">Project name<span class="req">*</span></div></div><div class="fc"><input class="finput" id="setProject"></div></div>
+                <div class="frow"><div class="fl"><div class="ftitle">Project code</div><div class="fhint">Shown in slide footers and the chrome bar.</div></div><div class="fc"><input class="finput mono" id="setCode"></div></div>
+                <div class="frow"><div class="fl"><div class="ftitle">Customer</div></div><div class="fc"><input class="finput" id="setCustomer"></div></div>
+                <div class="frow"><div class="fl"><div class="ftitle">Version</div><div class="fhint">Semantic version (major.minor.patch).</div></div><div class="fc"><input class="finput mono" id="setVersion"><div class="field-msg" id="verMsg" hidden></div></div></div>
+                <div class="frow"><div class="fl"><div class="ftitle">Language</div></div><div class="fc"><select class="finput" id="setLanguage"></select></div></div>
+                <div class="frow"><div class="fl"><div class="ftitle">Project folder</div><div class="fhint">Read-only — for context.</div></div><div class="fc"><div class="inline-row"><span class="pathchip"><span class="p" id="setFolder"></span></span><button class="dwa-btn dwa-btn-secondary dwa-btn-sm" id="setOpenFolder" type="button">Open folder</button></div></div></div>
+              </div>
+            </div>
+
+            <div class="set-section" id="secAudiences">
+              <div class="set-sec-head"><div class="set-sec-title">Audiences</div>
+                <div class="set-sec-desc">Lightweight labels chapters and views are tagged with. Ids are stable and read-only — renaming would break view bindings.</div></div>
+              <div class="rowlist" id="audList"></div>
+              <button class="addrow" id="addAud" type="button"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Add audience</button>
+            </div>
+
+            <div class="set-section" id="secOutput">
+              <div class="set-sec-head"><div class="set-sec-title">Handover output</div>
+                <div class="set-sec-desc">How the generated handover renders. Written to <span class="dwa-mono">docwiz.yaml</span>.</div></div>
+              <div class="fcard">
+                <div class="frow"><div class="fl"><div class="ftitle">Automatic numbering</div><div class="fhint">Word-style 1 / 1.1 / 1.1.1 headings.</div></div>
+                  <div class="fc"><div class="toggle-row"><button class="switch" id="numSwitch" role="switch" aria-checked="true" type="button"></button><span class="tlabel" id="numLabel">On — headings numbered</span></div>
+                    <div class="num-example" id="numExample"><span class="lvl"><span class="n">1</span><span class="t">Getting Started</span></span><span class="lvl"><span class="n">1.1</span><span class="t">Installation</span></span><span class="lvl"><span class="n">1.1.1</span><span class="t">Requirements</span></span></div>
+                  </div></div>
+              </div>
+            </div>
+
+            <div class="set-section" id="secApplication">
+              <div class="set-sec-head"><div class="set-sec-title">Application</div>
+                <div class="set-sec-desc">Per-user preferences stored in <span class="dwa-mono">settings.json</span> — saved instantly as you change them (no Save button).</div></div>
+              <div class="fcard">
+                <div class="frow"><div class="fl"><div class="ftitle">Window mode</div><div class="fhint">How DocWiz opens on this machine.</div></div>
+                  <div class="fc"><div class="seg" id="winMode"><button data-mode="native" type="button">Native window</button><button data-mode="browser" type="button">Browser tab</button></div>
+                    <div class="applies">Saved instantly · takes effect the next time you open DocWiz</div></div></div>
+                <div class="frow"><div class="fl"><div class="ftitle">Appearance</div><div class="fhint">Light or dark theme for the editor and its slide previews. Remembered on this computer.</div></div>
+                  <div class="fc"><button id="themeBtn" type="button" data-tip="Switch the editor between light and dark appearance.">Dark</button>
+                    <div class="applies">Saved instantly</div></div></div>
+              </div>
+            </div>
+
+            <div class="set-section" id="secRaw">
+              <div class="set-sec-head"><div class="set-sec-title">Raw YAML</div>
+                <div class="set-sec-desc">The complete <span class="dwa-mono">docwiz.yaml</span>, including keys with no UI. An escape hatch for power users.</div></div>
+              <div class="warnbox"><div class="wb-text">Advanced — editing here can break your project. The form sections write only known fields and preserve unknown keys and comments.</div></div>
+              <textarea class="finput mono" id="setRawText" spellcheck="false" style="margin-top:var(--dw-s4);min-height:300px"></textarea>
+              <div class="inline-row" style="margin-top:var(--dw-s3)"><button class="dwa-btn dwa-btn-primary dwa-btn-sm" id="setRawSave" type="button">Save raw YAML</button></div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="issuesPanel" hidden>
+  <div class="issues-head"><b id="issuesTitle">Check results</b>
+    <button id="issuesClose" type="button">×</button></div>
+  <ul id="issuesList"></ul>
+</div>
+
+<dialog id="modal"></dialog>
+
+<script src="/app/app.js"></script>
+<!-- Light/dark theme toggle — the SAME script the handover uses (binds #themeBtn,
+     flips data-theme on <html>, persists dw-theme). Single source, no editor copy (Rule 21). -->
+<script src="/app/site.js"></script>
+<!-- Visual self-check probe (dev/verification only): inert unless the URL carries
+     ?probe=1. Reads geometry/contrast facts off the live surface for headless checks. -->
+<script src="/app/probe.js"></script>
+<script type="module" src="/app/editor2/main.js"></script>
+<!-- Slide-zone live editing (Slides v2, Task 7b): mounts per-zone ProseMirror editors
+     on the slide canvas and lets the shared chapter toolbar follow the focused zone.
+     Loads after main.js so window.DocWizEditor2 exists; sets window.DocWizSlideEdit. -->
+<script type="module" src="/app/editor2/slideedit.js"></script>
+</body>
+</html>

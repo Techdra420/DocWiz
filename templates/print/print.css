@@ -1,0 +1,21 @@
+/* DocWiz print layer. Loaded AFTER tokens.css + site.css. Light theme forced.
+   Footers + bookmarks come from Page.printToPDF (native), not CSS margin boxes. */
+:root { color-scheme: light; }
+html, body { background: #fff; }
+
+*, *::before, *::after { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+@page { size: A4; margin: 18mm 16mm; }
+
+.pdf-cover { break-after: page; text-align: center; padding-top: 60mm; }
+.pdf-cover h1 { font-size: 32pt; margin: 0 0 8mm; }
+.pdf-cover .meta { font-size: 12pt; color: var(--dw-muted); line-height: 1.8; }
+
+.pdf-chapter { break-before: page; }
+.pdf-chapter:first-of-type { break-before: avoid; }
+
+figure, table, .dw-figure, .dw-table-figure { break-inside: avoid; }
+
+/* Printed code must wrap, not scroll: headless Edge bakes an overflow:auto scroll
+   track into the PDF for lines wider than the text column. */
+pre { overflow: visible; white-space: pre-wrap; overflow-wrap: anywhere; }

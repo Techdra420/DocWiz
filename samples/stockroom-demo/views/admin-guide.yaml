@@ -1,0 +1,17 @@
+# Administrator guide — full depth plus external artifacts (release notes, API reference).
+id: admin-guide
+title: Administrator Guide
+audience: admin
+mode: document
+slides:
+  - include: system-overview
+  - include: installation
+  - include: security-summary#security-functions
+  - include: troubleshooting
+  - markdown: |
+      ## External artifacts
+
+      - Release notes: see attachments (PDF)
+      - Requirements sheet: see attachments
+      - API reference: generated site (set
+        `external.api_reference` in `docwiz.yaml` to embed it)

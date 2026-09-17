@@ -1,0 +1,106 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- WinExe: double-clicking DocWiz.exe must not open a console window — the
+         editor flow is fully GUI (folder picker → browser). Terminal verbs still
+         print via ConsoleInterop.TryAttachParentConsole(). -->
+    <OutputType>WinExe</OutputType>
+    <AssemblyName>DocWiz</AssemblyName>
+    <!-- App/exe icon: the DocWiz "DW" mark (src/DocWiz.Cli/DocWiz.ico, multi-size). -->
+    <ApplicationIcon>DocWiz.ico</ApplicationIcon>
+    <!-- Windows-only (WinExe). The native folder picker runs as a SEPARATE short-lived
+         process (the hidden `__pickfolder` verb), not inside the server: a freshly
+         launched process gets foreground rights, so the dialog appears in front — the
+         in-process version did not. Do not move the dialog back into the server. -->
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <!-- Required by the LibraryImport source generator (ConsoleInterop.AttachConsole) -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <!-- Cold-start: the double-click exe is a ~150 MB self-contained single-file. Without
+       this, every method on the startup path (WinForms splash + ASP.NET Core + Kestrel +
+       Markdig) is JIT-compiled on launch — that JIT is the multi-second "nothing happens"
+       gap before the splash can even paint (VISION dogfood note). ReadyToRun precompiles
+       to native so startup is mostly load-and-run, not compile. Only applies when a RID is
+       set (the self-contained publish: `-r win-x64`); a plain `dotnet build`/`dotnet test`
+       ignores it, so it never slows inner-loop builds. Trade-off: larger exe + slower
+       publish, both acceptable for a once-per-release artifact. -->
+  <PropertyGroup Condition="'$(RuntimeIdentifier)' != ''">
+    <PublishReadyToRun>true</PublishReadyToRun>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- ASP.NET Core shared framework — required to host the DocWiz.App editor server -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DocWiz.Core\DocWiz.Core.csproj" />
+    <ProjectReference Include="..\DocWiz.Build\DocWiz.Build.csproj" />
+    <ProjectReference Include="..\DocWiz.App\DocWiz.App.csproj" />
+  </ItemGroup>
+
+  <!-- Ship the file-based project templates beside the exe so the welcome screen's
+       TemplateLibrary.Discover finds them (TemplatesLocation = <exe dir>\Templates).
+       CopyToOutputDirectory covers BOTH `dotnet run` (bin\...\Templates) AND publish
+       (dist\Templates). PreserveNewest skips unchanged files after the first build, so the
+       files only copy once per clean output. The recovery folders are gitignored (not in
+       the repo) but excluded here defensively too. Content files are copied loose beside the
+       single-file exe (not embedded), matching today's dist. -->
+  <ItemGroup>
+    <Content Include="..\..\templates\projects\**\*"
+             Exclude="..\..\templates\projects\**\_emf-originals\**;..\..\templates\projects\**\_rotated-originals\**;..\..\templates\projects\**\output\**">
+      <Link>Templates\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Justification (Guardrails: a NuGet package needs a reason here). The editor must run
+         inside a native DocWiz.exe-owned window (VISION L191: "DW app is not running, edge
+         started"), not a separate Edge app-window process. WebView2 is the embeddable
+         Edge/Chromium engine, same renderer as the handover, hosted in our own WinForms window
+         (DocWiz.Cli is already net8.0-windows + WinForms). NO runtime internet dependency: it
+         renders the localhost editor and the WebView2 Runtime ships with Edge/Windows 11 (the
+         same Edge dependency we already rely on); nothing is downloaded. Microsoft-official, in
+         the Chromium/Edge family we already target. -->
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4022.49" />
+  </ItemGroup>
+
+  <!-- The WebView2 package references BOTH its WinForms and WPF assemblies unconditionally
+       (build/Common.targets — no UseWPF guard), but DocWiz only hosts the WinForms control.
+       The WPF assembly pulls in WPF's WindowsBase 5.0.0.0, conflicting with net8's WindowsBase
+       (warning MSB3277) and shipping dead weight. Drop the WPF reference before RAR; we never
+       use Microsoft.Web.WebView2.Wpf. -->
+  <Target Name="RemoveWebView2WpfReference" BeforeTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <Reference Remove="@(Reference)" Condition="'%(Filename)' == 'Microsoft.Web.WebView2.Wpf'" />
+    </ItemGroup>
+  </Target>
+
+  <!-- Bundle Pandoc beside the published exe for the Word-import feature. Shipping it as a
+       sibling process invoked separately = GPL "mere aggregation": DocWiz's own license is
+       unaffected; only the bundled binary carries the GPL obligations (satisfied by the
+       copied COPYING/COPYRIGHT + THIRD-PARTY-NOTICES.md). pandoc.exe is ~210 MB and
+       git-ignored — fetched ONCE into tools\pandoc\ (see tools/README.md) and copied at
+       publish, never committed. Only on a real self-contained publish (RID set); a plain
+       `dotnet build`/`dotnet test` skips it, so the inner loop never needs Pandoc present. -->
+  <Target Name="BundlePandoc" AfterTargets="Publish" Condition="'$(RuntimeIdentifier)' != ''">
+    <PropertyGroup>
+      <PandocSrcDir>$(MSBuildProjectDirectory)\..\..\tools\pandoc\pandoc-3.6.3</PandocSrcDir>
+      <RepoRootDir>$(MSBuildProjectDirectory)\..\..</RepoRootDir>
+    </PropertyGroup>
+    <Error Condition="!Exists('$(PandocSrcDir)\pandoc.exe')"
+           Text="Word-import publish needs Pandoc at $(PandocSrcDir)\pandoc.exe — fetch the portable zip into tools\pandoc\ (see tools/README.md) before publishing dist." />
+    <ItemGroup>
+      <PandocFiles Include="$(PandocSrcDir)\pandoc.exe;$(PandocSrcDir)\COPYING.rtf;$(PandocSrcDir)\COPYRIGHT.txt" />
+    </ItemGroup>
+    <Copy SourceFiles="@(PandocFiles)" DestinationFolder="$(PublishDir)pandoc" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(RepoRootDir)\THIRD-PARTY-NOTICES.md" DestinationFolder="$(PublishDir)"
+          SkipUnchangedFiles="true" Condition="Exists('$(RepoRootDir)\THIRD-PARTY-NOTICES.md')" />
+    <Message Importance="high"
+             Text="BundlePandoc: copied pandoc.exe + license files to $(PublishDir)pandoc\ and THIRD-PARTY-NOTICES.md to $(PublishDir)." />
+  </Target>
+
+</Project>

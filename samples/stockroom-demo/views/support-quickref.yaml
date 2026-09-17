@@ -1,0 +1,11 @@
+# Support quick reference — one tidy page, not a slide deck.
+id: support-quickref
+title: Support Quick Reference
+audience: support
+mode: document
+slides:
+  - include: security-summary#security-functions
+  - include: troubleshooting#routine-tasks
+  - include: troubleshooting#common-problems
+  - include: daily-operations#daily-startup
+  - include: installation#network

@@ -1,0 +1,2524 @@
+﻿/* DocWiz Editor UI â€” tokens come from /app/tokens.css (the single shared token file);
+   no palette is defined here. Recipes per docs/DESIGN_SYSTEM.md. */
+
+* { box-sizing: border-box; }
+/* The hidden attribute must always win, even over #id display rules */
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--dw-bg);
+  color: var(--dw-text);
+  font-family: var(--dw-font-ui);
+  font-size: var(--dw-fs-sm);
+  line-height: var(--dw-lh-snug);
+  -webkit-font-smoothing: antialiased;
+  display: flex;
+  flex-direction: column;
+}
+/* The single sanctioned gradient: the welcome hero wash */
+body.welcome { background: linear-gradient(180deg, var(--dw-accent-bg), transparent 320px) var(--dw-bg); }
+code, .mono { font-family: var(--dw-font-mono); font-size: 0.92em; }
+::selection { background: var(--dw-accent-glow); }
+
+/* ---- Buttons: secondary by default; one primary per view; ghost in groups;
+        danger = outline, never solid red at rest ---------------------------- */
+button, .ghost {
+  font: inherit;
+  font-size: var(--dw-fs-sm);
+  font-weight: var(--dw-w-medium);
+  line-height: var(--dw-lh-tight);
+  border: 1px solid var(--dw-border-strong);
+  background: transparent;
+  color: var(--dw-text);
+  border-radius: var(--dw-r1);
+  padding: var(--dw-s2) var(--dw-s4);
+  cursor: pointer;
+  text-decoration: none;
+}
+button:hover, .ghost:hover { background: var(--dw-surface-2); }
+button:focus-visible, .ghost:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: none;
+  box-shadow: var(--dw-focus-ring);
+}
+button:disabled { opacity: 0.45; cursor: default; }
+button.primary { background: var(--dw-accent); color: var(--dw-accent-contrast); border-color: var(--dw-accent); }
+button.primary:hover { background: var(--dw-accent-strong); border-color: var(--dw-accent-strong); }
+#quitBtn, #vDeleteBtn, #chDeleteBtn {
+  color: var(--dw-bad);
+  border-color: var(--dw-border);
+}
+#quitBtn:hover, #vDeleteBtn:hover, #chDeleteBtn:hover { background: var(--dw-bad-bg); border-color: var(--dw-bad); }
+
+/* ---- Chrome (always dark â€” header carries data-theme="dark") --------------- */
+header {
+  background: var(--dw-chrome);
+  color: var(--dw-chrome-text);
+  border-bottom: 1px solid var(--dw-chrome-border);
+  display: flex;
+  align-items: center;
+  gap: var(--dw-s4);
+  padding: 0 var(--dw-s4) 0 var(--dw-s4);
+  height: 54px;
+  flex: none;
+}
+
+/* Brand mark + name */
+.hd-brand { display: flex; align-items: center; gap: var(--dw-s3); flex-shrink: 0; }
+.hd-brand-mark { width: 30px; height: 30px; flex-shrink: 0; }
+.hd-brand-mark img { width: 100%; height: 100%; display: block; }
+.hd-brand-text { display: flex; align-items: baseline; gap: var(--dw-s2); }
+.hd-brand-name {
+  font-size: var(--dw-fs-sm); font-weight: var(--dw-w-bold); color: var(--dw-chrome-text);
+  letter-spacing: -0.2px; line-height: 1;
+}
+.hd-brand-sub {
+  font-size: var(--dw-fs-xs); font-weight: var(--dw-w-medium); color: var(--dw-chrome-muted);
+  text-transform: uppercase; letter-spacing: var(--dw-track-caps); line-height: 1;
+}
+
+/* Vertical divider */
+.hd-div { width: 1px; height: 26px; background: var(--dw-chrome-border); flex-shrink: 0; }
+
+/* Project block */
+.hd-proj { display: flex; align-items: center; gap: var(--dw-s2); min-width: 0; flex-shrink: 0; }
+.hd-proj-ico {
+  width: 26px; height: 26px; border-radius: 6px; background: var(--dw-chrome-2);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--dw-chrome-muted); flex-shrink: 0;
+}
+.hd-proj-text { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
+.hd-proj-name {
+  font-size: var(--dw-fs-sm); font-weight: var(--dw-w-medium);
+  color: var(--dw-chrome-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.hd-proj-meta {
+  font-size: var(--dw-fs-xs); color: var(--dw-chrome-muted);
+  font-family: var(--dw-font-mono); white-space: nowrap;
+  display: flex; align-items: center; gap: var(--dw-s2);
+}
+/* Green live dot â€” reuses --dw-ok (green semantic token) as a visual live-state indicator */
+.hd-live-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--dw-ok);
+  box-shadow: 0 0 0 3px var(--dw-ok-bg);
+  flex-shrink: 0;
+}
+.hd-proj-live { color: var(--dw-chrome-muted); }
+/* "Editing template" badge — caution state: every live save lands in the master. */
+.hd-tpl-badge {
+  display: inline-flex; align-items: center; flex-shrink: 0;
+  font-size: var(--dw-fs-xs); font-weight: var(--dw-w-medium);
+  text-transform: uppercase; letter-spacing: var(--dw-track-caps);
+  color: var(--dw-warn); background: var(--dw-warn-bg);
+  border: 1px solid var(--dw-warn); border-radius: var(--dw-r0);
+  padding: var(--dw-s1) var(--dw-s2); margin-left: var(--dw-s2); white-space: nowrap;
+}
+
+/* Spacer */
+.hd-spacer { flex: 1; }
+
+/* Grouped ghost nav cluster */
+.hd-nav-cluster {
+  display: flex; align-items: center; gap: var(--dw-s1);
+  background: var(--dw-chrome-2); border: 1px solid var(--dw-chrome-border);
+  border-radius: 9px; padding: var(--dw-s1); flex-shrink: 0;
+}
+.hd-cbtn {
+  display: inline-flex; align-items: center; gap: var(--dw-s2);
+  height: 30px; padding: 0 var(--dw-s3);
+  border: 0; border-radius: 6px;
+  background: transparent; color: var(--dw-chrome-muted);
+  font-size: var(--dw-fs-xs); font-weight: var(--dw-w-medium);
+  font-family: var(--dw-font-ui); cursor: pointer; white-space: nowrap;
+  text-decoration: none;
+  transition: background 0.12s, color 0.12s;
+}
+.hd-cbtn:hover { background: var(--dw-chrome-border); color: var(--dw-chrome-text); }
+.hd-cbtn:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
+
+/* Nav-cluster wrapper + "More" overflow trigger. Wide header: the cluster is the inline chip
+   and "More" is hidden. Narrow header (the @media below): the cluster becomes a dropdown
+   anchored under "More". Same buttons either way — no duplicate set (ADR-008). */
+.hd-nav-wrap { display: flex; align-items: center; flex-shrink: 0; position: relative; }
+.hd-more-btn {
+  display: none; /* shown only on a narrow header (@media) */
+  align-items: center; gap: var(--dw-s2);
+  height: 30px; padding: 0 var(--dw-s3);
+  background: var(--dw-chrome-2); border: 1px solid var(--dw-chrome-border); border-radius: 9px;
+  color: var(--dw-chrome-muted);
+  font-size: var(--dw-fs-xs); font-weight: var(--dw-w-medium); font-family: var(--dw-font-ui);
+  cursor: pointer; white-space: nowrap;
+  transition: background 0.12s, color 0.12s;
+}
+.hd-more-btn:hover { background: var(--dw-chrome-border); color: var(--dw-chrome-text); }
+.hd-more-btn:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
+
+/* Narrow header: collapse the nav cluster into the "More" dropdown so the buttons stop
+   crowding the bar (VISION: "buttons on the top app bar on small screen take too much space").
+   The cluster reuses its own chip styling as the popover panel, just re-stacked vertically.
+   Breakpoint is just above the measured intrinsic width of the FULL header with the nav cluster
+   inline + post-build buttons + native window controls (~1776px); collapsing the secondary nav
+   to "More" below that drops the header to ~1170px (measured) so it fits every laptop/medium
+   screen — including 1920×1080 at 125% Windows scaling (1536px logical) — without the window
+   controls falling off the right edge. The primary Check/Build/Handover/Download buttons keep
+   their labels; only this secondary cluster collapses. */
+@media (max-width: 1800px) {
+  .hd-more-btn { display: inline-flex; }
+  .hd-nav-cluster {
+    position: absolute; top: calc(100% + 6px); right: 0; z-index: 60;
+    flex-direction: column; align-items: stretch; gap: var(--dw-s1);
+    min-width: 232px; box-shadow: var(--dw-shadow-2);
+    display: none;
+  }
+  .hd-nav-cluster.hd-open { display: flex; }
+  .hd-nav-cluster .hd-cbtn { width: 100%; height: 34px; justify-content: flex-start; }
+}
+
+/* Right cluster */
+.hd-right { display: flex; align-items: center; gap: var(--dw-s3); flex-shrink: 0; }
+
+/* Check button */
+.hd-check-btn {
+  display: inline-flex; align-items: center; gap: var(--dw-s2);
+  height: 34px; padding: 0 var(--dw-s3);
+  border: 1px solid var(--dw-chrome-border); border-radius: 8px;
+  background: transparent; color: var(--dw-chrome-text);
+  font-size: var(--dw-fs-xs); font-weight: var(--dw-w-medium);
+  font-family: var(--dw-font-ui); cursor: pointer; white-space: nowrap;
+  transition: background 0.12s, border-color 0.12s;
+}
+.hd-check-btn:hover { background: var(--dw-chrome-border); border-color: var(--dw-chrome-2); }
+.hd-check-btn:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
+.hd-check-btn svg { color: var(--dw-ok); }
+
+/* Build meta (two-line: "build" label + timestamp) */
+.hd-build-meta {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 1px;
+  font-family: var(--dw-font-mono); font-size: var(--dw-fs-xs); color: var(--dw-chrome-muted);
+  line-height: 1.3; flex-shrink: 0;
+}
+.hd-build-label { color: var(--dw-chrome-muted); }
+.hd-build-stamp { color: var(--dw-chrome-text); font-weight: var(--dw-w-medium); }
+
+/* Build primary button (one primary on --dw-mark; white text) */
+.hd-build-btn {
+  display: inline-flex; align-items: center; gap: var(--dw-s2);
+  height: 34px; padding: 0 var(--dw-s4) 0 var(--dw-s3);
+  border: 0; border-radius: 8px; cursor: pointer;
+  background: var(--dw-mark); color: var(--dw-accent-contrast);
+  font-size: var(--dw-fs-sm); font-weight: var(--dw-w-bold);
+  font-family: var(--dw-font-ui); letter-spacing: 0.1px; white-space: nowrap;
+  box-shadow: var(--dw-shadow);
+  transition: background 0.12s, transform 0.04s;
+}
+.hd-build-btn:hover { background: var(--dw-accent); }
+.hd-build-btn:active { transform: translateY(1px); }
+.hd-build-btn:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
+
+/* Ghost link buttons (handover/download) inside right cluster */
+.hd-ghost-btn {
+  display: inline-flex; align-items: center; gap: var(--dw-s2);
+  height: 34px; padding: 0 var(--dw-s3);
+  border: 1px solid var(--dw-chrome-border); border-radius: 8px;
+  background: transparent; color: var(--dw-chrome-muted);
+  font-size: var(--dw-fs-xs); font-weight: var(--dw-w-medium);
+  text-decoration: none; white-space: nowrap;
+  transition: background 0.12s, color 0.12s;
+}
+.hd-ghost-btn:hover { background: var(--dw-chrome-border); color: var(--dw-chrome-text); }
+.hd-ghost-btn:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
+
+/* Tiny windows only: once the nav cluster has already collapsed to "More" (above), the header
+   with FULL ghost labels is ~1170px (measured); below ~1200px even that no longer fits, so the
+   post-build Handover / Download .zip buttons drop their labels to icon-only (their data-tip still
+   explains them). On normal screens the labels stay — only their spans are hidden here, no second
+   copy of the buttons (ADR-008). */
+@media (max-width: 1200px) {
+  .hd-ghost-btn { width: 34px; padding: 0; justify-content: center; }
+  .hd-ghost-btn .hd-btn-label { display: none; }
+}
+
+/* Theme toggle lives in Settings -> Application (text-only "Dark"/"Light" label set by the
+   shared site.js). Compact bordered button on the page surface (not chrome); fixed min-width
+   so it doesn't resize when the label flips between the two words. */
+#themeBtn {
+  min-width: 72px; padding: var(--dw-s2) var(--dw-s4);
+  border: 1px solid var(--dw-border-strong); border-radius: var(--dw-r1);
+  background: var(--dw-surface); color: var(--dw-text);
+  font: inherit; font-size: var(--dw-fs-sm); font-weight: var(--dw-w-medium); cursor: pointer;
+}
+#themeBtn:hover { background: var(--dw-surface-2); }
+#themeBtn:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
+
+/* Quit button â€” power icon, red on hover */
+.hd-quit-btn {
+  width: 34px; height: 34px; border-radius: 8px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent; border: 1px solid transparent;
+  color: var(--dw-chrome-muted); cursor: pointer;
+  transition: color 0.12s, background 0.12s, border-color 0.12s;
+}
+.hd-quit-btn:hover { color: var(--dw-bad); background: var(--dw-bad-bg); border-color: var(--dw-bad); }
+.hd-quit-btn:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
+
+/* Native window controls (custom title bar) — only inside the DocWiz app window (html.dw-native).
+   Caption buttons sit flush to the window's right edge: the group cancels the header's right
+   padding and the buttons fill the full header height, like OS caption buttons. */
+.hd-winctl { display: none; align-self: stretch; margin-left: var(--dw-s2); margin-right: calc(-1 * var(--dw-s4)); }
+html.dw-native .hd-winctl { display: flex; }
+/* In the native window the close button replaces the separate Quit button. */
+html.dw-native .hd-quit-btn { display: none; }
+.hd-wbtn {
+  width: 46px; align-self: stretch; padding: 0;
+  border: 0; background: transparent; color: var(--dw-chrome-muted); cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.12s, color 0.12s;
+}
+.hd-wbtn:hover { background: var(--dw-chrome-border); color: var(--dw-chrome-text); }
+.hd-wbtn:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
+.hd-wbtn-close:hover { background: var(--dw-bad); color: var(--dw-accent-contrast); }
+/* Maximize vs restore icon: restore shows only when the window is maximized. */
+.hd-wbtn .ic-restore { display: none; }
+html.dw-maximized .hd-wbtn .ic-max { display: none; }
+html.dw-maximized .hd-wbtn .ic-restore { display: inline; }
+/* The header reads as a title bar in the native window: empty areas drag it (app.js). */
+html.dw-native header { cursor: default; }
+
+/* ---- Layout ----------------------------------------------------------------- */
+.shell { flex: 1; min-height: 0; display: flex; }
+
+/* ---- Welcome screen ----------------------------------------------------------- */
+#welcomeScreen { flex: 1; overflow-y: auto; }
+.welcome-canvas { min-height: 100%; }
+.welcome-wrap { max-width: 1140px; margin: 0 auto; padding: var(--dw-s7) var(--dw-s7) var(--dw-s8); }
+
+/* Hero */
+.welcome-hero { display: flex; align-items: center; gap: var(--dw-s5); margin-bottom: var(--dw-s7); }
+.welcome-hero-mark {
+  width: 52px; height: 52px; border-radius: 13px;
+  background: var(--dw-accent); display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; box-shadow: var(--dw-shadow-2);
+  overflow: hidden;
+}
+.welcome-hero-mark img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.welcome-hero-text h1 {
+  font-size: var(--dw-fs-3xl); font-weight: var(--dw-w-bold);
+  letter-spacing: -0.015em; color: var(--dw-text); line-height: 1.05; margin: 0;
+}
+.welcome-hero-text p {
+  font-size: var(--dw-fs-md); color: var(--dw-muted); margin-top: var(--dw-s2);
+  max-width: 62ch; line-height: 1.55;
+}
+
+/* Two-column grid */
+.welcome-cols { display: grid; grid-template-columns: 404px 1fr; gap: var(--dw-s7); align-items: start; }
+@media (max-width: 900px) { .welcome-cols { grid-template-columns: 1fr; gap: var(--dw-s7); } }
+
+/* Eyebrow labels */
+.welcome-eyebrow {
+  font-size: var(--dw-fs-xs); font-weight: var(--dw-w-bold);
+  text-transform: uppercase; letter-spacing: var(--dw-track-caps);
+  color: var(--dw-faint); margin-bottom: var(--dw-s3);
+}
+.welcome-eyebrow-gap { margin-top: var(--dw-s6); }
+
+/* Action card stack */
+.welcome-stack { display: flex; flex-direction: column; gap: var(--dw-s3); }
+
+/* .acard â€” action card */
+.acard {
+  display: flex; gap: var(--dw-s4); align-items: flex-start;
+  padding: var(--dw-s4);
+  background: var(--dw-surface);
+  border: 1px solid var(--dw-border);
+  border-radius: var(--dw-r2);
+  cursor: pointer; text-align: left; width: 100%;
+  font-family: inherit; font-size: inherit;
+  transition: border-color 0.12s, box-shadow 0.12s, transform 0.05s;
+}
+/* Primary acard: same surface/border as normal card â€” only the icon tile is accented.
+   Overrides the generic button.primary fill so the card body stays light. */
+.acard.primary { background: var(--dw-surface); color: var(--dw-text); border-color: var(--dw-border); }
+.acard.primary:hover { background: var(--dw-surface); border-color: var(--dw-accent); box-shadow: var(--dw-shadow-2); }
+.acard:hover { border-color: var(--dw-accent); box-shadow: var(--dw-shadow-2); }
+.acard:active { transform: translateY(1px); }
+.acard:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
+.acard-ico {
+  width: 40px; height: 40px; border-radius: var(--dw-r1);
+  background: var(--dw-surface-2); color: var(--dw-muted);
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  transition: background 0.12s, color 0.12s;
+}
+.acard.primary .acard-ico { background: var(--dw-accent); color: var(--dw-accent-contrast); }
+.acard:hover .acard-ico { background: var(--dw-accent-bg); color: var(--dw-accent); }
+.acard.primary:hover .acard-ico { background: var(--dw-accent); color: var(--dw-accent-contrast); }
+.acard-body { flex: 1; min-width: 0; }
+.acard-title {
+  font-size: var(--dw-fs-md); font-weight: var(--dw-w-medium);
+  color: var(--dw-text); display: flex; align-items: center; gap: var(--dw-s2);
+}
+.acard.primary .acard-title { color: var(--dw-accent); }
+.acard-desc { font-size: var(--dw-fs-sm); color: var(--dw-muted); line-height: 1.5; margin-top: var(--dw-s1); }
+.acard-chev {
+  color: var(--dw-border-strong); align-self: center; flex-shrink: 0;
+  transition: color 0.12s, transform 0.12s;
+}
+.acard:hover .acard-chev { color: var(--dw-accent); transform: translateX(2px); }
+
+/* .tcard â€” template card */
+.tcard {
+  background: var(--dw-surface);
+  border: 1px solid var(--dw-border);
+  border-radius: var(--dw-r2);
+  padding: var(--dw-s4);
+  cursor: pointer; width: 100%; text-align: left; font-family: inherit; font-size: inherit;
+  transition: border-color 0.12s, box-shadow 0.12s;
+  margin-bottom: var(--dw-s3);
+}
+.tcard:hover { border-color: var(--dw-accent); box-shadow: var(--dw-shadow-2); }
+.tcard:active { transform: translateY(1px); }
+.tcard:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
+.tcard-head { display: flex; align-items: center; gap: var(--dw-s3); margin-bottom: var(--dw-s2); }
+.tcard-ico {
+  width: 30px; height: 30px; border-radius: var(--dw-r0);
+  background: var(--dw-accent-bg); color: var(--dw-accent);
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.tcard-name { font-size: var(--dw-fs-md); font-weight: var(--dw-w-medium); color: var(--dw-text); }
+.tcard-badge {
+  font-family: var(--dw-font-mono); font-size: var(--dw-fs-xs); font-weight: var(--dw-w-bold);
+  letter-spacing: var(--dw-track-caps); color: var(--dw-muted);
+  background: var(--dw-surface-2); border: 1px solid var(--dw-border);
+  border-radius: var(--dw-r0); padding: var(--dw-s1) var(--dw-s2); margin-left: var(--dw-s2);
+}
+.tcard-desc { font-size: var(--dw-fs-sm); color: var(--dw-muted); line-height: 1.55; }
+
+/* Template card: whole card = Use; the Edit affordance (top-right) maintains the master.
+   Edit is a sibling button (never nested inside the card button). */
+.tcard-wrap { position: relative; }
+.tcard { position: relative; }
+.tcard-head { padding-right: var(--dw-s8); } /* reserve the corner for the Edit pill */
+.tcard-edit {
+  position: absolute; top: var(--dw-s4); right: var(--dw-s4);
+  display: inline-flex; align-items: center; gap: var(--dw-s1);
+  font-family: inherit; font-size: var(--dw-fs-xs); font-weight: var(--dw-w-medium);
+  color: var(--dw-muted); background: var(--dw-surface-2);
+  border: 1px solid var(--dw-border); border-radius: var(--dw-r1);
+  padding: var(--dw-s1) var(--dw-s2); cursor: pointer;
+  transition: color 0.12s, border-color 0.12s;
+}
+.tcard-edit svg { display: block; }
+.tcard-edit:hover { color: var(--dw-accent); border-color: var(--dw-accent); }
+.tcard-edit:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
+
+/* Broken template: visible but unusable until fixed (rule 11 disabled recipe). */
+.tcard.is-broken { opacity: .45; cursor: default; }
+.tcard.is-broken:hover { border-color: var(--dw-border); box-shadow: none; }
+.tcard-badge-broken { color: var(--dw-bad); background: var(--dw-bad-bg); border-color: var(--dw-bad); }
+.welcome-hint { font-size: var(--dw-fs-xs); color: var(--dw-faint); margin-top: var(--dw-s3); font-style: italic; }
+
+/* Recent header + search */
+.welcome-recent-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: var(--dw-s4); margin-bottom: var(--dw-s4);
+}
+.welcome-recent-head .welcome-eyebrow { margin-bottom: 0; }
+.welcome-search {
+  display: flex; align-items: center; gap: var(--dw-s2);
+  background: var(--dw-surface); border: 1px solid var(--dw-border-strong);
+  border-radius: var(--dw-r1); padding: var(--dw-s2) var(--dw-s3); min-width: 230px;
+  transition: border-color 0.12s, box-shadow 0.12s;
+  color: var(--dw-faint);
+}
+.welcome-search:focus-within { border-color: var(--dw-accent); box-shadow: var(--dw-focus-ring); }
+.welcome-search input {
+  border: 0; outline: 0; background: transparent;
+  font: inherit; font-size: var(--dw-fs-sm); color: var(--dw-text); width: 100%;
+}
+.welcome-search input::placeholder { color: var(--dw-faint); }
+.welcome-search input:focus-visible { box-shadow: none; } /* ring on the wrapper */
+
+/* Day groups */
+.daygroup {
+  font-size: var(--dw-fs-xs); font-weight: var(--dw-w-bold);
+  text-transform: uppercase; letter-spacing: var(--dw-track-caps);
+  color: var(--dw-faint); padding: var(--dw-s4) var(--dw-s4) var(--dw-s2);
+}
+.daygroup:first-child { padding-top: 2px; }
+
+/* Project row */
+.prow {
+  display: flex; align-items: center; gap: var(--dw-s4);
+  padding: var(--dw-s3) var(--dw-s4); border-radius: var(--dw-r1);
+  cursor: pointer; border: 1px solid transparent;
+  position: relative;
+  transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
+}
+.prow:hover { background: var(--dw-surface); border-color: var(--dw-border); box-shadow: var(--dw-shadow); }
+.prow:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
+.prow.missing { opacity: 0.45; cursor: default; }
+.prow.missing:hover { background: transparent; border-color: transparent; box-shadow: none; }
+
+/* Avatar */
+.pava {
+  width: 38px; height: 38px; border-radius: var(--dw-r1);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--dw-font-mono); font-size: var(--dw-fs-xs); font-weight: var(--dw-w-bold);
+  flex-shrink: 0;
+  background: var(--dw-surface-2); color: var(--dw-muted);
+  border: 1px solid var(--dw-border);
+}
+/* Variant avatars: colored background tint; border via currentColor so both themes work. */
+.pava.accent { background: var(--dw-accent-bg); color: var(--dw-accent); border: 1px solid currentColor; }
+.pava.green  { background: var(--dw-ok-bg);     color: var(--dw-ok);     border: 1px solid currentColor; }
+.pava.amber  { background: var(--dw-warn-bg);   color: var(--dw-warn);   border: 1px solid currentColor; }
+
+/* Row info */
+.pinfo { flex: 1; min-width: 0; }
+.pname { font-size: var(--dw-fs-sm); font-weight: var(--dw-w-medium); color: var(--dw-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pmeta { display: flex; align-items: center; gap: var(--dw-s2); margin-top: var(--dw-s1); min-width: 0; }
+.pcode {
+  font-family: var(--dw-font-mono); font-size: var(--dw-fs-xs); color: var(--dw-muted);
+  background: var(--dw-surface-2); border: 1px solid var(--dw-border);
+  border-radius: var(--dw-r0); padding: 1px var(--dw-s2); flex-shrink: 0;
+}
+.ppath {
+  font-family: var(--dw-font-mono); font-size: var(--dw-fs-xs); color: var(--dw-faint);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+}
+.ptime { font-size: var(--dw-fs-xs); color: var(--dw-faint); flex-shrink: 0; margin-left: auto; padding-left: var(--dw-s3); }
+
+/* Pin icon inside row */
+.ppin-icon { flex-shrink: 0; color: var(--dw-accent); width: 13px; height: 13px; }
+
+/* Pin and delete controls â€” hover-reveal */
+.prow-actions {
+  display: flex; align-items: center; gap: 2px; flex-shrink: 0;
+  opacity: 0; transition: opacity 0.12s; margin-left: var(--dw-s1);
+}
+.prow:hover .prow-actions, .prow:focus-within .prow-actions { opacity: 1; }
+.prow-btn {
+  width: 26px; height: 26px; border-radius: var(--dw-r0);
+  border: none; background: transparent; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--dw-muted); padding: 0; font-size: inherit; font-family: inherit;
+  transition: background 0.12s, color 0.12s;
+}
+.prow-btn:hover { background: var(--dw-surface-2); color: var(--dw-text); }
+.prow-btn.pin-active { color: var(--dw-accent); opacity: 1 !important; }
+.prow-btn.del:hover { background: var(--dw-bad-bg); color: var(--dw-bad); }
+.prow-btn:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
+
+/* Keep error + hint styled */
+.welcome-error { color: var(--dw-bad); margin-top: var(--dw-s4); font-size: var(--dw-fs-sm); }
+
+/* Window-mode toggle (welcome footer) */
+.welcome-settings { display: flex; align-items: center; gap: var(--dw-s3); margin-top: var(--dw-s7); color: var(--dw-muted); font-size: var(--dw-fs-sm); }
+.welcome-settings-toggle { display: inline-flex; border: 1px solid var(--dw-border-strong); border-radius: var(--dw-r1); overflow: hidden; }
+.welcome-settings-toggle .wmode { border: 0; border-radius: 0; background: var(--dw-surface); color: var(--dw-muted); padding: var(--dw-s2) var(--dw-s3); }
+.welcome-settings-toggle .wmode + .wmode { border-left: 1px solid var(--dw-border); }
+.welcome-settings-toggle .wmode[aria-pressed="true"] { background: var(--dw-accent-bg); color: var(--dw-accent); font-weight: var(--dw-w-medium); }
+.welcome-settings-note { font-size: var(--dw-fs-xs); color: var(--dw-faint); }
+
+/* ---- Tree sidebar (same recipe as the handover sidebar) ------------------------ */
+#tree {
+  width: 280px;
+  flex: none;
+  background: var(--dw-surface-2);
+  border-right: 1px solid var(--dw-border);
+  overflow-y: auto;
+  padding: var(--dw-s3);
+}
+#tree .grp {
+  font-size: var(--dw-fs-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--dw-track-caps);
+  font-weight: var(--dw-w-medium);
+  color: var(--dw-muted);
+  margin: var(--dw-s5) 0 var(--dw-s1);
+  display: flex;
+  align-items: center;
+  gap: var(--dw-s2);
+}
+#tree .tree-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* â–²â–¼ reorder handles â€” present in the layout, revealed on row hover */
+.tree-tools { display: inline-flex; gap: 2px; flex: none; visibility: hidden; }
+#tree a:hover .tree-tools, #tree .grp:hover .tree-tools { visibility: visible; }
+.tree-tools .tbtn {
+  font-size: var(--dw-fs-xs);
+  line-height: 1;
+  padding: 1px 2px;
+  border-radius: var(--dw-r0);
+  color: var(--dw-muted);
+  cursor: pointer;
+}
+.tree-tools .tbtn:hover { color: var(--dw-accent); background: var(--dw-accent-bg); }
+/* Subchapter outline (H2/H3 of the open chapter) */
+#tree a.tree-sub {
+  padding: 2px var(--dw-s3) 2px calc(var(--dw-s3) + 16px);
+  font-size: var(--dw-fs-sm);
+  color: var(--dw-muted);
+}
+#tree a.tree-sub3 { padding-left: calc(var(--dw-s3) + 32px); }
+#tree a.tree-sub:hover { color: var(--dw-text); }
+#tree a {
+  display: flex;
+  align-items: center;
+  gap: var(--dw-s2);
+  padding: var(--dw-s2) var(--dw-s3);
+  border-radius: var(--dw-r1);
+  color: var(--dw-text);
+  text-decoration: none;
+  font-size: var(--dw-fs-sm);
+  line-height: var(--dw-lh-snug);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#tree a:hover { background: var(--dw-surface); }
+#tree a.current {
+  background: var(--dw-accent-bg);
+  color: var(--dw-accent);
+  font-weight: var(--dw-w-medium);
+  box-shadow: inset 3px 0 0 var(--dw-accent);
+}
+#tree a.tree-add { color: var(--dw-accent); margin-top: var(--dw-s1); }
+
+main { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 0; gap: 0; }
+#welcome { max-width: 720px; margin: var(--dw-s8) auto; font-size: var(--dw-fs-md); line-height: var(--dw-lh-body); }
+#welcome h1 { font-size: var(--dw-fs-2xl); font-weight: var(--dw-w-bold); }
+
+/* ---- Chapter editor -------------------------------------------------------------- */
+#chapterEditor { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+/* Input / select shared recipe (used by view editor + dialogs too) */
+#viewEditor select, dialog#modal input, dialog#modal select {
+  font: inherit;
+  font-weight: var(--dw-w-regular);
+  border: 1px solid var(--dw-border-strong);
+  border-radius: var(--dw-r1);
+  padding: var(--dw-s2) var(--dw-s3);
+  background: var(--dw-surface);
+  color: var(--dw-text);
+}
+#viewEditor select:focus, dialog#modal input:focus, dialog#modal select:focus {
+  outline: none;
+  border-color: var(--dw-accent);
+  box-shadow: var(--dw-focus-ring);
+}
+
+/* ---- Chapter bar (.chapterbar) â€” redesigned phase 3 ---- */
+.chapterbar {
+  flex-shrink: 0;
+  background: var(--dw-surface);
+  border-bottom: 1px solid var(--dw-border);
+  display: flex; align-items: center; gap: var(--dw-s3);
+  padding: var(--dw-s3) var(--dw-s5);
+  flex-wrap: wrap; row-gap: var(--dw-s3);
+}
+
+/* ID chip: mono #-accent slug */
+.cb-id-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: var(--dw-font-mono); font-size: var(--dw-fs-xs);
+  color: var(--dw-muted);
+  background: var(--dw-surface-2); border: 1px solid var(--dw-border);
+  border-radius: var(--dw-r0); padding: var(--dw-s2) var(--dw-s3);
+  max-width: 280px; flex-shrink: 0; white-space: nowrap;
+  overflow: hidden;
+}
+.cb-id-hash { color: var(--dw-accent); font-weight: var(--dw-w-bold); flex-shrink: 0; }
+.cb-id-slug { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Title input */
+.cb-title-input {
+  flex: 1 1 140px; min-width: 140px;
+  font: inherit; font-size: var(--dw-fs-sm); font-weight: var(--dw-w-medium); color: var(--dw-text);
+  background: var(--dw-surface); border: 1px solid var(--dw-border-strong);
+  border-radius: var(--dw-r0); padding: var(--dw-s2) var(--dw-s3); outline: none;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.cb-title-input:focus { border-color: var(--dw-accent); box-shadow: var(--dw-focus-ring); }
+.cb-title-input:focus-visible { outline: none; }
+
+/* Discipline select-wrap (wraps the tag icon + the custom .dw-sel-trigger) */
+.cb-sel-wrap {
+  display: inline-flex; align-items: center; gap: var(--dw-s2);
+  border: 1px solid var(--dw-border-strong); border-radius: var(--dw-r0);
+  padding-left: var(--dw-s3); background: var(--dw-surface); flex-shrink: 0;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+/* The wrapper ring activates when the inner trigger has focus */
+.cb-sel-wrap:focus-within { border-color: var(--dw-accent); box-shadow: var(--dw-focus-ring); }
+.cb-sel-ico { color: var(--dw-muted); flex-shrink: 0; }
+
+/* Mount point for the discipline custom dropdown (JS appends the trigger here) */
+#fmDisciplineDropdown { display: inline-flex; align-items: center; }
+
+/* .cb-disc-trigger: the discipline custom dropdown trigger sits inside .cb-sel-wrap
+   so it inherits the wrapper's border/radius; the trigger itself is borderless here. */
+.cb-disc-trigger {
+  border: 0; border-radius: 0;
+  height: auto; padding: var(--dw-s2) var(--dw-s3) var(--dw-s2) var(--dw-s1);
+  background: transparent;
+  font-size: var(--dw-fs-xs);
+}
+.cb-disc-trigger:hover { background: transparent; }
+.cb-disc-trigger:focus-visible { outline: none; box-shadow: none; }
+.cb-disc-trigger[aria-expanded="true"] { border-color: transparent; box-shadow: none; }
+
+
+/* Segmented audience multi-toggle */
+.cb-aud-set {
+  display: inline-flex; align-items: center;
+  background: var(--dw-surface-2); border: 1px solid var(--dw-border);
+  border-radius: var(--dw-r0); padding: var(--dw-s1); gap: var(--dw-s1); flex-shrink: 0;
+}
+.cb-aud-btn {
+  display: inline-flex; align-items: center; gap: var(--dw-s2);
+  height: 28px; padding: 0 var(--dw-s3);
+  border: 0; border-radius: 5px;
+  background: transparent; color: var(--dw-muted);
+  font: inherit; font-size: var(--dw-fs-xs); font-weight: var(--dw-w-medium);
+  cursor: pointer; white-space: nowrap;
+  transition: background 0.12s, color 0.12s, box-shadow 0.12s;
+}
+.cb-aud-btn:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
+/* ON state: raised surface chip */
+.cb-aud-btn[data-on="1"] {
+  background: var(--dw-surface); color: var(--dw-text); box-shadow: var(--dw-shadow);
+}
+.cb-aud-btn:not([data-on="1"]):hover { color: var(--dw-muted); }
+
+/* Audience color dots */
+.cb-aud-dot {
+  width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+  opacity: 0.3; transition: opacity 0.12s;
+}
+.cb-aud-btn[data-on="1"] .cb-aud-dot { opacity: 1; }
+.cb-dot-op { background: var(--dw-ok); }       /* user â†’ green */
+.cb-dot-ma { background: var(--dw-warn); }      /* support â†’ amber */
+.cb-dot-en { background: var(--dw-accent); }    /* admin â†’ blue */
+
+/* Action group (right side) */
+.cb-actions {
+  display: flex; align-items: center; gap: var(--dw-s2);
+  margin-left: auto; flex-shrink: 0;
+}
+/* Vertical hairline divider */
+.cb-div { width: 1px; height: 30px; background: var(--dw-border); flex-shrink: 0; margin-right: var(--dw-s1); }
+
+/* Status text in the chapter bar */
+.cb-status { color: var(--dw-muted); font-size: var(--dw-fs-xs); white-space: nowrap; }
+.cb-status.ok { color: var(--dw-ok); }
+.cb-status.err { color: var(--dw-bad); }
+/* Override the generic #status rule for when it is inside .cb-actions */
+.cb-actions #status { margin-left: 0; font-size: var(--dw-fs-xs); }
+
+/* Save button (one primary in the chapter bar, on --dw-accent) */
+.cb-save-btn {
+  display: inline-flex; align-items: center; gap: var(--dw-s2);
+  height: 34px; padding: 0 var(--dw-s4);
+  border: 0; border-radius: 8px; cursor: pointer;
+  background: var(--dw-accent); color: var(--dw-accent-contrast);
+  font: inherit; font-size: var(--dw-fs-xs); font-weight: var(--dw-w-bold);
+  box-shadow: var(--dw-shadow);
+  transition: background 0.12s, transform 0.04s;
+}
+.cb-save-btn:hover { background: var(--dw-accent-strong); }
+.cb-save-btn:active { transform: translateY(1px); }
+.cb-save-btn:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
+
+/* Amber unsaved dot — uses the global --dw-save-dot / --dw-save-dot-halo tokens
+   (tokens.css), shared by the chapter bar dot AND the view/YAML Save-button corner dots. */
+.cb-save-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--dw-save-dot);
+  box-shadow: 0 0 0 3px var(--dw-save-dot-halo);
+  flex-shrink: 0; display: none; margin-right: 1px;
+}
+.chapterbar.dirty .cb-save-dot { display: block; }
+
+/* The view / YAML editors share the same unsaved affordance as the chapter bar: their
+   primary Save button grows the amber dot the moment content diverges from disk (app.js
+   toggles .dirty on #vSaveBtn / #yamlSaveBtn via the state.dirty setter — the same path
+   a slide-zone edit hits in Task 7c). Corner dot, so it never reflows the button label;
+   same sanctioned editing-chrome amber as .cb-save-dot, via the shared --dw-save-dot. */
+#vSaveBtn.dirty, #yamlSaveBtn.dirty { position: relative; }
+#vSaveBtn.dirty::after, #yamlSaveBtn.dirty::after {
+  content: ""; position: absolute; top: -3px; right: -3px;
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--dw-save-dot);
+  box-shadow: 0 0 0 3px var(--dw-save-dot-halo);
+}
+
+/* Kebab popup */
+.cb-kebab-wrap { position: relative; flex-shrink: 0; }
+.cb-kebab-btn {
+  width: 34px; height: 34px; border-radius: 8px; padding: 0;
+  border: 1px solid transparent; background: transparent;
+  color: var(--dw-muted); display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: background 0.12s, color 0.12s;
+}
+.cb-kebab-btn:hover { background: var(--dw-surface-2); color: var(--dw-text); }
+.cb-kebab-btn:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
+.cb-kebab-menu {
+  position: absolute; top: 40px; right: 0;
+  background: var(--dw-surface); border: 1px solid var(--dw-border);
+  border-radius: var(--dw-r1); box-shadow: var(--dw-shadow-2);
+  padding: var(--dw-s1); min-width: 182px; z-index: 30;
+  display: none;
+}
+.cb-kebab-menu.cb-open { display: block; }
+.cb-kebab-item {
+  display: flex; align-items: center; gap: var(--dw-s2);
+  width: 100%; padding: var(--dw-s2) var(--dw-s3);
+  border: 0; background: transparent; border-radius: var(--dw-r0);
+  font: inherit; font-size: var(--dw-fs-sm); font-weight: var(--dw-w-medium); color: var(--dw-text);
+  cursor: pointer; text-align: left;
+  transition: background 0.12s;
+}
+.cb-kebab-item:hover { background: var(--dw-surface-2); }
+.cb-kebab-item:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
+.cb-kebab-danger { color: var(--dw-bad); }
+.cb-kebab-danger:hover { background: var(--dw-bad-bg); }
+
+/* Keep the old .fm for yaml/view editors */
+.fm { display: flex; gap: var(--dw-s3); align-items: center; flex-wrap: wrap;
+      padding: var(--dw-s2) var(--dw-s3); border-bottom: 1px solid var(--dw-border);
+      background: var(--dw-surface); }
+.fm label { display: flex; align-items: center; gap: var(--dw-s2); color: var(--dw-muted); font-size: var(--dw-fs-sm); font-weight: var(--dw-w-medium); }
+.fm input, dialog#modal input, dialog#modal select {
+  font: inherit;
+  font-weight: var(--dw-w-regular);
+  border: 1px solid var(--dw-border-strong);
+  border-radius: var(--dw-r1);
+  padding: var(--dw-s2) var(--dw-s3);
+  background: var(--dw-surface);
+  color: var(--dw-text);
+}
+.fm input:focus, dialog#modal input:focus, dialog#modal select:focus {
+  outline: none;
+  border-color: var(--dw-accent);
+  box-shadow: var(--dw-focus-ring);
+}
+.fm input:disabled { background: var(--dw-surface-2); color: var(--dw-muted); font-family: var(--dw-font-mono); }
+
+/* Toolbelt: ghost buttons grouped into one bordered strip â€” reads as one tool */
+.toolbelt { display: flex; align-items: center; }
+.toolbelt button {
+  border: 1px solid var(--dw-border);
+  border-right: 0;
+  background: var(--dw-surface-2);
+  color: var(--dw-muted);
+  border-radius: 0;
+  padding: var(--dw-s2) var(--dw-s3);
+}
+.toolbelt button:first-of-type { border-radius: var(--dw-r1) 0 0 var(--dw-r1); }
+.toolbelt button:last-of-type {
+  border-right: 1px solid var(--dw-border);
+  border-radius: 0 var(--dw-r1) var(--dw-r1) 0;
+}
+.toolbelt button:hover { background: var(--dw-accent-bg); color: var(--dw-text); }
+#status, #yamlStatus, #vStatus { color: var(--dw-muted); font-size: var(--dw-fs-sm); margin-left: auto; }
+#status.ok, #yamlStatus.ok, #vStatus.ok { color: var(--dw-ok); }
+#status.err, #yamlStatus.err, #vStatus.err { color: var(--dw-bad); }
+
+.split { flex: 1; min-height: 0; display: flex; }
+
+/* ---- View editor — live authoring surface (Slides v2, ADR-007) ------------------------ */
+/* The deck is authored on ONE unscaled, layout-faithful canvas rendered in THIS document
+   inside #vEditSurface.dw-live-surface — exactly like the chapter editor's #editor2 — so
+   site.css applies via the /app/site-scoped.css @scope wrapper and 7b can mount per-zone
+   editors in one document (no cross-document ProseMirror). app.js injects the RenderSlides
+   fragment and marks each .slide .active; the rules below ONLY re-frame the deck (chrome,
+   per Rule 20) — the slide internals (data-layout grid, .slide-region zones, .slide
+   typography) all come from site.css unchanged. The present (scaled) deck lives behind
+   "Read / present"; document mode uses the #vDocSurface iframe. 7a is read-only scaffold;
+   7b adds per-zone editing. */
+#viewEditor { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: var(--dw-s2); padding: var(--dw-s3); }
+.vhint { color: var(--dw-muted); font-size: var(--dw-fs-sm); margin-left: var(--dw-s3); }
+/* The surface row: slide organization panel + the canvas, side by side. Document mode
+   hides the panel (app.js) and the iframe canvas fills the row. */
+.vedit-layout { flex: 1; min-height: 0; display: flex; gap: var(--dw-s3); }
+.vsurface {
+  flex: 1;
+  min-height: 0;
+  border: 1px solid var(--dw-border);
+  border-radius: var(--dw-r2);
+  background: var(--dw-chrome);
+  overflow: auto;   /* the slide list scrolls in this document now (no iframe) */
+  /* Resizing a linked block reflows its content (height changes); without this, scroll
+     anchoring nudges the deck ("shrinking the linked view scrolls up"). The toolbar
+     sub-row no longer resizes (it reserves a constant height), so opting out is safe. */
+  overflow-anchor: none;
+}
+
+/* ---- Slide organization panel (filmstrip) — navigate / reorder / delete ----
+   A PowerPoint-style vertical list of slides left of the canvas. Each item shows the
+   slide number, layout badge and a short label; clicking scrolls the canvas to that
+   slide and highlights the item; ▲▼ reorder; the danger control deletes. Editor chrome
+   only (Rule 20) — tokens only; the canvas/slide look stays in site.css. */
+.vpanel {
+  flex: none;
+  width: 232px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--dw-border);
+  border-radius: var(--dw-r2);
+  background: var(--dw-surface);
+  overflow: hidden;
+}
+.vpanel-head {
+  flex: none;
+  padding: var(--dw-s2) var(--dw-s3);
+  font-size: var(--dw-fs-xs);
+  font-weight: var(--dw-w-medium);
+  text-transform: uppercase;
+  letter-spacing: var(--dw-track-caps);
+  color: var(--dw-muted);
+  border-bottom: 1px solid var(--dw-border);
+}
+.vpanel-list { flex: 1; min-height: 0; overflow: auto; padding: var(--dw-s2); display: flex; flex-direction: column; gap: var(--dw-s2); }
+.vpanel-empty { color: var(--dw-muted); font-size: var(--dw-fs-sm); padding: var(--dw-s2); }
+/* One slide item: number + badge + label, with reveal-on-hover reorder/delete tools. */
+.vpanel-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: var(--dw-s1) var(--dw-s2);
+  padding: var(--dw-s2);
+  border: 1px solid var(--dw-border);
+  border-radius: var(--dw-r1);
+  background: var(--dw-surface);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.vpanel-item:hover { background: var(--dw-surface-2); }
+.vpanel-item:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
+.vpanel-item.active { border-color: var(--dw-accent); background: var(--dw-accent-bg); }
+.vpanel-num {
+  grid-row: 1 / span 2;
+  align-self: center;
+  min-width: var(--dw-s5);
+  text-align: center;
+  font-family: var(--dw-font-mono);
+  font-size: var(--dw-fs-sm);
+  color: var(--dw-faint);
+}
+.vpanel-item.active .vpanel-num { color: var(--dw-accent); }
+.vpanel-badge {
+  justify-self: start;
+  font-size: var(--dw-fs-xs);
+  font-weight: var(--dw-w-medium);
+  text-transform: uppercase;
+  letter-spacing: var(--dw-track-caps);
+  color: var(--dw-muted);
+}
+.vpanel-label {
+  grid-column: 2;
+  font-size: var(--dw-fs-sm);
+  color: var(--dw-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.vpanel-label.is-auto { color: var(--dw-faint); font-style: italic; }
+/* Reorder/delete tools — revealed on hover/focus (kept reachable by keyboard). */
+.vpanel-tools {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: var(--dw-s1);
+  margin-top: var(--dw-s1);
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+.vpanel-item:hover .vpanel-tools,
+.vpanel-item:focus-within .vpanel-tools { opacity: 1; }
+.vpanel-tbtn {
+  border: 1px solid var(--dw-border);
+  background: var(--dw-surface);
+  color: var(--dw-muted);
+  border-radius: var(--dw-r0);
+  font-size: var(--dw-fs-xs);
+  line-height: 1;
+  padding: var(--dw-s1) var(--dw-s2);
+  cursor: pointer;
+}
+.vpanel-tbtn:hover { color: var(--dw-accent); border-color: var(--dw-accent); background: var(--dw-accent-bg); }
+.vpanel-tbtn:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
+.vpanel-tbtn:disabled { opacity: 0.45; cursor: default; }
+/* Delete uses the danger OUTLINE recipe — never solid red at rest (Rule 8). */
+.vpanel-tbtn-danger { color: var(--dw-bad); margin-left: auto; }
+.vpanel-tbtn-danger:hover { color: var(--dw-bad); border-color: var(--dw-bad); background: var(--dw-bad-bg); }
+/* "+ Add slide" entry under the list — secondary, never the view's primary button. */
+.vpanel-add {
+  flex: none;
+  margin: var(--dw-s2);
+  padding: var(--dw-s2);
+  border: 1px dashed var(--dw-border);
+  border-radius: var(--dw-r1);
+  background: var(--dw-surface);
+  color: var(--dw-muted);
+  font-size: var(--dw-fs-sm);
+  cursor: pointer;
+}
+.vpanel-add:hover { color: var(--dw-accent); border-color: var(--dw-accent); background: var(--dw-accent-bg); }
+.vpanel-add:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
+/* The document-mode preview still rides in an iframe (display-only filtered page). */
+.vedit-surface {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+
+/* Edit re-framing for the in-document slide canvas — WYSIWYG, pixel-identical to Read.
+   .dw-slide-edit is the .dw-live-surface container holding the RenderSlides fragment;
+   site.css styles the slide internals. These rules ONLY stack the slides and render each
+   one as the SAME fixed 1920×1080 .slide-frame the present deck uses, scaled to the column
+   with CSS `zoom`. We use `zoom` (NOT `transform: scale`): zoom scales the layout AND the
+   coordinate/hit-test space natively in Edge/Chromium, so ProseMirror carets and selection
+   stay correct inside the scaled frame — transform:scale leaves the caret in the unscaled
+   coordinate space and produces janky/offset carets in contenteditable. The result is the
+   exact Read slide (same type, layout, proportions). app.js sets --dw-edit-zoom from the
+   live column width (see fitSlideZoom). Tokens only (Rule 6/7) for chrome; the 1920×1080
+   design size mirrors site.css's .slide-frame verbatim and the slide padding/layout stays
+   site.css's (not set here) — NOT re-tuned (the whole point is identical-to-Read). */
+.dw-slide-edit {
+  --dw-edit-zoom: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;   /* centre the scaled frames in the (wider) column */
+  gap: var(--dw-s6);
+  margin: 0 auto;
+  padding: var(--dw-s5);
+  /* The slides themselves set no text color — in the present deck they inherit it from
+     .slides-surface { color: var(--dw-text) } (site.css). This surface is NOT inside
+     .slides-surface, so we mirror that one declaration here; without it slide headings
+     and body text would inherit from a different cascade origin. The slide canvas follows
+     the editor page theme now (no pinned data-theme), so --dw-text resolves to the active
+     theme. Tokens only — content type/layout still comes from site.css. */
+  color: var(--dw-text);
+}
+/* Document-view live editing surface (Editable Document Views). Unlike .dw-slide-edit there
+   is NO 1920×1080 frame and NO `zoom` — the view's sections render at natural reading width,
+   styled by site.css through the .dw-live-surface @scope wrapper, exactly like the read
+   handover page. Like .dw-slide-edit it follows the editor page theme (no pinned data-theme —
+   Rule 16): --dw-bg is the active reading page. Zone outlines + editable-title placeholders
+   come from the shared editing-chrome rules below (broadened to :is(.dw-slide-edit, .dw-doc-edit)). */
+.dw-doc-edit {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: auto;
+  overflow-anchor: none;
+  background: var(--dw-bg);
+  padding: var(--dw-s5) var(--dw-s6);
+}
+.dw-doc-edit .dw-doc-edit-list {
+  max-width: 60rem;
+  margin: 0 auto;
+}
+/* Beat site.css's `.slide.active[data-layout]` (0,3,0) for the box model so the frame
+   sizing wins; the layout grid/typography INSIDE still comes from site.css unchanged.
+   Fixed 1920×1080 (the present deck's design surface) scaled by `zoom` so it renders at
+   the same proportions and type size as Read. The present deck's .slide-frame supplies
+   the surface/border/shadow there; here the .slide IS the frame, so we mirror those. */
+.dw-slide-edit .slide.active[data-layout] {
+  position: relative;
+  width: 1920px;
+  height: 1080px;
+  zoom: var(--dw-edit-zoom);
+  background: var(--dw-surface);
+  border: 1px solid var(--dw-border);
+  border-radius: var(--dw-r2);
+  box-shadow: var(--dw-shadow-2);
+  overflow: hidden;   /* match the present frame: content is sized to fit 1080px, not grown */
+}
+
+/* ---- Slide-zone live editing (Slides v2, Task 7b) ----
+   Each .slide-region becomes a ProseMirror host (.dw-zone) edited in place with the
+   shared toolbar. Rule 20: the zone CONTENT look is site.css (the slide layout/type);
+   these rules are editing CHROME only — the PM root reset, a clickable affordance, and
+   the shared toolbar's placement above the canvas. Tokens only. */
+/* The per-zone ProseMirror ROOT is a normal box — it MUST be, or there is nothing to click
+   into and the zone is uneditable (display:contents paints no box, so a click never lands a
+   caret — the bug the stakeholder hit on the bullet-list zones). It does not break WYSIWYG:
+   the region holds a single .dw-embed (ship wraps embeds too) or flows the authored blocks,
+   and the PM root either fills a block region or shrink-wraps as a centered flex/grid item —
+   the same geometry the deck shows. The edit-vs-ship gate treats .ProseMirror as a transparent
+   editing wrapper (probe.js layoutChildren descends through it), so the region's effective
+   layout children still compare equal to the deck's. site.css owns the content look; this is
+   the editing-chrome reset only. */
+.dw-zone .ProseMirror { outline: none; }
+/* A subtle, click-discoverable affordance: zones hint a border on hover and ring on
+   focus so authors see they are editable, without changing the shipped slide look.
+   outline/box-shadow do not affect layout, so edit geometry still equals ship. */
+:is(.dw-slide-edit, .dw-doc-edit) .slide-region.dw-zone {
+  border-radius: var(--dw-r0);
+  outline: 1px dashed transparent;
+  outline-offset: var(--dw-s1);
+  transition: outline-color 0.12s ease;
+  /* Empty zones (brand-new blank slides) stay clickable; 32px is far below any real
+     region's content height, so a populated region's box is unaffected — edit == ship. */
+  min-height: var(--dw-s6);
+}
+:is(.dw-slide-edit, .dw-doc-edit) .slide-region.dw-zone:hover { outline-color: var(--dw-border); }
+:is(.dw-slide-edit, .dw-doc-edit) .slide-region.dw-zone:focus-within {
+  outline: none;
+  box-shadow: var(--dw-focus-ring);
+}
+/* A zone whose fragment failed to open (e.g. a dangling embed) keeps its 7a render and
+   shows the reason; never blank. */
+:is(.dw-slide-edit, .dw-doc-edit) .slide-region.dw-zone-error { outline: 1px solid var(--dw-bad); }
+.dw-zone-errnote { color: var(--dw-bad); font-size: var(--dw-fs-xs); margin: var(--dw-s2) 0 0; }
+
+/* Editable slide title/subtitle on the canvas (Slides v2 — new/blank slides authorable).
+   The h1[data-slide-title] / .slide-sub[data-slide-sub] are contenteditable in edit mode
+   (wired in slideedit.js → slide.title/subtitle). Their TYPE/COLOUR come from site.css
+   (.slide h1 / .slide .slide-sub) — these rules are editing chrome only: caret affordance
+   and an empty-state placeholder so a brand-new section-header slide isn't a dead page.
+   An empty title/subtitle still occupies its line (min-height) so it's clickable. */
+:is(.dw-slide-edit, .dw-doc-edit) [data-slide-title],
+:is(.dw-slide-edit, .dw-doc-edit) [data-slide-sub] {
+  outline: 1px dashed transparent;
+  outline-offset: var(--dw-s1);
+  border-radius: var(--dw-r0);
+  transition: outline-color 0.12s ease;
+  cursor: text;
+}
+:is(.dw-slide-edit, .dw-doc-edit) [data-slide-title]:hover,
+:is(.dw-slide-edit, .dw-doc-edit) [data-slide-sub]:hover { outline-color: var(--dw-border); }
+:is(.dw-slide-edit, .dw-doc-edit) [data-slide-title]:focus,
+:is(.dw-slide-edit, .dw-doc-edit) [data-slide-sub]:focus { outline: none; box-shadow: var(--dw-focus-ring); }
+:is(.dw-slide-edit, .dw-doc-edit) [data-slide-title].is-empty::before,
+:is(.dw-slide-edit, .dw-doc-edit) [data-slide-sub].is-empty::before {
+  content: attr(data-placeholder);
+  color: var(--dw-muted);
+  opacity: 0.6;
+}
+/* An empty editable title/subtitle renders IN NORMAL FLOW (a faint one-line "Add a …"
+   placeholder), never absolutely positioned — an absolute placeholder floated ON TOP of the
+   slide's real content (the overlap the stakeholder hit). It is only ever rendered where the
+   deck has space for it: a body layout omits an empty title/subtitle entirely (ViewRenderer),
+   so this in-flow placeholder appears only on a section-header slide (no regions to overlap) or
+   once the author has typed text (which the deck ships too). Stays a clickable one-line line. */
+:is(.dw-slide-edit, .dw-doc-edit) [data-slide-title].is-empty,
+:is(.dw-slide-edit, .dw-doc-edit) [data-slide-sub].is-empty { min-height: 1em; }
+/* An empty title shows only the faint "Add a title…" placeholder — hide the .slide h1::after
+   accent underline so a blank placeholder doesn't read as an already-set title. */
+:is(.dw-slide-edit, .dw-doc-edit) [data-slide-title].is-empty::after { display: none; }
+
+/* The shared formatting toolbar mounted once above the slide canvas. It reuses the
+   chapter editor's .e2-maintoolbar shell (built with withViewSwitch:false), so it is
+   editor chrome in the page's own theme — not on the dark slide surface. Sticky like
+   the chapter editor's .e2-top so it stays put while the deck scrolls. */
+.e2-slide-top { position: sticky; top: 0; z-index: 4; }
+
+/* ---- Structured slide layouts: the Add-slide gallery (modal) ---- */
+/* Shared wireframe thumbnail used in the gallery cards. */
+.vlay-thumb {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 72 / 48;
+  color: var(--dw-muted);
+}
+.vlay-name { font-size: var(--dw-fs-xs); font-weight: var(--dw-w-medium); }
+
+/* Add-slide gallery (in the modal): larger cards with a one-line description. */
+.vlay-gallery {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--dw-s3);
+  margin-bottom: var(--dw-s3);
+}
+.vlay-gallery-card {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  grid-template-rows: auto auto;
+  column-gap: var(--dw-s3);
+  align-items: center;
+  text-align: left;
+  padding: var(--dw-s3);
+  border: 1px solid var(--dw-border);
+  border-radius: var(--dw-r1);
+  background: var(--dw-surface);
+  color: var(--dw-text);
+  cursor: pointer;
+}
+.vlay-gallery-card:hover { border-color: var(--dw-accent); background: var(--dw-surface-2); }
+.vlay-gallery-card:focus-visible { box-shadow: var(--dw-focus-ring); outline: none; }
+.vlay-gallery-card .vlay-thumb { grid-row: 1 / 3; width: 64px; color: var(--dw-accent); }
+.vlay-gallery-card .vlay-name { grid-column: 2; }
+.vlay-desc {
+  grid-column: 2;
+  font-size: var(--dw-fs-xs);
+  color: var(--dw-muted);
+  line-height: 1.45;
+}
+
+/* ---- YAML editor ------------------------------------------------------------------------ */
+#yamlEditor { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: var(--dw-s2); padding: var(--dw-s3); }
+#yamlText {
+  flex: 1;
+  font-family: var(--dw-font-mono);
+  font-size: var(--dw-fs-sm);
+  line-height: 1.5;
+  border: 1px solid var(--dw-border-strong);
+  border-radius: var(--dw-r1);
+  padding: var(--dw-s3);
+  resize: none;
+  background: var(--dw-surface);
+  color: var(--dw-text);
+}
+#yamlText:focus { outline: none; border-color: var(--dw-accent); box-shadow: var(--dw-focus-ring); }
+
+/* ---- Issues panel -------------------------------------------------------------------------- */
+#issuesPanel {
+  flex: none;
+  max-height: 220px;
+  overflow-y: auto;
+  border-top: 1px solid var(--dw-border);
+  background: var(--dw-surface);
+  padding: var(--dw-s2) var(--dw-s4);
+}
+.issues-head { display: flex; justify-content: space-between; align-items: center; }
+.issues-head button { border: none; padding: var(--dw-s1) var(--dw-s2); color: var(--dw-muted); }
+#issuesList { list-style: none; margin: var(--dw-s2) 0 0; padding: 0; font-size: var(--dw-fs-sm); }
+#issuesList li { padding: var(--dw-s1) 0; }
+#issuesList .sev {
+  display: inline-block;
+  font-size: var(--dw-fs-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--dw-track-caps);
+  font-weight: var(--dw-w-medium);
+  padding: 1px var(--dw-s2);
+  border-radius: var(--dw-r0);
+  border: 1px solid currentColor;
+  margin-right: var(--dw-s2);
+}
+#issuesList .sev.Error { color: var(--dw-bad); background: var(--dw-bad-bg); }
+#issuesList .sev.Warning { color: var(--dw-warn); background: var(--dw-warn-bg); }
+#issuesList .src { color: var(--dw-muted); margin-right: var(--dw-s2); font-family: var(--dw-font-mono); font-size: var(--dw-fs-xs); }
+
+/* ---- Dialogs ---------------------------------------------------------------------------------- */
+dialog#modal {
+  border: 1px solid var(--dw-border);
+  border-radius: var(--dw-r2);
+  box-shadow: var(--dw-shadow-2);
+  padding: var(--dw-s5);
+  min-width: 420px;
+  max-width: 520px;
+  font: inherit;
+  background: var(--dw-surface);
+  color: var(--dw-text);
+}
+dialog#modal::backdrop { background: var(--dw-backdrop); }
+dialog#modal h3 { margin: 0 0 var(--dw-s3); font-size: var(--dw-fs-lg); font-weight: var(--dw-w-medium); }
+dialog#modal .row { display: flex; gap: var(--dw-s2); align-items: center; margin-bottom: var(--dw-s3); }
+dialog#modal .row label { width: 110px; color: var(--dw-muted); font-size: var(--dw-fs-sm); font-weight: var(--dw-w-medium); flex: none; }
+dialog#modal input, dialog#modal select { flex: 1; }
+dialog#modal .buttons { display: flex; justify-content: flex-end; gap: var(--dw-s2); margin-top: var(--dw-s4); }
+.mhelp { color: var(--dw-muted); font-size: var(--dw-fs-sm); line-height: 1.5; margin: 0 0 var(--dw-s3); }
+.mhelp.warn { color: var(--dw-warn); }
+.modal-warn {
+  background: var(--dw-bad-bg);
+  color: var(--dw-bad);
+  font-weight: var(--dw-w-medium);
+  border-radius: var(--dw-r1);
+  padding: var(--dw-s3);
+  margin: 0 0 var(--dw-s3);
+}
+
+/* ---- Word import dialog (cherry-pick) + walkthrough ---------------------------------------------- */
+.imp-sections { max-height: 280px; overflow-y: auto; margin-bottom: var(--dw-s3); }
+.imp-head {
+  text-transform: uppercase; letter-spacing: var(--dw-track-caps);
+  font-size: var(--dw-fs-xs); font-weight: var(--dw-w-medium); color: var(--dw-muted);
+  margin: var(--dw-s2) 0 var(--dw-s2);
+}
+.imp-row {
+  display: flex; gap: var(--dw-s3); align-items: flex-start;
+  padding: var(--dw-s2); border-radius: var(--dw-r1); cursor: pointer;
+}
+.imp-row:hover { background: var(--dw-surface-2); }
+/* dialog#modal input{flex:1} is an id selector — match its specificity to keep these
+   checkboxes their natural size instead of stretching across the row. */
+dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none; width: auto; margin-top: 3px; }
+.imp-info { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.imp-title { font-size: var(--dw-fs-sm); font-weight: var(--dw-w-medium); color: var(--dw-text); }
+.imp-meta { font-size: var(--dw-fs-xs); color: var(--dw-muted); }
+.imp-flag { color: var(--dw-warn); }
+.imp-junk .imp-title { color: var(--dw-muted); }
+.imp-status { margin: 0; }
+
+/* Walkthrough: audience checkboxes laid out as a wrapping row, not stacked fields. */
+.wt-auds { display: flex; flex-wrap: wrap; gap: var(--dw-s3); flex: 1; }
+.wt-aud { display: inline-flex; align-items: center; gap: var(--dw-s1); font-size: var(--dw-fs-sm); color: var(--dw-text); cursor: pointer; }
+
+/* Import review worklist (reuses the issues panel) */
+.imp-task .imp-link { color: var(--dw-accent); font-weight: var(--dw-w-medium); cursor: pointer; text-decoration: none; }
+.imp-task .imp-link:hover { text-decoration: underline; }
+.imp-task .imp-link:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); border-radius: var(--dw-r0); }
+
+/* ---- Element library dialog ---------------------------------------------------------------------- */
+.elib { max-height: 460px; overflow-y: auto; border: 1px solid var(--dw-border); border-radius: var(--dw-r1); padding: var(--dw-s1); margin-bottom: var(--dw-s3); }
+.elib-row {
+  display: grid;
+  grid-template-columns: 148px 1fr;
+  gap: var(--dw-s1) var(--dw-s3);
+  align-items: start;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: var(--dw-s2) var(--dw-s3);
+  border-radius: var(--dw-r1);
+  font-weight: var(--dw-w-regular);
+  cursor: pointer;
+  color: var(--dw-text);
+  font-family: inherit;
+  font-size: inherit;
+}
+.elib-row:hover { background: var(--dw-accent-bg); }
+.elib-meta { grid-column: 2; display: flex; flex-direction: column; gap: 2px; padding-top: var(--dw-s1); }
+.elib-name { font-weight: var(--dw-w-medium); font-size: var(--dw-fs-sm); }
+.elib-desc { color: var(--dw-muted); font-size: var(--dw-fs-xs); line-height: 1.45; }
+
+/* ---- Element preview thumbnails (uses --dw-* tokens; NOT site-scoped — reproduced here) ---- */
+/* DESIGN EXCEPTION (rule 5, 12px floor): these are purely decorative, non-interactive
+   mini-renders (140px wide, pointer-events:none, user-select:none) of the :::-element
+   recipes. The 7–9px sizes below are intentional scale-model proportions, not readable
+   text; they are consciously accepted preview exceptions per the design skill's
+   "triage and accept" path. Do not treat them as real UI type. */
+/* Wrapper: scales down the preview so it fits in the dialog column */
+.dw-elem-preview {
+  grid-row: span 2;
+  width: 140px;
+  overflow: hidden;
+  border-radius: var(--dw-r0);
+  background: var(--dw-surface);
+  border: 1px solid var(--dw-border);
+  font-size: 9px;
+  line-height: 1.4;
+  pointer-events: none;
+  user-select: none;
+  flex: none;
+}
+/* Callout mini-preview — replicates .dw-callout */
+.dw-ep-callout {
+  border-left: 3px solid var(--dw-accent);
+  background: var(--dw-accent-bg);
+  padding: 4px 6px;
+}
+.dw-ep-callout.dw-ep-tip   { border-left-color: var(--dw-ok);   background: var(--dw-ok-bg); }
+.dw-ep-callout.dw-ep-warning { border-left-color: var(--dw-warn); background: var(--dw-warn-bg); }
+.dw-ep-callout.dw-ep-danger  { border-left-color: var(--dw-bad);  background: var(--dw-bad-bg); }
+.dw-ep-tag {
+  display: block;
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: var(--dw-track-caps);
+  font-weight: 600;
+  color: var(--dw-accent);
+  margin-bottom: 2px;
+}
+.dw-ep-callout.dw-ep-tip     .dw-ep-tag { color: var(--dw-ok); }
+.dw-ep-callout.dw-ep-warning  .dw-ep-tag { color: var(--dw-warn); }
+.dw-ep-callout.dw-ep-danger   .dw-ep-tag { color: var(--dw-bad); }
+/* Steps mini-preview — replicates .dw-steps */
+.dw-ep-steps { padding: 4px 6px 4px 2px; }
+.dw-ep-steps ol { list-style: none; counter-reset: ep-step; margin: 0; padding: 0; }
+.dw-ep-steps ol > li {
+  counter-increment: ep-step;
+  position: relative;
+  padding: 2px 0 2px 18px;
+  border-left: 1px solid var(--dw-border);
+  margin-left: 9px;
+  font-size: 9px;
+  color: var(--dw-text);
+}
+.dw-ep-steps ol > li::before {
+  content: counter(ep-step);
+  position: absolute;
+  left: -9px;
+  top: 1px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--dw-accent);
+  color: var(--dw-accent-contrast);
+  font-weight: 700;
+  font-size: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: translateX(-50%);
+}
+.dw-ep-steps ol > li:last-child { border-left-color: transparent; }
+/* Cards mini-preview — replicates .dw-cards */
+.dw-ep-cards { padding: 4px 6px; display: flex; flex-direction: column; gap: 3px; }
+.dw-ep-card {
+  border: 1px solid var(--dw-border);
+  border-radius: var(--dw-r0);
+  background: var(--dw-surface);
+  padding: 3px 5px;
+}
+.dw-ep-card-title { font-weight: 600; color: var(--dw-accent); font-size: 9px; }
+.dw-ep-card-desc  { color: var(--dw-muted); font-size: 8px; }
+/* Buttons mini-preview — replicates .dw-buttons */
+.dw-ep-buttons { padding: 6px 6px; display: flex; gap: 4px; flex-wrap: wrap; }
+.dw-ep-btn {
+  display: inline-block;
+  background: var(--dw-accent);
+  color: var(--dw-accent-contrast);
+  font-size: 9px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: var(--dw-r0);
+  line-height: 1.4;
+}
+/* Details mini-preview — replicates .dw-details */
+.dw-ep-details {
+  border: 1px solid var(--dw-border);
+  border-radius: var(--dw-r0);
+  margin: 4px 5px;
+}
+.dw-ep-summary {
+  font-weight: 600;
+  padding: 3px 6px;
+  color: var(--dw-accent);
+  font-size: 9px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.dw-ep-summary::before { content: '\25BA'; font-size: 7px; }
+/* Center / Right mini-previews */
+.dw-ep-center { padding: 6px; text-align: center; color: var(--dw-muted); font-size: 9px; }
+.dw-ep-right  { padding: 6px; text-align: right;  color: var(--dw-muted); font-size: 9px; }
+
+/* ---- File list (image/attachment pickers) ------------------------------------------------------ */
+.file-list {
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid var(--dw-border);
+  border-radius: var(--dw-r1);
+  padding: var(--dw-s1);
+  margin-bottom: var(--dw-s3);
+}
+.file-row {
+  display: flex;
+  align-items: center;
+  gap: var(--dw-s3);
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  padding: var(--dw-s2) var(--dw-s3);
+  border-radius: var(--dw-r1);
+  font-weight: var(--dw-w-regular);
+}
+.file-row:hover { background: var(--dw-surface-2); }
+.file-row.selected { background: var(--dw-accent-bg); color: var(--dw-accent); font-weight: var(--dw-w-medium); }
+.file-dir { color: var(--dw-muted); }
+.file-thumb {
+  width: 56px;
+  height: 36px;
+  object-fit: cover;
+  border-radius: var(--dw-r0);
+  border: 1px solid var(--dw-border);
+  background: var(--dw-surface-2);
+  flex: none;
+}
+
+/* ---- Tooltips (explain boxes) â€” chrome-dark in both themes -------------------------------------- */
+#tooltip {
+  position: fixed;
+  z-index: 1000;
+  max-width: 320px;
+  background: var(--dw-chrome);
+  color: var(--dw-chrome-text);
+  font-size: var(--dw-fs-sm);
+  line-height: 1.45;
+  padding: var(--dw-s2) var(--dw-s3);
+  border-radius: var(--dw-r1);
+  box-shadow: var(--dw-shadow-2);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+#tooltip.show { opacity: 1; }
+
+/* ---- Error toast â€” visible, never silent --------------------------------------------------------- */
+#errToast {
+  position: fixed;
+  z-index: 2000;
+  right: var(--dw-s5);
+  bottom: var(--dw-s5);
+  transform: translateY(12px);
+  max-width: 480px;
+  background: var(--dw-surface);
+  color: var(--dw-text);
+  border: 1px solid var(--dw-border);
+  border-left: 3px solid var(--dw-bad);
+  font-size: var(--dw-fs-sm);
+  line-height: 1.45;
+  padding: var(--dw-s3) var(--dw-s4);
+  border-radius: var(--dw-r1);
+  box-shadow: var(--dw-shadow-2);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s, transform 0.15s;
+}
+#errToast b { display: block; margin-bottom: 2px; }
+#errToast.toast-error { border-left-color: var(--dw-bad); }
+#errToast.toast-error b { color: var(--dw-bad); }
+#errToast.toast-success { border-left-color: var(--dw-ok); }
+#errToast.toast-success b { color: var(--dw-ok); }
+#errToast.show { opacity: 1; transform: translateY(0); }
+
+/* ---------- the live editor surface (ADR-007) ----------
+   The surface IS the handover page: site.css applies inside .dw-live-surface via the
+   @scope wrapper served at /app/site-scoped.css; tokens come from the shared
+   tokens.css. Rules here only style EDITING CHROME, lay out the pane, and patch the
+   two structural differences of the PM DOM (content-wrapper divs in chrome
+   containers, li > p).
+   Z ladder of the editing chrome: 1 block pill Â· 2 grips/handles/thumb numbers Â·
+   3 sticky toolbar wrapper Â· 4 focus backdrop Â· 5 table focus mode Â· 1000 tooltip Â· 2000 error toast.
+   Layout constants (screen geometry, not design tokens):
+   --e2-focus-left  = 280px #tree + 16px main padding/scrollbar allowance;
+   --e2-focus-top   = 52px header + frontmatter row + toolbar â‰ˆ 150px (also the 160px
+                      subtracted from 100vh by the Source pane's min-height). */
+#editor2 {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: auto;
+  /* Resizing a table reflows its content (height changes); opt out of scroll anchoring so
+     the page doesn't nudge during the drag. The toolbar sub-row reserves a constant height,
+     so this no longer affects the contextual-bar case (L187). */
+  overflow-anchor: none;
+  background: var(--dw-bg);
+}
+/* No card behind the article â€” the handover page is text directly on --dw-bg. */
+#editor2 article { min-height: 100%; }
+/* The editing surface must not clip drag handles / resize grips that extend past the content box. */
+#editor2 .ProseMirror { outline: none; overflow: visible; }
+/* PM always wraps list-item text in <p>; the pipeline renders tight lists without it.
+   Kill the phantom paragraph spacing so both DOMs look identical. */
+.dw-live-surface li > p { margin: 0; }
+/* Chrome containers keep ProseMirror's content in a wrapper <div>; replicate the
+   site.css "> :last-child" spacing rules across that extra level. */
+.dw-live-surface .aud > div > :last-child,
+.dw-live-surface .dw-callout > div > :last-child { margin-bottom: 0; }
+.dw-live-surface .dw-details > div > :last-child { margin-bottom: var(--dw-s3); }
+
+#editor2 .e2-source {
+  display: block;
+  width: 100%;
+  min-height: calc(100vh - 160px);
+  border: 0;
+  padding: var(--dw-s5) var(--dw-s6);
+  font: var(--dw-fs-sm)/1.6 var(--dw-font-mono);
+  background: var(--dw-surface);
+  color: var(--dw-text);
+  resize: none;
+  outline: none;
+}
+
+/* ---------- M3 + feedback round 1: click-to-activate tables/images; their tools
+   live in ONE fixed context bar under the banner, never beside the element ---- */
+.e2-top { position: sticky; top: 0; z-index: 3; }
+.e2-contextbar {
+  /* OVERLAY-when-shown (stakeholder choice, divergence-audit follow-up): the sub-row no longer
+     reserves constant flow height — that left a permanent ~53px empty strip below the toolbar
+     whenever nothing was selected ("invisible box"). It is now absolutely positioned just below
+     the main toolbar, so showing the contextual tools OVERLAYS the top of the content instead of
+     pushing it down: no content-shift when something is selected AND no gap at rest. .e2-top is
+     position:sticky (a positioned, non-clipping containing block), so this anchors to it and
+     scrolls/sticks with the bar. The cost (accepted): while something is selected the tools cover
+     the top ~53px of content. */
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: var(--dw-s3);
+  padding: var(--dw-s2) var(--dw-s4);
+  background: var(--dw-surface);
+  border-bottom: 1px solid var(--dw-border);
+  box-shadow: var(--dw-shadow);   /* reads as a layer floating over the content it overlays */
+  flex-wrap: nowrap;
+  min-height: 53px;
+  box-sizing: border-box;
+}
+/* Nothing selected → no overlay at all: no permanent strip, no gap (the old reserved-height
+   empty sub-row is gone now that showing tools overlays instead of reserving flow space). */
+.e2-contextbar.e2-ctx-empty { display: none; }
+.e2-ctx-label {
+  font-size: var(--dw-fs-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--dw-track-caps);
+  font-weight: var(--dw-w-medium);
+  color: var(--dw-accent);
+}
+.e2-ctx-hint { font-size: var(--dw-fs-xs); color: var(--dw-muted); margin-left: var(--dw-s3); }
+/* (`.e2-tools` / `.e2-tools button` — the legacy bordered-box context idiom — was deleted in
+   the table/picture toolbar redesign: every context-bar control is now the borderless `.ib`
+   family, see `.e2-contextbar .ib` below. Single source: editor2/contexttools.js, ADR-008.) */
+/* Active table: cell-division grid as an editing aid (the handover keeps its clean
+   horizontal-hairline look â€” this appears only while the table is selected). */
+.dw-live-surface .dw-table-figure.e2-active { box-shadow: var(--dw-focus-ring); border-radius: var(--dw-r0); }
+.dw-live-surface .dw-table-figure.e2-active td,
+.dw-live-surface .dw-table-figure.e2-active th { border: 1px solid var(--dw-border); }
+.dw-live-surface .dw-image-figure.e2-active img { box-shadow: var(--dw-focus-ring); }
+.e2-sep { width: 1px; height: 14px; background: var(--dw-border); margin: 0 var(--dw-s1); }
+/* Caption / alt field — the ONE slack-absorbing item in the context row; shrinks to its
+   90px min first so the bar stays a single nowrap row. */
+.e2-figcap {
+  flex: 1 1 120px;
+  min-width: 90px;
+  max-width: 340px;
+  height: 30px;
+  border: 1px solid var(--dw-border-strong);
+  border-radius: var(--dw-r0);
+  padding: 0 var(--dw-s3);
+  font-size: var(--dw-fs-sm);
+  background: var(--dw-surface);
+  color: var(--dw-text);
+}
+.e2-figcap:focus { border-color: var(--dw-accent); box-shadow: var(--dw-focus-ring); outline: none; }
+.e2-pxinput {
+  width: 56px;
+  height: 30px;
+  border: 1px solid var(--dw-border-strong);
+  border-radius: var(--dw-r0);
+  padding: 0 var(--dw-s2);
+  font-size: var(--dw-fs-xs);
+  font-family: var(--dw-font-mono);
+  background: var(--dw-surface-2);
+  color: var(--dw-text);
+  text-align: right;
+  flex-shrink: 0;
+}
+.e2-pxinput:focus { border-color: var(--dw-accent); box-shadow: var(--dw-focus-ring); outline: none; }
+.dw-live-surface .dw-image-figure { position: relative; }
+.e2-fighandle {
+  display: none;
+  width: 14px; height: 14px;
+  border: 2px solid var(--dw-accent);
+  background: var(--dw-surface);
+  border-radius: 2px;
+  cursor: nwse-resize;
+  position: absolute;
+  z-index: 2;
+}
+.dw-image-figure.e2-active .e2-fighandle { display: inline-block; }
+.e2-figreadout {
+  position: absolute;
+  top: var(--dw-s2);
+  right: var(--dw-s2);
+  font-family: var(--dw-font-mono);
+  font-size: var(--dw-fs-xs);
+  background: var(--dw-chrome);
+  color: var(--dw-chrome-text);
+  padding: 2px var(--dw-s2);
+  border-radius: var(--dw-r0);
+}
+.dw-live-surface thead th { position: relative; }
+.e2-colgrip { display: none; position: absolute; right: -4px; top: 0; width: 8px; height: 100%; cursor: col-resize; z-index: 2; }
+.dw-table-figure.e2-active .e2-colgrip { display: block; }
+/* Box-width handle (L202): the active table is the positioning context for a right-edge
+   drag handle that sizes the WHOLE table (% of the page/zone width; height follows
+   content). Editor chrome only — the handover (site.css) never sees these. */
+#editor2 .dw-table-figure, .dw-live-surface .dw-table-figure { position: relative; }
+.e2-boxhandle {
+  display: none;
+  position: absolute;
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+  width: 10px;
+  height: 40px;
+  border-radius: var(--dw-r0);
+  background: var(--dw-accent);
+  cursor: ew-resize;
+  z-index: 2;
+}
+.dw-table-figure.e2-active .e2-boxhandle { display: block; }
+.e2-boxreadout {
+  position: absolute;
+  top: var(--dw-s2);
+  right: var(--dw-s2);
+  font-family: var(--dw-font-mono);
+  font-size: var(--dw-fs-xs);
+  background: var(--dw-chrome);
+  color: var(--dw-chrome-text);
+  padding: 2px var(--dw-s2);
+  border-radius: var(--dw-r0);
+  z-index: 3;
+}
+.e2-cell-editing { outline: 2px solid var(--dw-accent); outline-offset: -2px; background: var(--dw-accent-bg); position: relative; }
+/* The cell editor is the positioning context for the in-cell picture resize handle
+   (a reused .e2-fighandle, shown only while a cell is being edited). */
+.e2-cell-editing .e2-fighandle { display: block; }
+.dw-live-surface td .ProseMirror p, .dw-live-surface th .ProseMirror p { margin: 0; }
+.dw-live-surface td .ProseMirror, .dw-live-surface th .ProseMirror { outline: none; min-width: 40px; }
+
+/* Focus mode: the active table expands to fill the full viewport.
+   A dimmed backdrop (.e2-focus-backdrop) is injected into <body> at z-index 4
+   by setFocusMode(true); the table sits above it at z-index 5.
+   Edit-time only; nothing about the page changes. Esc returns. */
+.e2-focus-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--dw-backdrop);
+  z-index: 4;
+}
+/* Specificity must beat "#editor2 .dw-table-figure { position:relative }" (ID+class),
+   so we include #editor2 here (ID+class+class). */
+#editor2 .dw-table-figure.e2-focus,
+.dw-live-surface .dw-table-figure.e2-focus {
+  position: fixed;
+  inset: var(--dw-s5);
+  margin: 0;
+  transform: none;
+  width: auto;
+  max-width: none;
+  min-width: 0;
+  overflow: auto;
+  background: var(--dw-surface);
+  border: 1px solid var(--dw-border-strong);
+  border-radius: var(--dw-r1);
+  box-shadow: var(--dw-shadow-2);
+  padding: var(--dw-s4);
+  z-index: 5;
+}
+/* "Esc to exit" hint floated in the top-right corner of the focused table */
+#editor2 .dw-table-figure.e2-focus::after,
+.dw-live-surface .dw-table-figure.e2-focus::after {
+  content: 'Esc — exit focus';
+  position: sticky;
+  float: right;
+  top: 0;
+  right: 0;
+  font-size: var(--dw-fs-xs);
+  color: var(--dw-muted);
+  background: var(--dw-surface);
+  border: 1px solid var(--dw-border);
+  border-radius: var(--dw-r0);
+  padding: 2px var(--dw-s2);
+  margin: 0 0 var(--dw-s2) var(--dw-s2);
+  line-height: 1.5;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* M4: container selection chrome. Plain wrappers (steps/cards/buttons/center/right)
+   carry a tiny absolute label chip; their PM content wrapper is display:contents so
+   the pipeline layout (flex button rows, card grids) is undisturbed. */
+.dw-live-surface .dw-steps, .dw-live-surface .dw-cards, .dw-live-surface .dw-buttons,
+.dw-live-surface .dw-align-center, .dw-live-surface .dw-align-right { position: relative; }
+.dw-live-surface .dw-steps > div, .dw-live-surface .dw-cards > div,
+.dw-live-surface .dw-buttons > div, .dw-live-surface .dw-align-center > div,
+.dw-live-surface .dw-align-right > div { display: contents; }
+.e2-blockpill {
+  position: absolute;
+  top: calc(-1 * var(--dw-s3));
+  right: 0;
+  font-size: var(--dw-fs-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--dw-track-caps);
+  color: var(--dw-muted);
+  background: var(--dw-surface);
+  border: 1px solid var(--dw-border);
+  border-radius: var(--dw-r0);
+  padding: 0 var(--dw-s2);
+  line-height: 1.5;
+  z-index: 1;
+}
+.e2-ctx-check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dw-s1);
+  font-size: var(--dw-fs-xs);
+  color: var(--dw-text);
+  margin-right: var(--dw-s2);
+}
+.e2-ctx-check input { accent-color: var(--dw-accent); }
+
+/* Live-linked block chrome (Slides v2, Task 9). Rule 20: this is EDITING chrome only —
+   the transcluded CONTENT inside .dw-embed renders through site.css like the rest of the
+   slide. WYSIWYG-by-construction (the edit-vs-ship gate): on ship a lone embed renders as a
+   single .dw-embed box directly inside the region; in edit the embed NODE adds a .dw-embed-host
+   wrapper + a LINKED pill. The host MUST add no box, or a flex/grid region would lay out the
+   host (with its padding/border) instead of the .dw-embed itself and diverge from ship. So the
+   host is `display:contents` (no box) and the .dw-embed body is the real layout box on both
+   surfaces. The "not your content, kept in sync" affordance is the always-visible pill plus
+   the selection ring — no resting border/wash (those would need a box and would shift layout).
+   The pill is absolutely positioned, anchored to the .dw-embed body (position:relative is
+   layout-neutral — it adds no size), so it floats over the content without affecting flow. */
+.dw-live-surface .dw-embed-host { display: contents; }
+/* The .dw-embed body is the SAME plain grouping box ship renders (a div with no padding),
+   so its children keep their natural margins on BOTH surfaces — do NOT reset first/last-child
+   margins here (that reset existed for the old padded host and made the edit figure start 16px
+   higher than ship, a divergence the gate caught). position:relative anchors the absolute pill;
+   it is layout-neutral (adds no size). */
+.dw-live-surface .dw-embed-host .dw-embed {
+  position: relative;
+  border-radius: var(--dw-r0);
+  /* The embed body is display-only transcluded HTML (importNode'd with the server's
+     pretty-print whitespace), NOT editable text. The vendored prosemirror.css sets
+     white-space:pre-wrap on the .ProseMirror root, which inherits down here and would render
+     the inter-tag newlines as real blank lines — the gate caught a 37px-taller figure in edit
+     because the gap between a table and its figcaption ballooned. Reset to normal so the
+     transcluded HTML lays out exactly like ship (which has no .ProseMirror ancestor). */
+  white-space: normal;
+}
+/* Same reason for any display-only atom block (AtomHtmlView raw/fallback HTML): it is
+   importNode'd verbatim HTML, not editable text, so it must not inherit the PM root's
+   white-space:pre-wrap or its inter-tag whitespace would distort layout vs the built page. */
+.dw-live-surface [data-dw-atom] { white-space: normal; }
+/* The .dw-embed body is the pill's positioning context in the editor (the host is
+   display:contents and paints no box). position:relative changes no geometry, so the
+   edit-vs-ship WYSIWYG gate is unaffected; it just anchors the LINKED pill to the
+   embedded block's own corner instead of letting it escape to the whole slide. */
+.dw-slide-edit .dw-embed { position: relative; }
+.dw-embed-pill {
+  position: absolute;
+  top: var(--dw-s1);
+  right: var(--dw-s1);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dw-s1);
+  font-size: var(--dw-fs-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--dw-track-caps);
+  /* A SOLID accent chip — the old accent-on-dark-surface pill was nearly invisible on the
+     dark slide. Solid fill + on-accent text reads clearly against the slide. */
+  color: var(--dw-accent-contrast);
+  background: var(--dw-accent);
+  border: 1px solid var(--dw-accent);
+  border-radius: var(--dw-r0);
+  padding: 0 var(--dw-s2);
+  line-height: 1.5;
+  cursor: pointer;
+  z-index: 1;
+  /* Hidden at rest so it never sits over the embedded content — the embed reads exactly
+     like the deck. It appears (top-right) only on hover or when the block is selected, so
+     the author can see it is linked and click to act. Opacity (not display) keeps it
+     clickable the instant it shows and adds no layout. */
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+.dw-embed:hover .dw-embed-pill,
+.dw-embed-host.e2-active .dw-embed-pill {
+  opacity: 1;
+  pointer-events: auto;
+}
+.dw-embed-dot {
+  width: var(--dw-s2);
+  height: var(--dw-s2);
+  border-radius: 50%;
+  background: var(--dw-accent-contrast);
+}
+.dw-embed-pill:hover { box-shadow: var(--dw-focus-ring); }
+/* Selection ring on the .dw-embed BODY (the host is display:contents → paints no box).
+   box-shadow does not affect layout, so the selected state still matches ship geometry. */
+.dw-live-surface .dw-embed-host.e2-active .dw-embed { box-shadow: var(--dw-focus-ring); }
+/* Width handle (L205): the active linked box reuses the SAME right-edge .e2-boxhandle a
+   table uses (the .dw-embed is position:relative on the slide surface). Shown only while
+   selected. Editor chrome only — the handover never mounts EmbedView, so it never appears. */
+.dw-embed-host.e2-active .e2-boxhandle { display: block; }
+.dw-live-surface .dw-callout.e2-active, .dw-live-surface .aud.e2-active,
+.dw-live-surface details.e2-active, .dw-live-surface .dw-steps.e2-active,
+.dw-live-surface .dw-cards.e2-active, .dw-live-surface .dw-buttons.e2-active,
+.dw-live-surface .dw-align-center.e2-active, .dw-live-surface .dw-align-right.e2-active,
+.dw-live-surface .e2-group.e2-active {
+  box-shadow: var(--dw-focus-ring);
+  border-radius: var(--dw-r0);
+}
+
+/* Group: an authoring-only structuring frame. Invisible in the handover (.dw-group is
+   unstyled there); here it shows a dashed frame + name banner so the author sees the
+   grouping and can pick it for embedding. Editing chrome -> app.css (design rule 20). */
+.dw-live-surface .e2-group {
+  border: 1px dashed var(--dw-border-strong);
+  border-radius: var(--dw-r1);
+  padding: var(--dw-s3);
+  margin: var(--dw-s3) 0;
+}
+.dw-live-surface .e2-group-banner {
+  display: inline-flex;
+  gap: var(--dw-s2);
+  align-items: baseline;
+  font-size: var(--dw-fs-xs);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--dw-track-caps);
+  color: var(--dw-muted);
+}
+.dw-live-surface .e2-group-desc {
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 400;
+  color: var(--dw-faint);
+}
+
+/* Discoverability (stakeholder feedback): block pills must LOOK clickable. */
+.dw-live-surface .dw-callout-tag:hover, .dw-live-surface .aud-tag:hover,
+.dw-live-surface .dw-details summary:hover, .e2-blockpill:hover {
+  box-shadow: var(--dw-focus-ring);
+  border-radius: var(--dw-r0);
+}
+
+.e2-ctx-flash { font-size: var(--dw-fs-xs); color: var(--dw-warn); margin-left: var(--dw-s3); }
+.e2-locked { outline: 2px dashed var(--dw-warn); outline-offset: -2px; }
+/* Phase 4: One 48px toolbar shell â€” shows either the Main formatting track
+   (.e2-tb-main) or the contextual format bar (.e2-tb-ctx, IMAGE/TABLE).
+   .context class = 3px --dw-accent inset top line (contextual mode signal). */
+.e2-maintoolbar {
+  display: flex;
+  align-items: center;
+  height: 48px;
+  padding: 0 var(--dw-s4);
+  background: var(--dw-surface);
+  border-bottom: 1px solid var(--dw-border);
+  position: relative;
+}
+.e2-maintoolbar.context {
+  box-shadow: inset 0 3px 0 var(--dw-accent);
+  /* The accent wash (--dw-accent-bg is translucent) is LAYERED OVER an opaque
+     --dw-surface base — otherwise the top ~22px band is only ~10% opaque and whatever
+     scrolls under this sticky bar bleeds through. On the slide canvas that exposed the
+     dark slide frames behind the bar (BUG 7). Two background layers: tint on top, solid
+     surface beneath. Tokens only. */
+  background:
+    linear-gradient(180deg, var(--dw-accent-bg), transparent 22px),
+    var(--dw-surface);
+}
+
+/* Main track: scrollable formatting groups + right-pinned view switch */
+.e2-tb-main {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  gap: 0;
+}
+.tb-scroll {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--dw-border) transparent;
+  gap: 0;
+}
+.tb-scroll::-webkit-scrollbar { height: 6px; }
+.tb-scroll::-webkit-scrollbar-thumb { background: var(--dw-border); border-radius: 6px; }
+.tb-scroll::-webkit-scrollbar-track { background: transparent; }
+
+/* Contextual track: badge + tool strip */
+.e2-tb-ctx {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  gap: var(--dw-s2);
+  padding: 0 var(--dw-s1);
+}
+.e2-tb-tools { display: flex; align-items: center; flex-wrap: nowrap; gap: var(--dw-s2); flex: 1 1 auto; min-width: 0; }
+
+/* Context badge (IMAGE / TABLE) */
+.e2-ctx-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dw-s2);
+  font-family: var(--dw-font-mono);
+  font-size: var(--dw-fs-xs);
+  font-weight: var(--dw-w-bold);
+  letter-spacing: var(--dw-track-caps);
+  text-transform: uppercase;
+  color: var(--dw-accent);
+  background: var(--dw-accent-bg);
+  border: 1px solid var(--dw-border-strong);
+  border-radius: var(--dw-r0);
+  padding: var(--dw-s1) var(--dw-s3);
+  flex-shrink: 0;
+}
+
+/* ── Table/picture context-bar redesign: ONE borderless .ib family for every control ──
+   The five legacy idioms (.e2-seg bordered pill, .e2-btn-grp connected frame, .e2-lbtn
+   bordered icon+text, .e2-tools box, the .e2-tb-grp/.e2-tgl labelled group) are gone; each
+   context control is now an .ib (or the .e2-figcap / .e2-pxinput field), grouped by 2px gaps
+   and divided by .e2-sep hairlines. Markup single-sourced in editor2/contexttools.js. */
+
+/* A capability cluster: its buttons sit tight (2px); top-level row items are gap s2 apart.
+   Applies in the right-click menu too (the inline Size/Align/Place sets reuse these). */
+.e2-contextbar .e2-grp, .e2-menu .e2-grp { display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; }
+
+/* Frame-light Size set — the chips ARE .ib buttons (no pill border), just compact. */
+.e2-contextbar .e2-sizeset .ib, .e2-menu .e2-sizeset .ib {
+  min-width: 30px;
+  padding: 0 var(--dw-s2);
+  font-size: var(--dw-fs-xs);
+  font-weight: var(--dw-w-bold);
+}
+
+/* Taller hairline separators to match the 32px context-bar buttons. */
+.e2-contextbar .e2-sep { height: 20px; }
+
+/* Toolbar Esc/hint text (right of context bar content) */
+.e2-tb-hint {
+  font-size: var(--dw-fs-xs);
+  color: var(--dw-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-left: var(--dw-s3);
+}
+.e2-tb-hint kbd {
+  font-family: var(--dw-font-mono);
+  font-size: var(--dw-fs-xs);
+  background: var(--dw-surface-2);
+  border: 1px solid var(--dw-border);
+  border-radius: var(--dw-r0);
+  padding: 1px var(--dw-s2);
+  color: var(--dw-muted);
+}
+
+/* View switch (Edit / Source / Read) â€” right-pinned in main track */
+.e2-view-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  flex-shrink: 0;
+}
+.e2-view-switch button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dw-s2);
+  height: 34px;
+  border: none;
+  background: transparent;
+  color: var(--dw-muted);
+  font-size: var(--dw-fs-xs);
+  font-weight: var(--dw-w-medium);
+  padding: 0 var(--dw-s3);
+  border-radius: var(--dw-r0);
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.e2-view-switch button.active { background: var(--dw-accent-bg); color: var(--dw-accent); }
+.e2-view-switch button:not(.active):hover { background: var(--dw-surface-2); color: var(--dw-text); }
+.e2-view-switch button:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
+
+/* Icon buttons in the scrollable track */
+.e2-maintoolbar .ib {
+  height: 34px;
+  min-width: 30px;
+  padding: 0 var(--dw-s2);
+  border: none;
+  border-radius: var(--dw-r0);
+  background: transparent;
+  color: var(--dw-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: var(--dw-fs-sm);
+  font-weight: var(--dw-w-medium);
+  gap: var(--dw-s1);
+  flex-shrink: 0;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.e2-maintoolbar .ib:hover { background: var(--dw-surface-2); color: var(--dw-text); }
+.e2-maintoolbar .ib.active { background: var(--dw-accent-bg); color: var(--dw-accent); }
+.e2-maintoolbar .ib:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
+
+/* The ONE borderless icon-button family for the whole context bar (figure / table / cell
+   image / linked block / container / symbol / link tools all use it). Matches the main
+   toolbar's .ib; editing chrome (rule 20). Markup single-sourced in editor2/contexttools.js. */
+.e2-contextbar .ib, .e2-menu .ib {
+  height: 32px;
+  min-width: 32px;
+  padding: 0 var(--dw-s2);
+  border: none;
+  border-radius: var(--dw-r1);
+  background: transparent;
+  color: var(--dw-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font: var(--dw-w-medium) var(--dw-fs-sm)/var(--dw-lh-tight) var(--dw-font-ui);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.e2-contextbar .ib:hover, .e2-menu .ib:hover { background: var(--dw-surface-2); color: var(--dw-text); }
+.e2-contextbar .ib.active, .e2-menu .ib.active { background: var(--dw-accent-bg); color: var(--dw-accent); }
+.e2-contextbar .ib:focus-visible, .e2-menu .ib:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
+.e2-contextbar .ib:disabled, .e2-menu .ib:disabled { opacity: .45; cursor: default; }
+/* Destructive Delete: --dw-bad text/glyph at rest, --dw-bad-bg on hover — never solid red. */
+.e2-contextbar .ib.e2-ib-danger { color: var(--dw-bad); }
+.e2-contextbar .ib.e2-ib-danger .e2-icon { color: var(--dw-bad); }
+.e2-contextbar .ib.e2-ib-danger:hover { background: var(--dw-bad-bg); color: var(--dw-bad); }
+
+/* ── Right-click context menu (Phase 2). Reusable .e2-menu recipe; same accent/surface state
+   language and icon set as the context bar. Markup single-sourced in editor2/contexttools.js;
+   opened/positioned/closed by openContextMenu(). Tokens only. ── */
+.e2-menu, .e2-menu .submenu {
+  background: var(--dw-surface);
+  border: 1px solid var(--dw-border);
+  border-radius: var(--dw-r1);
+  box-shadow: var(--dw-shadow-2);
+  padding: var(--dw-s1);
+}
+.e2-menu { position: fixed; z-index: 1000; min-width: 220px; max-width: 268px; }
+.e2-menu .mlabel {
+  font: var(--dw-w-bold) var(--dw-fs-xs)/1 var(--dw-font-ui);
+  letter-spacing: var(--dw-track-caps);
+  text-transform: uppercase;
+  color: var(--dw-faint);
+  padding: var(--dw-s2) var(--dw-s3) var(--dw-s1);
+}
+.e2-menu .mi {
+  display: flex;
+  align-items: center;
+  gap: var(--dw-s3);
+  height: 32px;
+  padding: 0 var(--dw-s2) 0 var(--dw-s3);
+  border-radius: var(--dw-r0);
+  color: var(--dw-text);
+  font: var(--dw-w-medium) var(--dw-fs-sm)/var(--dw-lh-tight) var(--dw-font-ui);
+  cursor: pointer;
+  position: relative;
+}
+.e2-menu .mi .mlbl { flex: 1; }
+.e2-menu .mi .e2-icon { width: 16px; height: 16px; color: var(--dw-muted); }
+.e2-menu .mi:hover { background: var(--dw-surface-2); }
+.e2-menu .mi:hover .e2-icon { color: var(--dw-text); }
+.e2-menu .mi.on { color: var(--dw-accent); }                 /* checkable ON + trailing check */
+.e2-menu .mi.on .e2-icon { color: var(--dw-accent); }
+.e2-menu .mi.on .mcheck { margin-left: auto; }
+.e2-menu .mi.danger { color: var(--dw-bad); }
+.e2-menu .mi.danger .e2-icon { color: var(--dw-bad); }
+.e2-menu .mi.danger:hover { background: var(--dw-bad-bg); }
+.e2-menu .mi.disabled { opacity: .4; pointer-events: none; }
+.e2-menu .msep { height: 1px; background: var(--dw-border); margin: var(--dw-s1) var(--dw-s2); }
+.e2-menu .mkey { font: var(--dw-fs-xs)/1 var(--dw-font-mono); color: var(--dw-faint); margin-left: auto; }
+/* Inline mutually-exclusive set (Size / Align / Place) — the bar's .ib controls in a menu row. */
+.e2-menu .mrow { display: flex; align-items: center; gap: var(--dw-s2); height: 34px; padding: 0 var(--dw-s1) 0 var(--dw-s3); }
+.e2-menu .mrow .mlbl { flex: 1; color: var(--dw-text); font: var(--dw-w-medium) var(--dw-fs-sm)/1 var(--dw-font-ui); }
+.e2-menu .mrow .ib { height: 28px; min-width: 28px; }
+/* Submenu flyout (Row ▸ / Column ▸): chevron right; flips to the left near the viewport edge. */
+.e2-menu .mi.has-sub .mchev { margin-left: auto; }
+.e2-menu .submenu { position: absolute; left: 100%; top: calc(-1 * var(--dw-s1)); display: none; min-width: 200px; z-index: 1; }
+.e2-menu .mi.has-sub.open > .submenu { display: block; }
+.e2-menu .mi.has-sub.flip > .submenu { left: auto; right: 100%; }
+
+.e2-icon { display: inline-flex; }
+.e2-icon svg { display: block; }
+
+/* ---- Custom dropdown (.dw-select) — shared CSS recipe; two separate JS builders
+   (one in editor2/main.js, one in app.js) build the DOM.
+   Trigger: .dw-sel-trigger (button, matches input styling).
+   Popup:   .dw-sel-popup (role=listbox, fixed position).
+   Option:  .dw-sel-opt  (role=option).
+   The trigger shows the current label + a chevron SVG (inline).
+   The popup appears below the trigger; z-index 2200 (above tooltip 1000, toast 2000).
+   Token contract: all colors via --dw-*; no literals; 12px floor on font-size. */
+
+/* Wrapper — position context for the popup */
+.dw-sel-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+/* Trigger button */
+.dw-sel-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--dw-s2);
+  height: 30px;
+  padding: 0 var(--dw-s2) 0 var(--dw-s3);
+  border: 1px solid var(--dw-border-strong);
+  border-radius: var(--dw-r0);
+  background: var(--dw-surface);
+  color: var(--dw-text);
+  font: inherit;
+  font-size: var(--dw-fs-xs);
+  font-weight: var(--dw-w-medium);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.12s, box-shadow 0.12s;
+  flex-shrink: 0;
+}
+.dw-sel-trigger:hover { background: var(--dw-surface-2); }
+.dw-sel-trigger:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
+.dw-sel-trigger[aria-expanded="true"] {
+  border-color: var(--dw-accent);
+  box-shadow: var(--dw-focus-ring);
+}
+/* Chevron icon inside trigger */
+.dw-sel-chev {
+  color: var(--dw-muted);
+  flex-shrink: 0;
+  transition: transform 0.12s;
+}
+.dw-sel-trigger[aria-expanded="true"] .dw-sel-chev { transform: rotate(180deg); }
+
+/* Popup list */
+.dw-sel-popup {
+  position: fixed;
+  z-index: 2200;
+  min-width: 160px;
+  background: var(--dw-surface);
+  border: 1px solid var(--dw-border-strong);
+  border-radius: var(--dw-r1);
+  box-shadow: var(--dw-shadow-2);
+  padding: var(--dw-s1);
+  overflow: hidden;
+}
+
+/* Individual option */
+.dw-sel-opt {
+  display: flex;
+  align-items: baseline;
+  padding: var(--dw-s2) var(--dw-s3);
+  border-radius: var(--dw-r0);
+  cursor: pointer;
+  color: var(--dw-text);
+  font-size: var(--dw-fs-xs);
+  font-weight: var(--dw-w-medium);
+  line-height: var(--dw-lh-snug);
+  white-space: nowrap;
+  transition: background 0.08s;
+  user-select: none;
+}
+.dw-sel-opt:hover { background: var(--dw-surface-2); }
+.dw-sel-opt[aria-selected="true"] {
+  background: var(--dw-accent-bg);
+  color: var(--dw-accent);
+}
+/* Keyboard highlight (distinct from selected) */
+.dw-sel-opt.dw-sel-hi {
+  background: var(--dw-accent-bg);
+  color: var(--dw-accent);
+  outline: none;
+}
+
+/* Block-style picker: each option renders in its own heading style */
+.dw-sel-opt[data-style="p"]  { font-size: var(--dw-fs-sm); font-weight: 400; }
+.dw-sel-opt[data-style="h1"] { font-size: var(--dw-fs-xl); font-weight: 700; line-height: 1.2; }
+.dw-sel-opt[data-style="h2"] { font-size: var(--dw-fs-lg); font-weight: 700; }
+.dw-sel-opt[data-style="h3"] { font-size: var(--dw-fs-md); font-weight: 600; }
+.dw-sel-opt[data-style="h4"] { font-size: var(--dw-fs-sm); font-weight: 600; }
+
+/* ---- Table grid picker popup -------------------------------------------- */
+.dw-tbl-picker {
+  position: fixed;
+  z-index: 2100;
+  background: var(--dw-surface);
+  border: 1px solid var(--dw-border);
+  border-radius: var(--dw-r1);
+  box-shadow: var(--dw-shadow-2);
+  padding: var(--dw-s2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--dw-s2);
+  user-select: none;
+}
+.dw-tbl-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(10, 20px);
+  grid-template-rows: repeat(8, 20px);
+  gap: 2px;
+}
+.dw-tbl-picker-cell {
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--dw-border);
+  border-radius: var(--dw-r0);
+  background: var(--dw-surface-2);
+  cursor: pointer;
+  transition: background 0.08s ease, border-color 0.08s ease;
+}
+.dw-tbl-picker-cell--on {
+  background: var(--dw-accent-bg);
+  border-color: var(--dw-accent);
+}
+.dw-tbl-picker-label {
+  font-size: var(--dw-fs-xs);
+  font-family: var(--dw-font-mono);
+  color: var(--dw-muted);
+  text-align: center;
+  letter-spacing: 0.04em;
+}
+
+/* ---- Slash (/) insert menu (slide zones, Task 8) ------------------------- */
+/* Caret-anchored insert popup on a focused slide zone. Same recipe family as the
+   block dropdown (.dw-sel-popup) and table grid picker: fixed position, surface
+   card, strong border, shadow-2; z-index 2200 (above tooltip 1000, toast 2000,
+   below nothing else here). Tokens only; built by editor2/slashmenu.js. */
+.dw-slash-menu {
+  position: fixed;
+  z-index: 2200;
+  min-width: 248px;
+  max-width: 320px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--dw-surface);
+  border: 1px solid var(--dw-border-strong);
+  border-radius: var(--dw-r1);
+  box-shadow: var(--dw-shadow-2);
+  padding: var(--dw-s1);
+}
+.dw-slash-opt {
+  display: flex;
+  align-items: center;
+  gap: var(--dw-s3);
+  padding: var(--dw-s2) var(--dw-s3);
+  border-radius: var(--dw-r0);
+  cursor: pointer;
+  color: var(--dw-text);
+  user-select: none;
+  transition: background 0.08s;
+}
+.dw-slash-opt:hover { background: var(--dw-surface-2); }
+.dw-slash-opt.dw-slash-hi { background: var(--dw-accent-bg); color: var(--dw-accent); }
+.dw-slash-ic {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--dw-border);
+  border-radius: var(--dw-r0);
+  background: var(--dw-surface-2);
+  color: var(--dw-muted);
+  font-size: var(--dw-fs-xs);
+  font-weight: var(--dw-w-medium);
+}
+.dw-slash-opt.dw-slash-hi .dw-slash-ic { border-color: var(--dw-accent); color: var(--dw-accent); }
+.dw-slash-text { display: flex; flex-direction: column; min-width: 0; }
+.dw-slash-name { font-size: var(--dw-fs-sm); font-weight: var(--dw-w-medium); line-height: var(--dw-lh-snug); }
+.dw-slash-desc {
+  font-size: var(--dw-fs-xs);
+  color: var(--dw-faint);
+  line-height: var(--dw-lh-snug);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dw-slash-opt.dw-slash-hi .dw-slash-desc { color: var(--dw-accent); }
+.dw-slash-empty {
+  padding: var(--dw-s2) var(--dw-s3);
+  font-size: var(--dw-fs-xs);
+  color: var(--dw-faint);
+}
+
+/* ============================================================================
+   Handover artifacts — Documentation packages surface (ported from the Claude
+   Design mock, mapped to --dw-* tokens; dwa- prefix avoids clashing with the
+   editor's existing button/card rules). Lives in a #main pane (#viewDocs). */
+.dw-artifacts {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: auto;
+  background: var(--dw-bg);
+  padding: var(--dw-s6) var(--dw-s7) var(--dw-s8);
+}
+.dw-artifacts > * { max-width: 60rem; margin-left: auto; margin-right: auto; }
+
+.dwa-head { display: flex; align-items: flex-start; gap: var(--dw-s4); margin-bottom: var(--dw-s5); }
+.dwa-htext { flex: 1; min-width: 0; }
+.dwa-title { font-size: var(--dw-fs-xl); font-weight: var(--dw-w-bold); color: var(--dw-text); }
+.dwa-desc { font-size: var(--dw-fs-sm); color: var(--dw-muted); line-height: var(--dw-lh-body); margin-top: var(--dw-s1); max-width: 62ch; }
+
+/* Buttons (scoped) — primary is the one accent button; danger is an outline (rule 8). */
+.dwa-btn { display: inline-flex; align-items: center; gap: var(--dw-s2); height: 36px; padding: 0 var(--dw-s4);
+  border-radius: var(--dw-r1); font-size: var(--dw-fs-sm); font-weight: var(--dw-w-bold); cursor: pointer;
+  white-space: nowrap; border: 1px solid transparent; background: transparent; color: var(--dw-text); }
+.dwa-btn svg { width: 16px; height: 16px; }
+.dwa-btn-primary { background: var(--dw-accent); color: var(--dw-accent-contrast); border-color: var(--dw-accent); box-shadow: var(--dw-shadow); }
+.dwa-btn-primary:hover { background: var(--dw-accent-strong); border-color: var(--dw-accent-strong); }
+.dwa-btn-secondary { border-color: var(--dw-border-strong); color: var(--dw-text); }
+.dwa-btn-secondary svg { color: var(--dw-muted); }
+.dwa-btn-secondary:hover { background: var(--dw-surface-2); border-color: var(--dw-muted); }
+.dwa-btn-danger { border-color: var(--dw-border); color: var(--dw-bad); }
+.dwa-btn-danger:hover { background: var(--dw-bad-bg); border-color: var(--dw-bad); }
+.dwa-btn:disabled { opacity: .45; cursor: default; pointer-events: none; }
+.dwa-btn-sm { height: 30px; padding: 0 var(--dw-s3); font-size: var(--dw-fs-xs); }
+.dwa-btn:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
+
+/* Package cards */
+.dwa-pkg-list { display: flex; flex-direction: column; gap: var(--dw-s3); }
+.dwa-pkg-card { background: var(--dw-surface); border: 1px solid var(--dw-border); border-radius: var(--dw-r2);
+  box-shadow: var(--dw-shadow); padding: var(--dw-s4) var(--dw-s5); display: flex; align-items: center; gap: var(--dw-s5); }
+.dwa-pkg-card:hover { border-color: var(--dw-border-strong); }
+.dwa-pkg-icon { width: 46px; height: 46px; border-radius: var(--dw-r1); background: var(--dw-accent-bg);
+  color: var(--dw-accent); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.dwa-pkg-icon svg { width: 24px; height: 24px; }
+.dwa-pkg-icon.bad { background: var(--dw-bad-bg); color: var(--dw-bad); }
+.dwa-pkg-main { flex: 1; min-width: 0; }
+.dwa-pkg-toprow { display: flex; align-items: center; gap: var(--dw-s3); margin-bottom: var(--dw-s2); flex-wrap: wrap; }
+.dwa-pkg-tab { font-size: var(--dw-fs-md); font-weight: var(--dw-w-bold); color: var(--dw-text); }
+.dwa-pkg-type { font-size: var(--dw-fs-xs); font-weight: var(--dw-w-bold); letter-spacing: var(--dw-track-caps);
+  text-transform: uppercase; color: var(--dw-muted); background: var(--dw-surface-2); border: 1px solid var(--dw-border);
+  border-radius: var(--dw-r0); padding: 2px var(--dw-s2); }
+.dwa-pkg-meta { display: flex; align-items: center; gap: var(--dw-s2) var(--dw-s4); flex-wrap: wrap;
+  font-size: var(--dw-fs-sm); color: var(--dw-muted); }
+.dwa-mi { display: inline-flex; align-items: center; gap: var(--dw-s2); }
+.dwa-mi svg { width: 14px; height: 14px; color: var(--dw-faint); }
+.dwa-path, .dwa-size, .dwa-mono { font-family: var(--dw-font-mono); font-size: var(--dw-fs-xs); }
+.dwa-path { color: var(--dw-text); }
+.dwa-status { display: inline-flex; align-items: center; gap: var(--dw-s1); font-size: var(--dw-fs-xs);
+  font-weight: var(--dw-w-bold); letter-spacing: var(--dw-track-caps); text-transform: uppercase;
+  border-radius: var(--dw-r0); padding: 3px var(--dw-s2); border: 1px solid; }
+.dwa-status svg { width: 13px; height: 13px; }
+.dwa-status.ok { color: var(--dw-ok); background: var(--dw-ok-bg); border-color: color-mix(in srgb, var(--dw-ok) 35%, transparent); }
+.dwa-status.bad { color: var(--dw-bad); background: var(--dw-bad-bg); border-color: color-mix(in srgb, var(--dw-bad) 35%, transparent); }
+.dwa-pkg-actions { display: flex; gap: var(--dw-s2); flex-shrink: 0; }
+
+/* Empty state + footnote */
+.dwa-empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: var(--dw-s2);
+  padding: var(--dw-s8) var(--dw-s5); background: var(--dw-surface); border: 1.5px dashed var(--dw-border-strong);
+  border-radius: var(--dw-r2); }
+.dwa-em-title { font-size: var(--dw-fs-lg); font-weight: var(--dw-w-bold); color: var(--dw-text); }
+.dwa-em-desc { font-size: var(--dw-fs-sm); color: var(--dw-muted); line-height: var(--dw-lh-body); max-width: 46ch; margin-bottom: var(--dw-s3); }
+.dwa-foot { margin-top: var(--dw-s4); font-size: var(--dw-fs-xs); color: var(--dw-faint); font-family: var(--dw-font-mono); }
+.dwa-foot .dwa-mono { color: var(--dw-faint); }
+
+/* Add-package modal labels/radios */
+.mlbl { display: block; margin: var(--dw-s4) 0 var(--dw-s1); font-size: var(--dw-fs-sm); font-weight: var(--dw-w-bold); color: var(--dw-text); }
+.mradio { display: flex; align-items: flex-start; gap: var(--dw-s2); margin-top: var(--dw-s2); font-size: var(--dw-fs-sm); color: var(--dw-text); }
+.mradio input { margin-top: 3px; }
+/* Export modal: section heading over a group of chapter/view checkboxes, and the indented chapter rows. */
+.mgroup-lbl { margin: var(--dw-s3) 0 var(--dw-s1); font-size: var(--dw-fs-xs); font-weight: var(--dw-w-bold); color: var(--dw-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.mradio-sub { margin-left: var(--dw-s4); }
+
+/* ============================================================================
+   Settings surface (#setPane) — interactive docwiz.yaml editor + app prefs.
+   Ported from the Claude Design mock, mapped to --dw-* tokens; scoped under
+   #setPane so the generic class names (.finput/.switch/.seg/.frow) can't clash. */
+#setPane { display: flex; min-width: 0; min-height: 0; overflow: hidden; }
+#setPane[hidden] { display: none; }
+
+#setPane .set-rail { width: 262px; flex-shrink: 0; background: var(--dw-surface); border-right: 1px solid var(--dw-border); display: flex; flex-direction: column; overflow: hidden; }
+#setPane .set-rail-scroll { flex: 1; overflow-y: auto; padding: var(--dw-s2); }
+#setPane .set-grp { font-size: var(--dw-fs-xs); font-weight: var(--dw-w-bold); letter-spacing: var(--dw-track-caps); text-transform: uppercase; color: var(--dw-faint); padding: var(--dw-s4) var(--dw-s2) var(--dw-s1); }
+#setPane .set-grp:first-child { padding-top: var(--dw-s1); }
+#setPane .set-item { display: flex; align-items: center; gap: var(--dw-s2); font-size: var(--dw-fs-sm); color: var(--dw-muted); padding: var(--dw-s2); border-radius: var(--dw-r1); cursor: pointer; }
+#setPane .set-item:hover { background: var(--dw-surface-2); }
+#setPane .set-item.active { background: var(--dw-accent-bg); color: var(--dw-accent); font-weight: var(--dw-w-bold); box-shadow: inset 3px 0 0 var(--dw-accent); }
+#setPane .set-item.soon { cursor: default; opacity: .55; }
+#setPane .set-item.soon:hover { background: transparent; }
+#setPane .soon-badge { margin-left: auto; font-size: var(--dw-fs-xs); font-weight: var(--dw-w-bold); letter-spacing: var(--dw-track-caps); text-transform: uppercase; color: var(--dw-faint); background: var(--dw-surface-2); border: 1px solid var(--dw-border); border-radius: 20px; padding: 2px var(--dw-s2); }
+
+#setPane .set-pane-body { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+#setPane .set-topbar { height: 54px; flex-shrink: 0; background: var(--dw-surface); border-bottom: 1px solid var(--dw-border); display: flex; align-items: center; gap: var(--dw-s3); padding: 0 var(--dw-s5); }
+#setPane .set-crumb { font-size: var(--dw-fs-sm); color: var(--dw-muted); display: flex; align-items: center; gap: var(--dw-s2); }
+#setPane .set-crumb b { color: var(--dw-text); font-weight: var(--dw-w-bold); }
+#setPane .set-crumb .sep { color: var(--dw-faint); }
+#setPane .grow { flex: 1; }
+#setPane .save-state { display: flex; align-items: center; gap: var(--dw-s2); }
+#setPane .dirty-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dw-warn); box-shadow: 0 0 0 3px var(--dw-warn-bg); display: none; }
+#setPane.dirty .dirty-dot { display: block; }
+#setPane .btn-save { background: var(--dw-surface-2); color: var(--dw-faint); border-color: transparent; cursor: default; pointer-events: none; }
+#setPane.dirty .btn-save { background: var(--dw-accent); color: var(--dw-accent-contrast); border-color: var(--dw-accent); box-shadow: var(--dw-shadow); cursor: pointer; pointer-events: auto; }
+
+#setPane .set-body { flex: 1; overflow-y: auto; background: var(--dw-bg); }
+#setPane .set-content { max-width: 720px; margin: 0 auto; padding: var(--dw-s6) var(--dw-s6) var(--dw-s8); }
+#setPane .set-section { display: none; }
+#setPane .set-section.active { display: block; }
+#setPane .set-sec-head { margin-bottom: var(--dw-s4); }
+#setPane .set-sec-title { font-size: var(--dw-fs-xl); font-weight: var(--dw-w-bold); color: var(--dw-text); }
+#setPane .set-sec-desc { font-size: var(--dw-fs-sm); color: var(--dw-muted); line-height: var(--dw-lh-body); margin-top: var(--dw-s1); }
+
+#setPane .fcard { background: var(--dw-surface); border: 1px solid var(--dw-border); border-radius: var(--dw-r2); box-shadow: var(--dw-shadow); padding: 0 var(--dw-s5); margin-bottom: var(--dw-s4); }
+#setPane .frow { display: flex; align-items: flex-start; gap: var(--dw-s5); padding: var(--dw-s4) 0; border-bottom: 1px solid var(--dw-border); }
+#setPane .frow:last-child { border-bottom: 0; }
+#setPane .fl { width: 190px; flex-shrink: 0; padding-top: var(--dw-s2); }
+#setPane .ftitle { font-size: var(--dw-fs-sm); font-weight: var(--dw-w-bold); color: var(--dw-text); }
+#setPane .fhint { font-size: var(--dw-fs-xs); color: var(--dw-muted); margin-top: 3px; line-height: var(--dw-lh-snug); }
+#setPane .fc { flex: 1; min-width: 0; }
+#setPane .req { color: var(--dw-bad); font-weight: var(--dw-w-bold); margin-left: 2px; }
+
+#setPane .finput { width: 100%; font-size: var(--dw-fs-sm); color: var(--dw-text); background: var(--dw-surface); border: 1px solid var(--dw-border-strong); border-radius: var(--dw-r1); padding: var(--dw-s2) var(--dw-s3); outline: none; }
+#setPane .finput.mono { font-family: var(--dw-font-mono); }
+#setPane .finput:focus { border-color: var(--dw-accent); box-shadow: var(--dw-focus-ring); }
+#setPane .finput.invalid { border-color: var(--dw-bad); box-shadow: 0 0 0 3px var(--dw-bad-bg); }
+#setPane .field-msg { display: flex; align-items: center; gap: var(--dw-s1); font-size: var(--dw-fs-xs); margin-top: var(--dw-s2); }
+#setPane .field-msg.warn { color: var(--dw-warn); }
+#setPane .field-msg.ok { color: var(--dw-ok); }
+#setPane .pathchip { display: inline-flex; align-items: center; gap: var(--dw-s2); font-family: var(--dw-font-mono); font-size: var(--dw-fs-xs); color: var(--dw-muted); background: var(--dw-surface-2); border: 1px solid var(--dw-border); border-radius: var(--dw-r1); padding: var(--dw-s2) var(--dw-s3); max-width: 100%; }
+#setPane .pathchip .p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#setPane .inline-row { display: flex; align-items: center; gap: var(--dw-s3); flex-wrap: wrap; }
+
+/* Toggle switch */
+#setPane .switch { position: relative; width: 42px; height: 24px; border-radius: 20px; background: var(--dw-border-strong); border: 0; cursor: pointer; flex-shrink: 0; transition: background .15s; padding: 0; }
+#setPane .switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--dw-accent-contrast); box-shadow: var(--dw-shadow); transition: left .15s; }
+#setPane .switch[aria-checked="true"] { background: var(--dw-accent); }
+#setPane .switch[aria-checked="true"]::after { left: 21px; }
+#setPane .switch:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
+#setPane .toggle-row { display: flex; align-items: center; gap: var(--dw-s3); }
+#setPane .tlabel { font-size: var(--dw-fs-sm); color: var(--dw-text); }
+#setPane .num-example { display: flex; align-items: center; gap: var(--dw-s2); margin-top: var(--dw-s4); padding: var(--dw-s3) var(--dw-s4); background: var(--dw-surface-2); border: 1px solid var(--dw-border); border-radius: var(--dw-r1); font-family: var(--dw-font-mono); font-size: var(--dw-fs-sm); flex-wrap: wrap; }
+#setPane .num-example .lvl { display: flex; align-items: center; gap: var(--dw-s2); }
+#setPane .num-example .n { color: var(--dw-accent); font-weight: var(--dw-w-bold); min-width: 34px; }
+#setPane .num-example .t { color: var(--dw-muted); }
+#setPane .num-example.nonum .n { display: none; }
+
+/* Segmented control (window mode) */
+#setPane .seg { display: inline-flex; background: var(--dw-surface-2); border: 1px solid var(--dw-border); border-radius: var(--dw-r1); padding: 3px; gap: 3px; }
+#setPane .seg button { height: 30px; padding: 0 var(--dw-s4); border: 0; background: transparent; color: var(--dw-muted); font-size: var(--dw-fs-sm); font-weight: var(--dw-w-bold); border-radius: var(--dw-r0); cursor: pointer; }
+#setPane .seg button.active { background: var(--dw-surface); color: var(--dw-accent); box-shadow: var(--dw-shadow); }
+#setPane .seg button:not(.active):hover { color: var(--dw-text); }
+#setPane .applies { display: inline-flex; align-items: center; gap: var(--dw-s2); font-size: var(--dw-fs-xs); color: var(--dw-ok); margin-top: var(--dw-s3); }
+
+/* Audiences row-list */
+#setPane .rowlist { display: flex; flex-direction: column; gap: var(--dw-s2); }
+#setPane .audrow { display: flex; align-items: center; gap: var(--dw-s3); background: var(--dw-surface); border: 1px solid var(--dw-border); border-radius: var(--dw-r1); padding: var(--dw-s2) var(--dw-s3); }
+#setPane .audtitle { flex: 1; min-width: 120px; font-size: var(--dw-fs-sm); color: var(--dw-text); background: var(--dw-surface); border: 1px solid var(--dw-border-strong); border-radius: var(--dw-r0); padding: var(--dw-s2); outline: none; }
+#setPane .audtitle:focus { border-color: var(--dw-accent); box-shadow: var(--dw-focus-ring); }
+#setPane .audid { font-family: var(--dw-font-mono); font-size: var(--dw-fs-xs); color: var(--dw-muted); background: var(--dw-surface-2); border: 1px solid var(--dw-border); border-radius: var(--dw-r0); padding: var(--dw-s1) var(--dw-s2); white-space: nowrap; }
+#setPane .reorder { display: flex; flex-direction: column; gap: 1px; }
+#setPane .mini { width: 26px; height: 18px; border: 0; background: transparent; color: var(--dw-faint); border-radius: var(--dw-r0); cursor: pointer; display: flex; align-items: center; justify-content: center; }
+#setPane .mini:hover { background: var(--dw-surface-2); color: var(--dw-text); }
+#setPane .mini:disabled { opacity: .3; cursor: default; }
+#setPane .auddel { width: 30px; height: 30px; border: 1px solid transparent; background: transparent; color: var(--dw-faint); border-radius: var(--dw-r0); cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+#setPane .auddel:hover { color: var(--dw-bad); background: var(--dw-bad-bg); }
+#setPane .addrow { display: inline-flex; align-items: center; gap: var(--dw-s2); height: 36px; padding: 0 var(--dw-s4); margin-top: var(--dw-s2); border: 1px dashed var(--dw-border-strong); background: transparent; color: var(--dw-muted); border-radius: var(--dw-r1); font-size: var(--dw-fs-sm); font-weight: var(--dw-w-bold); cursor: pointer; }
+#setPane .addrow:hover { border-color: var(--dw-accent); color: var(--dw-accent); background: var(--dw-accent-bg); }
+
+#setPane .warnbox { display: flex; gap: var(--dw-s3); background: var(--dw-warn-bg); border: 1px solid color-mix(in srgb, var(--dw-warn) 30%, transparent); border-radius: var(--dw-r1); padding: var(--dw-s3) var(--dw-s4); }
+#setPane .warnbox .wb-text { font-size: var(--dw-fs-sm); color: var(--dw-text); line-height: var(--dw-lh-body); }
+#setPane textarea.finput { resize: vertical; line-height: var(--dw-lh-body); }
+

@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<title>DocWiz WYSIWYG gate</title>
+<!-- =====================================================================================
+     WYSIWYG edit-vs-ship gate (the guarantee). Dev/verification harness — never part of
+     the product UI. It mounts BOTH slide surfaces of one view in ONE document and proves,
+     mechanically, that the live AUTHORING surface renders structurally identical to the
+     shipped/Read deck ("what I see is what I ship"):
+
+       - SHIP: ViewRenderer.RenderSlides(edit:false) — display-only, what the handover ships.
+       - EDIT: ViewRenderer.RenderSlides(edit:true)  — the authoring fragment, with a live
+               ProseMirror editor mounted on every .slide-region zone (window.DocWizSlideEdit).
+
+     Both surfaces use the SAME .dw-slide-edit framing (a stacked list of full 1920×1080
+     frames scaled with CSS zoom) and the SAME site.css `.slide.active[data-layout]` internal
+     layout — so the ONLY thing that can differ between them is the content DOM (the embed
+     wrapper, the per-zone PM root, the editable title/subtitle), which is exactly what the
+     gate measures. probe.js's compareEditVsShip() then captures each slide's per-region
+     geometry normalized to the 1920 logical coordinate (dividing out each surface's scale)
+     plus a structural signature, diffs them, and prints PASS/FAIL JSON.
+
+     HOW TO RE-RUN (a project must be mounted in this editor instance; <file> is the project-
+     relative view path, e.g. views/user-training.yaml):
+       headless:  msedge --headless=new --disable-gpu --virtual-time-budget=20000 \
+                    --dump-dom "http://127.0.0.1:<port>/app/editor2/wysiwyg.html?view=<file>&wys=1"
+                  then read the JSON inside the dwWysOut element / the data-wys attribute on
+                  the root html (title flips to WYS-PASS / WYS-FAIL).
+       console:   open .../app/editor2/wysiwyg.html?view=views/user-training.yaml , then
+                  window.__wys.run().then(r => console.log(r.verdict, r))
+     ===================================================================================== -->
+<link rel="stylesheet" href="/app/tokens.css">
+<link rel="stylesheet" href="/app/vendor/prosemirror/prosemirror-view/prosemirror.css">
+<link rel="stylesheet" href="/app/site-scoped.css">
+<link rel="stylesheet" href="/app/app.css">
+<script type="importmap">
+{
+  "imports": {
+    "prosemirror-model": "/app/vendor/prosemirror/prosemirror-model/index.js",
+    "prosemirror-state": "/app/vendor/prosemirror/prosemirror-state/index.js",
+    "prosemirror-view": "/app/vendor/prosemirror/prosemirror-view/index.js",
+    "prosemirror-transform": "/app/vendor/prosemirror/prosemirror-transform/index.js",
+    "prosemirror-commands": "/app/vendor/prosemirror/prosemirror-commands/index.js",
+    "prosemirror-keymap": "/app/vendor/prosemirror/prosemirror-keymap/index.js",
+    "prosemirror-history": "/app/vendor/prosemirror/prosemirror-history/index.js",
+    "prosemirror-inputrules": "/app/vendor/prosemirror/prosemirror-inputrules/index.js",
+    "prosemirror-dropcursor": "/app/vendor/prosemirror/prosemirror-dropcursor/index.js",
+    "prosemirror-gapcursor": "/app/vendor/prosemirror/prosemirror-gapcursor/index.js",
+    "prosemirror-schema-list": "/app/vendor/prosemirror/prosemirror-schema-list/index.js",
+    "orderedmap": "/app/vendor/prosemirror/orderedmap/index.js",
+    "w3c-keyname": "/app/vendor/prosemirror/w3c-keyname/index.js",
+    "rope-sequence": "/app/vendor/prosemirror/rope-sequence/index.js"
+  }
+}
+</script>
+<style>
+  /* Harness chrome only — the surfaces themselves are styled by app.css/site.css. */
+  body { margin: 0; font-family: var(--dw-font-ui); background: var(--dw-chrome); }
+  .wys-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: start; }
+  .wys-col-head {
+    color: var(--dw-chrome-text); font-size: var(--dw-fs-sm); font-weight: 600;
+    text-transform: uppercase; letter-spacing: var(--dw-track-caps); padding: 8px 12px;
+  }
+  /* Both surfaces reuse .dw-slide-edit (stacked full frames + zoom) so their INTERNAL
+     layout is the authentic site.css layout and the ONLY difference is the content DOM.
+     The slide canvas follows the page theme (no pinned data-theme — Rule 16). */
+  #dwProbeOut { color: var(--dw-chrome-text); padding: 12px; white-space: pre-wrap;
+    font-family: var(--dw-font-mono); font-size: 12px; max-height: 40vh; overflow: auto;
+    border-top: 1px solid var(--dw-chrome-border); }
+</style>
+</head>
+<body>
+<div class="wys-grid">
+  <div>
+    <div class="wys-col-head">Ship (handover deck)</div>
+    <div id="wysShip" class="dw-live-surface dw-slide-edit"></div>
+  </div>
+  <div>
+    <div class="wys-col-head">Edit (live authoring surface)</div>
+    <div id="wysEdit" class="dw-live-surface dw-slide-edit"></div>
+  </div>
+</div>
+<pre id="dwWysOut" hidden></pre>
+
+<!-- probe.js provides window.DocWizProbe.compareEditVsShip; main.js sets window.DocWizEditor2;
+     slideedit.js sets window.DocWizSlideEdit. app.js is intentionally NOT loaded (it boots the
+     welcome UI); the zone mount path only needs DocWizEditor2 + DocWizSlideEdit. -->
+<script src="/app/probe.js"></script>
+<script type="module" src="/app/editor2/main.js"></script>
+<script type="module" src="/app/editor2/slideedit.js"></script>
+<script type="module">
+  const params = new URLSearchParams(location.search);
+  const viewFile = params.get('view') || 'user-training.yaml';
+
+  // 1920×1080 frames scaled to each column with CSS zoom (mirrors app.js fitSlideZoom). The
+  // ship deck normally fits the viewport; here we only need a consistent measurable scale —
+  // the gate divides the scale out, so the exact factor doesn't matter as long as both are
+  // laid out at full size. Half-width columns → fit the column.
+  function fitZoom(surface) {
+    const cs = getComputedStyle(surface);
+    const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+    const avail = surface.clientWidth - padX;
+    if (avail > 0) surface.style.setProperty('--dw-edit-zoom', String(Math.min(avail / 1920, 0.82)));
+  }
+  function activateAll(surface) {
+    surface.querySelectorAll('.slide').forEach((s) => s.classList.add('active'));
+  }
+
+  async function waitForEditor2(ms) {
+    const t0 = Date.now();
+    while (!window.DocWizEditor2 || !window.DocWizSlideEdit) {
+      if (Date.now() - t0 > ms) throw new Error('DocWizEditor2 / DocWizSlideEdit never loaded');
+      await new Promise((r) => setTimeout(r, 30));
+    }
+  }
+
+  async function setup() {
+    await waitForEditor2(8000);
+
+    // The view's working-model slides (region markdown) so DocWizSlideEdit.mountAll can mount
+    // a zone editor per region — the SAME data app.js feeds it from /api/view.
+    const view = await fetch('/api/view?file=' + encodeURIComponent(viewFile)).then((r) => {
+      if (!r.ok) return r.text().then((t) => { throw new Error('GET /api/view: ' + (t || r.status)); });
+      return r.json();
+    });
+    // Both surfaces' rendered HTML through the one ViewRenderer (dev gate route).
+    const both = await fetch('/api/dev/wysiwyg?view=' + encodeURIComponent(viewFile)).then((r) => {
+      if (!r.ok) return r.text().then((t) => { throw new Error('GET /api/dev/wysiwyg: ' + (t || r.status)); });
+      return r.json();
+    });
+
+    const shipEl = document.getElementById('wysShip');
+    const editEl = document.getElementById('wysEdit');
+
+    // SHIP: display-only slides (wrap in the .slides-edit-list the edit surface uses so the
+    // stacking/box rules match; the slides themselves carry the authentic site.css layout).
+    shipEl.innerHTML = '<div class="slides-edit-list">' + both.ship + '</div>';
+    // EDIT: the authoring fragment.
+    editEl.innerHTML = '<div class="slides-edit-list">' + both.edit + '</div>';
+
+    activateAll(shipEl);
+    activateAll(editEl);
+    fitZoom(shipEl);
+    fitZoom(editEl);
+
+    // Mount a live editor on every edit-surface zone, exactly like app.js does — including
+    // app.js's normalizeSlide(): a legacy `include:`/`markdown:` slide maps to a title-content
+    // body region holding the embed directive (mirrors SlideDef.EffectiveRegions), so the gate
+    // mounts the SAME content the real app does instead of a strawman empty region.
+    const DEFAULT_LAYOUT = 'title-content';
+    const embedDirective = (ref) => '::: embed dw:' + String(ref).replace(/^dw:/, '') + '\n:::';
+    function normalizeSlide(s) {
+      let layout = s.layout || null;
+      const regions = {};
+      if (s.regions && Object.keys(s.regions).length > 0) {
+        Object.keys(s.regions).forEach((name) => { if (s.regions[name] != null) regions[name] = String(s.regions[name]); });
+        if (!layout) layout = DEFAULT_LAYOUT;
+      } else if (!layout) {
+        layout = DEFAULT_LAYOUT;
+        if (s.include) regions.body = embedDirective(s.include);
+        else if (s.markdown != null) regions.body = String(s.markdown);
+      }
+      return { layout: layout, title: s.title || null, subtitle: s.subtitle || null, regions: regions };
+    }
+    await window.DocWizSlideEdit.mountAll({
+      surface: editEl,
+      slides: (view.slides || []).map(normalizeSlide),
+      audience: view.audience || null,
+      onZoneDirty: function () {},
+    });
+
+    // Let layout settle (zoom + zone mount reflow) before measuring.
+    await new Promise((r) => setTimeout(r, 250));
+  }
+
+  // Screenshot mode: ?shot=ship|edit&slide=N isolates ONE surface and ONE slide at a large
+  // zoom, so a headless --screenshot yields a clean, comparable per-slide image for the
+  // human-visible edit-vs-ship pairs (the gate's geometry PASS is the objective proof; these
+  // are the corroborating pictures). Hides the other column, the heads, and other slides.
+  function applyShot() {
+    const m = /[?&]shot=(ship|edit)\b/.exec(location.search);
+    if (!m) return false;
+    const which = m[1];
+    const slide = parseInt((/[?&]slide=(\d+)\b/.exec(location.search) || [])[1] || '0', 10);
+    document.querySelector('.wys-grid').style.display = 'block';
+    document.querySelectorAll('.wys-col-head').forEach((h) => h.remove());
+    const keepId = which === 'ship' ? 'wysShip' : 'wysEdit';
+    const dropId = which === 'ship' ? 'wysEdit' : 'wysShip';
+    document.getElementById(dropId).closest('.wys-grid > div').remove();
+    const surface = document.getElementById(keepId);
+    const slides = Array.prototype.slice.call(surface.querySelectorAll('.slide'));
+    slides.forEach((s, i) => { if (i !== slide) s.style.display = 'none'; });
+    // Bigger zoom for a legible single slide (full window width).
+    const cs = getComputedStyle(surface);
+    const avail = surface.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+    if (avail > 0) surface.style.setProperty('--dw-edit-zoom', String(Math.min(avail / 1920, 0.95)));
+    return true;
+  }
+
+  async function run() {
+    await setup();
+    const result = window.DocWizProbe.compareEditVsShip('#wysShip', '#wysEdit');
+    result.view = viewFile;
+    const pre = document.getElementById('dwWysOut');
+    pre.hidden = false;
+    pre.textContent = JSON.stringify(result, null, 2);
+    document.documentElement.setAttribute('data-wys', result.verdict || 'ERR');
+    document.title = 'WYS-' + (result.verdict || 'ERR') + ' DocWiz';
+    return result;
+  }
+
+  async function shot() {
+    await setup();
+    applyShot();
+    await new Promise((r) => setTimeout(r, 150));
+    document.title = 'WYS-SHOT DocWiz';
+  }
+
+  // Console/manual access.
+  window.__wys = { run, setup, shot, compare: () => window.DocWizProbe.compareEditVsShip('#wysShip', '#wysEdit') };
+
+  // Screenshot mode auto-run (?shot=…): isolate one surface/slide, then a headless --screenshot
+  // captures it. Mutually exclusive with the gate (?wys=1).
+  if (/[?&]shot=(ship|edit)\b/.test(location.search)) {
+    shot().catch((e) => { document.title = 'WYS-ERR DocWiz'; document.body.insertAdjacentText('afterbegin', String(e && e.message || e)); });
+  }
+
+  // Headless auto-run when ?wys=1. (Deliberately NOT ?probe=1: probe.js has its own global
+  // ?probe=1 auto-run for the single-surface contrast/overlap check, and it would race this
+  // page and clobber #dwProbeOut. ?wys=1 keeps probe.js inert so this gate's verdict stands.)
+  if (/[?&]wys=1\b/.test(location.search)) {
+    run().catch((e) => {
+      const pre = document.getElementById('dwWysOut');
+      pre.hidden = false;
+      pre.textContent = JSON.stringify({ verdict: 'ERR', error: String(e && e.message || e) }, null, 2);
+      document.documentElement.setAttribute('data-wys', 'ERR');
+      document.title = 'WYS-ERR DocWiz';
+    });
+  }
+</script>
+</body>
+</html>

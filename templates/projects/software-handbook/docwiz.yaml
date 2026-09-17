@@ -1,0 +1,20 @@
+project: 'Software Handbook'
+code: TEMPLATE-HANDBOOK
+customer: Customer Name
+version: 0.1.0
+language: en
+
+audiences:
+  - id: user
+    title: User
+  - id: support
+    title: Support
+  - id: admin
+    title: Administrator
+
+external:
+  # Paths to self-contained HTML documentation folders (each must have an
+  # index.html). Every non-null entry is embedded with its own tab.
+  api_reference: null
+  release_notes: null
+  integration_guide: null

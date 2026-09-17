@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <!-- Markdig: the Markdown engine pinned by ADR-004 (one pipeline shared by builder and editor preview) -->
+    <PackageReference Include="Markdig" Version="0.37.0" />
+    <!-- YamlDotNet: parses docwiz.yaml, chapter frontmatter, and views/*.yaml -->
+    <PackageReference Include="YamlDotNet" Version="16.2.1" />
+  </ItemGroup>
+
+</Project>

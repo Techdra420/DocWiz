@@ -1,0 +1,897 @@
+/* DocWiz handover site — all values from tokens.css (see docs/DESIGN_SYSTEM.md). */
+
+/* ---- Element base ------------------------------------------------------- */
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--dw-bg);
+  color: var(--dw-text);
+  font-family: var(--dw-font-ui);
+  font-size: var(--dw-fs-md);
+  line-height: var(--dw-lh-body);
+  -webkit-font-smoothing: antialiased;
+  display: flex;
+  flex-direction: column;
+}
+h1, h2, h3, h4 { line-height: var(--dw-lh-tight); text-wrap: balance; }
+h1 { font-size: var(--dw-fs-2xl); font-weight: var(--dw-w-bold); letter-spacing: -0.01em; margin: 0 0 var(--dw-s4); }
+h2 {
+  font-size: var(--dw-fs-xl);
+  font-weight: var(--dw-w-bold);
+  margin: var(--dw-s6) 0 var(--dw-s3);
+  border-bottom: 1px solid var(--dw-border);
+  padding-bottom: var(--dw-s2);
+}
+h3 { font-size: var(--dw-fs-lg); font-weight: var(--dw-w-medium); margin: var(--dw-s5) 0 var(--dw-s2); }
+p { margin: 0 0 var(--dw-s4); text-wrap: pretty; }
+a {
+  color: var(--dw-accent);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--dw-accent) 35%, transparent);
+  text-underline-offset: 2px;
+}
+a:hover { color: var(--dw-accent-strong); text-decoration-color: currentColor; }
+a:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); border-radius: 2px; }
+code, kbd, pre, .mono { font-family: var(--dw-font-mono); font-size: 0.92em; }
+code {
+  background: var(--dw-surface-2);
+  border: 1px solid var(--dw-border);
+  border-radius: var(--dw-r0);
+  padding: 1px 5px;
+}
+pre {
+  background: var(--dw-surface-2);
+  border: 1px solid var(--dw-border);
+  border-radius: var(--dw-r1);
+  padding: var(--dw-s4);
+  overflow-x: auto;
+  line-height: 1.5;
+}
+pre code { background: none; border: none; padding: 0; }
+hr { border: 0; border-top: 1px solid var(--dw-border); margin: var(--dw-s5) 0; }
+/* Blockquote: a neutral left accent bar + muted italic text. Lightweight and unmistakably a
+   quotation, and deliberately distinct from the coloured :::note/tip/warning callouts. Lives
+   here (not app.css) so the handover AND the editor live surface render it identically. */
+blockquote {
+  margin: var(--dw-s4) 0;
+  padding: var(--dw-s1) 0 var(--dw-s1) var(--dw-s4);
+  border-left: 3px solid var(--dw-border-strong);
+  color: var(--dw-muted);
+  font-style: italic;
+}
+blockquote > :first-child { margin-top: 0; }
+blockquote > :last-child { margin-bottom: 0; }
+img { max-width: 100%; border-radius: var(--dw-r1); }
+::selection { background: var(--dw-accent-glow); }
+
+/* ---- Tables (first-class) ------------------------------------------------ */
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: var(--dw-s4) 0;
+  font-size: var(--dw-fs-sm);
+  line-height: var(--dw-lh-snug);
+  font-variant-numeric: tabular-nums;
+}
+th, td {
+  text-align: left;
+  padding: var(--dw-s2) var(--dw-s3);
+  border-bottom: 1px solid var(--dw-border);
+  vertical-align: top;
+  /* break-word, NOT anywhere: a genuinely over-long word breaks only when it can't fit its
+     line, but a column's min-content stays the longest WORD — so auto layout won't crush a
+     short column to ~1ch and split a normal header like "SYMBOL" mid-word (2026-06-17). */
+  overflow-wrap: break-word;
+}
+thead th {
+  background: var(--dw-surface-2);
+  font-weight: var(--dw-w-medium);
+  font-size: var(--dw-fs-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--dw-track-caps);
+  color: var(--dw-muted);
+  border-bottom: 2px solid var(--dw-border-strong);
+}
+tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--dw-surface-2) 45%, transparent); }
+
+/* ---- Chrome (always dark — header carries data-theme="dark") ------------- */
+header {
+  background: var(--dw-chrome);
+  color: var(--dw-chrome-text);
+  border-bottom: 1px solid var(--dw-chrome-border);
+  display: flex;
+  align-items: center;
+  gap: var(--dw-s4);
+  padding: 0 var(--dw-s4);
+  height: 52px;
+  flex: none;
+}
+.brand { font-weight: var(--dw-w-bold); font-size: var(--dw-fs-md); letter-spacing: 0.02em; }
+.brand small {
+  font-weight: var(--dw-w-regular);
+  font-family: var(--dw-font-mono);
+  font-size: var(--dw-fs-xs);
+  color: var(--dw-chrome-muted);
+  margin-left: var(--dw-s3);
+}
+.tabs { display: flex; gap: var(--dw-s1); margin-left: auto; }
+.tabs a {
+  color: var(--dw-chrome-muted);
+  text-decoration: none;
+  font-size: var(--dw-fs-sm);
+  font-weight: var(--dw-w-medium);
+  padding: var(--dw-s2) var(--dw-s3);
+  border-radius: var(--dw-r1);
+  line-height: var(--dw-lh-tight);
+}
+.tabs a:hover { color: var(--dw-chrome-text); }
+.tabs a.active { background: var(--dw-accent); color: var(--dw-accent-contrast); }
+.tabs a:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
+#themeBtn {
+  margin-left: var(--dw-s3);
+  background: transparent;
+  border: 1px solid var(--dw-chrome-border);
+  color: var(--dw-chrome-muted);
+  border-radius: var(--dw-r1);
+  padding: var(--dw-s1) var(--dw-s3);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--dw-fs-sm);
+  font-weight: var(--dw-w-medium);
+}
+#themeBtn:hover { color: var(--dw-chrome-text); border-color: var(--dw-chrome-muted); }
+#themeBtn:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
+
+/* ---- External-doc wrapper: slim back strip + full-bleed iframe -------------
+   Touch users can't press browser Back, and the embedded external doc (ADR-006,
+   copied as-is) has no link home. This wrapper keeps a DocWiz back affordance. */
+body.ext-frame-body { display: flex; flex-direction: column; height: 100vh; margin: 0; overflow: hidden; }
+.ext-strip { height: 44px; gap: var(--dw-s3); }   /* a <header> — inherits chrome bg/colour/padding */
+.ext-back {
+  color: var(--dw-chrome-text);
+  text-decoration: none;
+  font-size: var(--dw-fs-sm);
+  font-weight: var(--dw-w-medium);
+  line-height: var(--dw-lh-tight);
+  padding: var(--dw-s2) var(--dw-s3);
+  border: 1px solid var(--dw-chrome-border);
+  border-radius: var(--dw-r1);
+}
+.ext-back:hover { border-color: var(--dw-chrome-text); }
+.ext-back:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
+.ext-doc-title { color: var(--dw-chrome-text); font-size: var(--dw-fs-sm); font-weight: var(--dw-w-medium); }
+.ext-frame { flex: 1 1 auto; width: 100%; border: 0; }
+
+/* ---- Layout --------------------------------------------------------------- */
+.shell { flex: 1; min-height: 0; display: flex; }
+#sidebar {
+  width: 290px;
+  flex: none;
+  background: var(--dw-surface-2);
+  border-right: 1px solid var(--dw-border);
+  overflow-y: auto;
+  padding: var(--dw-s4);
+}
+main { flex: 1; overflow-y: auto; padding: var(--dw-s6) var(--dw-s7); }
+article { max-width: var(--dw-measure, 210mm); margin: 0 auto; }
+.crumb { font-size: var(--dw-fs-sm); color: var(--dw-muted); margin-bottom: var(--dw-s4); }
+
+/* ---- Word-style numbering (manual chapter pages only: article[data-num]
+        carries the flat chapter number --dwch:'2'; headings number themselves
+        via CSS counters: 2, 2.1, 2.1.1) ---- */
+article[data-num] { counter-reset: dwh2; }
+article[data-num] h1::before {
+  content: var(--dwch) "  ";
+  color: var(--dw-muted);
+  font-variant-numeric: tabular-nums;
+}
+article[data-num] h2 { counter-increment: dwh2; counter-reset: dwh3; }
+article[data-num] h2::before {
+  content: var(--dwch) "." counter(dwh2) "  ";
+  color: var(--dw-muted);
+  font-weight: var(--dw-w-regular);
+  font-variant-numeric: tabular-nums;
+}
+article[data-num] h3 { counter-increment: dwh3; }
+article[data-num] h3::before {
+  content: var(--dwch) "." counter(dwh2) "." counter(dwh3) "  ";
+  color: var(--dw-muted);
+  font-weight: var(--dw-w-regular);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Sidebar nav ----------------------------------------------------------- */
+.nav-group { margin-bottom: var(--dw-s3); }
+.nav-group > .grp {
+  font-size: var(--dw-fs-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--dw-track-caps);
+  font-weight: var(--dw-w-medium);
+  color: var(--dw-muted);
+  margin: var(--dw-s5) 0 var(--dw-s1);
+}
+.nav-group a {
+  display: block;
+  padding: var(--dw-s2) var(--dw-s3);
+  border-radius: var(--dw-r1);
+  color: var(--dw-text);
+  text-decoration: none;
+  font-size: var(--dw-fs-sm);
+  line-height: var(--dw-lh-snug);
+}
+.nav-group a:hover { background: var(--dw-surface); }
+/* H2/H3 outline of the open chapter — indented, muted, smaller */
+.nav-group a.nav-sub {
+  padding: 2px var(--dw-s3) 2px calc(var(--dw-s3) + 16px);
+  font-size: var(--dw-fs-xs);
+  color: var(--dw-muted);
+}
+.nav-group a.nav-sub3 { padding-left: calc(var(--dw-s3) + 32px); }
+.nav-group a.nav-sub:hover { color: var(--dw-text); }
+.nav-group a.current {
+  background: var(--dw-accent-bg);
+  color: var(--dw-accent);
+  font-weight: var(--dw-w-medium);
+  box-shadow: inset 3px 0 0 var(--dw-accent);
+}
+.nav-group a:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
+
+/* ---- Search ----------------------------------------------------------------- */
+#searchBox { position: relative; margin-bottom: var(--dw-s4); }
+#searchInput {
+  width: 100%;
+  padding: var(--dw-s2) var(--dw-s3);
+  border: 1px solid var(--dw-border-strong);
+  border-radius: var(--dw-r1);
+  background: var(--dw-surface);
+  color: var(--dw-text);
+  font: inherit;
+  font-size: var(--dw-fs-sm);
+}
+#searchInput:focus { outline: none; border-color: var(--dw-accent); box-shadow: var(--dw-focus-ring); }
+#searchResults {
+  position: absolute;
+  z-index: 50;
+  left: 0;
+  right: 0;
+  top: calc(100% + var(--dw-s1));
+  max-height: 60vh;
+  overflow-y: auto;
+  background: var(--dw-surface);
+  border: 1px solid var(--dw-border);
+  border-radius: var(--dw-r2);
+  box-shadow: var(--dw-shadow-2);
+}
+.sr-item {
+  display: block;
+  padding: var(--dw-s3);
+  border-bottom: 1px solid var(--dw-border);
+  text-decoration: none;
+  color: var(--dw-text);
+  font-size: var(--dw-fs-sm);
+}
+.sr-item:last-child { border-bottom: none; }
+.sr-item:hover { background: var(--dw-accent-bg); }
+.sr-title { display: block; font-weight: var(--dw-w-medium); color: var(--dw-accent); }
+.sr-sec {
+  display: block;
+  font-size: var(--dw-fs-xs);
+  color: var(--dw-muted);
+  text-transform: uppercase;
+  letter-spacing: var(--dw-track-caps);
+}
+.sr-snip { display: block; font-size: var(--dw-fs-xs); color: var(--dw-muted); margin-top: var(--dw-s1); }
+.sr-snip mark { background: var(--dw-accent-glow); color: inherit; padding: 0 1px; }
+.sr-empty { padding: var(--dw-s3); color: var(--dw-muted); font-size: var(--dw-fs-sm); }
+
+/* ---- Audience callout -------------------------------------------------------- */
+.aud {
+  background: var(--dw-accent-surface);
+  border: 1px solid var(--dw-border);
+  border-left: 3px solid var(--dw-accent);
+  border-radius: 0 var(--dw-r1) var(--dw-r1) 0;
+  padding: var(--dw-s4);
+  margin: var(--dw-s4) 0;
+}
+.aud .aud-tag {
+  font-size: var(--dw-fs-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--dw-track-caps);
+  font-weight: var(--dw-w-medium);
+  color: var(--dw-accent);
+  display: block;
+  margin-bottom: var(--dw-s1);
+}
+.aud > :last-child { margin-bottom: 0; }
+
+/* ---- Content elements (the ::: library — see CONTENT_MODEL.md) ----------------- */
+.dw-callout {
+  border: 1px solid var(--dw-border);
+  border-left: 3px solid var(--dw-accent);
+  border-radius: 0 var(--dw-r1) var(--dw-r1) 0;
+  padding: var(--dw-s4);
+  margin: var(--dw-s4) 0;
+  background: var(--dw-accent-bg);
+}
+.dw-callout-tag {
+  display: block;
+  font-size: var(--dw-fs-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--dw-track-caps);
+  font-weight: var(--dw-w-medium);
+  color: var(--dw-accent);
+  margin-bottom: var(--dw-s1);
+}
+.dw-callout > :last-child { margin-bottom: 0; }
+.dw-tip { border-left-color: var(--dw-ok); background: var(--dw-ok-bg); }
+.dw-tip .dw-callout-tag { color: var(--dw-ok); }
+.dw-warning { border-left-color: var(--dw-warn); background: var(--dw-warn-bg); }
+.dw-warning .dw-callout-tag { color: var(--dw-warn); }
+.dw-danger { border-left-color: var(--dw-bad); background: var(--dw-bad-bg); }
+.dw-danger .dw-callout-tag { color: var(--dw-bad); }
+
+/* Task lists (- [ ] / - [x]). The handover renders <li class="task-list-item"><input> text
+   [+ nested <ul>]; the editor node view renders <input> + a .tli-body content holder. The two
+   DOM shapes differ, so the checkbox is positioned out of flow (not flex) and content sits in a
+   hanging-indent column — nested sub-lists then drop below and indent, identically on both
+   surfaces (rule 20/21). The em indent is font-relative checkbox sizing, not layout spacing. */
+/* Key the marker removal off the LI (both surfaces tag the li .task-list-item) rather than the
+   parent <ul> — the handover <ul> carries .contains-task-list but the editor's bullet_list toDOM
+   emits a plain <ul>, so an <ul>-scoped rule would leave the editor showing a bullet AND a box. */
+li.task-list-item { list-style: none; position: relative; padding-left: 1.6em; }
+li.task-list-item > input[type="checkbox"] { position: absolute; left: 0; top: 0.25em; margin: 0; accent-color: var(--dw-accent); }
+li.task-list-item > .tli-body > :first-child { margin-top: 0; }
+li.task-list-item > .tli-body > :last-child { margin-bottom: 0; }
+
+/* Procedure steps: the ordered list inside gets big numbered markers */
+.dw-steps { margin: var(--dw-s4) 0; }
+.dw-steps ol { list-style: none; counter-reset: dw-step; margin: 0; padding: 0; }
+.dw-steps ol > li {
+  counter-increment: dw-step;
+  position: relative;
+  padding: var(--dw-s2) 0 var(--dw-s3) var(--dw-s8);
+  border-left: 1px solid var(--dw-border);
+  margin-left: var(--dw-s4);
+}
+.dw-steps ol > li::before {
+  content: counter(dw-step);
+  position: absolute;
+  left: calc(-1 * var(--dw-s4) - 1px);
+  top: var(--dw-s1);
+  width: var(--dw-s6);
+  height: var(--dw-s6);
+  border-radius: 50%;
+  background: var(--dw-accent);
+  color: var(--dw-accent-contrast);
+  font-weight: var(--dw-w-bold);
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: translateX(-50%);
+}
+.dw-steps ol > li:last-child { border-left-color: transparent; }
+
+/* Navigation cards: the bullet list inside becomes a card grid */
+.dw-cards { margin: var(--dw-s4) 0; }
+.dw-cards ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--dw-s3);
+}
+.dw-cards li {
+  border: 1px solid var(--dw-border);
+  border-radius: var(--dw-r2);
+  background: var(--dw-surface);
+  box-shadow: var(--dw-shadow);
+  padding: var(--dw-s4);
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.dw-cards li:hover { border-color: var(--dw-accent); box-shadow: var(--dw-shadow-2); }
+.dw-cards li a {
+  display: block;
+  font-weight: var(--dw-w-medium);
+  text-decoration: none;
+  margin-bottom: var(--dw-s1);
+}
+
+/* Button row: links inside render as buttons */
+.dw-buttons { display: flex; flex-wrap: wrap; gap: var(--dw-s2); margin: var(--dw-s4) 0; }
+.dw-buttons p { margin: 0; display: contents; }
+.dw-buttons a {
+  display: inline-block;
+  background: var(--dw-accent);
+  color: var(--dw-accent-contrast);
+  text-decoration: none;
+  font-size: var(--dw-fs-sm);
+  font-weight: var(--dw-w-medium);
+  line-height: var(--dw-lh-tight);
+  padding: var(--dw-s2) var(--dw-s4);
+  border-radius: var(--dw-r1);
+}
+.dw-buttons a:hover { background: var(--dw-accent-strong); color: var(--dw-accent-contrast); }
+.dw-buttons a:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
+
+/* Collapsible details */
+.dw-details {
+  border: 1px solid var(--dw-border);
+  border-radius: var(--dw-r1);
+  background: var(--dw-surface);
+  padding: 0 var(--dw-s4);
+  margin: var(--dw-s4) 0;
+}
+.dw-details summary {
+  cursor: pointer;
+  font-weight: var(--dw-w-medium);
+  padding: var(--dw-s3) 0;
+  color: var(--dw-accent);
+}
+.dw-details summary:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); border-radius: var(--dw-r0); }
+.dw-details[open] summary { border-bottom: 1px solid var(--dw-border); margin-bottom: var(--dw-s3); }
+.dw-details > :last-child { margin-bottom: var(--dw-s3); }
+
+/* Text alignment blocks */
+.dw-align-center { text-align: center; }
+.dw-align-right { text-align: right; }
+.dw-align-center table, .dw-align-right table { margin-left: auto; margin-right: auto; }
+.dw-align-right table { margin-right: 0; }
+
+/* Image alignment ({.img-left} / {.img-center} / {.img-right} on the image; captions follow).
+   Within the centered-by-default figure flex column:
+     img-center = the default (align-items: center already centers it)
+     img-left   = pulled to the leading edge via align-self (escapes the centered default)
+     img-right  = pushed to the trailing edge via align-self */
+img.img-center { display: block; margin-left: auto; margin-right: auto; }
+img.img-left { display: block; margin-right: auto; align-self: flex-start; }
+img.img-right { display: block; margin-left: auto; align-self: flex-end; }
+.dw-figure:has(> img.img-center) figcaption { text-align: center; }
+.dw-figure:has(> img.img-left) figcaption { text-align: left; }
+.dw-figure:has(> img.img-right) figcaption { text-align: right; }
+
+/* Elements inside slides scale with the slide type */
+.slide .dw-callout-tag { font-size: var(--dw-slide-meta); }
+.slide .dw-buttons a { font-size: var(--dw-slide-meta); padding: var(--dw-s3) var(--dw-s5); }
+.slide .dw-cards li a { font-size: var(--dw-slide-body); }
+
+/* ---- Figures & captions ------------------------------------------------------- */
+/* Default: pictures and table figures are horizontally centered in the content
+   column. Explicit alignment classes (.dw-align-left/center/right on a wrapper
+   container, or .img-right on the image) still override.
+   Picture figures use flex so the image + caption sit centered as a unit.
+   Table figures fill the column by default (see the .dw-table-figure rules below); a
+   SIZED table ({width=…}) aligns L/C/R via the .dw-box-* rules. */
+.dw-figure { margin: var(--dw-s4) 0; }
+.dw-figure:not(.dw-table-figure) {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.dw-figure:not(.dw-table-figure) figcaption { text-align: center; }
+.dw-figure table { margin: 0; }
+/* Tables FIT the reading column (--dw-measure) by default and WRAP their content — they
+   never widen past the page to keep a long line on one row (stakeholder 2026-06-17;
+   replaces the earlier breakout-to-content design). width:100% + table-layout:fixed makes
+   the columns honour an optional {widths} colgroup (else equal width) and forces cell
+   content to wrap within the column; overflow-wrap:anywhere (on td/th) breaks long unbroken
+   tokens. overflow-x:auto is a last-resort scroll for a genuinely un-wrappable row rather
+   than clipping. {width=…} (.dw-table-sized) makes a table NARROWER than the column, and an
+   embedded table fits its linked box — both handled in the rules just below. */
+.dw-figure.dw-table-figure {
+  width: 100%;
+  max-width: 100%;
+}
+/* Default: auto layout = content-proportional columns (so "Auto widths" visibly re-fits the
+   columns to content), pinned to the column by width:100% so it never breaks out, content
+   wrapped by overflow-wrap. NO overflow-x here — a fixed/auto table at width:100% fits exactly,
+   and overflow-x:auto only produced a phantom scrollbar from border-collapse rounding. */
+.dw-figure.dw-table-figure table { width: 100%; min-width: 0; max-width: 100%; }
+/* In-cell images render at their intended size — set (width=…) OR natural — and the column
+   reserves that size + padding. Without this, the global img{max-width:100%} let an auto-layout
+   column squeeze shrink the picture to the column's content box (a width=70 icon squashed to
+   60px, an unsized one shrunk by the cell padding — stakeholder 2026-06-17). max-width:none
+   removes that shrink; we do NOT set width, so a sized image keeps its width attr and an unsized
+   one stays natural. A genuinely oversized cell image can be reined in with the size buttons. */
+.dw-figure.dw-table-figure td img,
+.dw-figure.dw-table-figure th img { max-width: none; }
+/* Explicit per-column widths (a {widths} colgroup) → fixed layout so the percentages are
+   AUTHORITATIVE in the handover (under auto, <col> widths are only advisory). The live column
+   drag forces table-layout:fixed INLINE for the drag's duration (tableview.dragWidth) — an
+   inline style works regardless of CSS scoping, which a class did not. */
+.dw-figure.dw-table-figure table:has(> colgroup) { table-layout: fixed; }
+/* Overall table-box width (L202): {width=…} sizes the whole captioned table narrower
+   than the column. .dw-table-sized drops the full-column stretch + breakout centering so
+   the figure's inline width wins (height still follows content); the inner table fills it.
+   site.css is @scoped onto the editor surface too, so the edit DOM matches the handover. */
+.dw-figure.dw-table-figure.dw-table-sized {
+  min-width: 0;
+  max-width: 100%;
+  margin-left: 0;
+  transform: none;
+}
+.dw-figure.dw-table-figure.dw-table-sized table { width: 100%; min-width: 0; table-layout: fixed; } /* fixed: cells cannot push the table wider than the figure (L203) */
+/* A table transcluded INSIDE a linked box (.dw-embed) must FIT that box, not break out of
+   it (L205): without this it keeps its full-column min-width + breakout centering/transform
+   and overflows — so resizing the linked block left the table the same width, just shifted.
+   Constrain it to the box (same as .dw-table-sized) so the table reflows with the box on
+   both surfaces. Images already fit via `img { max-width: 100% }`. */
+.dw-embed .dw-figure.dw-table-figure {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  margin-left: 0;
+  transform: none;
+}
+.dw-embed .dw-figure.dw-table-figure table { width: 100%; min-width: 0; table-layout: fixed; } /* fixed: mirrors .dw-table-sized so a long unbroken token wraps within the embed box instead of breaking out (L205) */
+/* Block alignment (L/C/R) for a SIZED table / linked box (L205). Left is the default
+   (margin-left:0 from the sized rule); auto margins centre / right-align within both a
+   normal block region and the flex big-media region. The image equivalent is
+   .img-center/.img-right. */
+.dw-figure.dw-table-figure.dw-table-sized.dw-box-center,
+.dw-embed.dw-box-center { margin-left: auto; margin-right: auto; }
+.dw-figure.dw-table-figure.dw-table-sized.dw-box-right,
+.dw-embed.dw-box-right { margin-left: auto; margin-right: 0; }
+.dw-figure img { display: block; border: 1px solid var(--dw-border); }
+.dw-figure figcaption {
+  font-size: var(--dw-fs-sm);
+  color: var(--dw-muted);
+  margin-top: var(--dw-s2);
+  font-variant-numeric: tabular-nums;
+}
+
+.img-placeholder {
+  display: block;
+  border: 1.5px dashed var(--dw-border-strong);
+  border-radius: var(--dw-r1);
+  background: var(--dw-surface-2);
+  color: var(--dw-muted);
+  text-align: center;
+  padding: var(--dw-s7) var(--dw-s4);
+  margin: var(--dw-s4) 0;
+  font-size: var(--dw-fs-sm);
+  font-family: var(--dw-font-mono);
+  min-height: 160px;
+}
+
+/* ---- Prev/next ------------------------------------------------------------------ */
+.prevnext {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--dw-s3);
+  margin-top: var(--dw-s7);
+  padding-top: var(--dw-s5);
+  border-top: 1px solid var(--dw-border);
+  font-size: var(--dw-fs-sm);
+}
+.prevnext a {
+  text-decoration: none;
+  font-weight: var(--dw-w-medium);
+  padding: var(--dw-s2) var(--dw-s4);
+  border: 1px solid var(--dw-border-strong);
+  border-radius: var(--dw-r1);
+  background: transparent;
+  color: var(--dw-text);
+}
+.prevnext a:hover { background: var(--dw-surface-2); }
+.prevnext a:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
+.prevnext .spacer { flex: 1; }
+
+/* ---- Meta table -------------------------------------------------------------------- */
+.meta-table td:first-child { color: var(--dw-muted); font-size: var(--dw-fs-sm); width: 200px; }
+.meta-table td:last-child { font-family: var(--dw-font-mono); }
+.meta-table tbody tr:nth-child(even) td { background: none; }
+
+/* ---- Document-mode views -------------------------------------------------------------- */
+.lead { color: var(--dw-muted); font-size: var(--dw-fs-lg); margin-bottom: var(--dw-s5); }
+.view-sec { margin-bottom: var(--dw-s6); }
+.srcline { font-size: var(--dw-fs-sm); margin-top: var(--dw-s2); }
+.srcline a { color: var(--dw-muted); text-decoration: none; }
+.srcline a:hover { color: var(--dw-accent); }
+
+/* ---- Attachments page ------------------------------------------------------------------- */
+.attach { margin: 0 0 var(--dw-s6); }
+.attach h3 { display: flex; align-items: baseline; gap: var(--dw-s3); }
+.attach h3 .path { font-family: var(--dw-font-mono); font-size: 0.92em; }
+.attach h3 .open { font-size: var(--dw-fs-sm); font-weight: var(--dw-w-regular); }
+.attach .pdf {
+  width: 100%;
+  height: 75vh;
+  border: 1px solid var(--dw-border);
+  border-radius: var(--dw-r1);
+  background: var(--dw-surface-2);
+}
+.attach .file-line {
+  border: 1px solid var(--dw-border);
+  border-radius: var(--dw-r1);
+  padding: var(--dw-s3) var(--dw-s4);
+  background: var(--dw-surface);
+}
+.attach .grp-label, .grp-label {
+  font-size: var(--dw-fs-xs);
+  text-transform: uppercase;
+  letter-spacing: var(--dw-track-caps);
+  font-weight: var(--dw-w-medium);
+  color: var(--dw-muted);
+  margin: var(--dw-s5) 0 var(--dw-s3);
+  border-bottom: 1px solid var(--dw-border);
+  padding-bottom: var(--dw-s1);
+}
+
+/* ---- Slides — the slide CANVAS (.slide-frame) follows the page theme; the
+        letterbox surround (.slides-surface) stays dark in both themes via the
+        theme-independent --dw-chrome, and the controls below use chrome tokens
+        so they stay legible on it in both themes. ---- */
+.slides-surface {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--dw-s4);
+  background: var(--dw-chrome);
+  color: var(--dw-text);
+  padding: var(--dw-s5);
+  overflow: hidden;
+}
+.slide-stage { position: relative; flex: none; }
+.slide-frame {
+  width: 1920px;
+  height: 1080px;
+  transform-origin: top left;
+  background: var(--dw-surface);
+  border: 1px solid var(--dw-border);
+  border-radius: var(--dw-r2);
+  box-shadow: var(--dw-shadow-2);
+  overflow: hidden;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+.slide { display: none; height: 100%; padding: 96px; overflow: hidden; }
+.slide.active { display: block; }
+.slide h1 {
+  font-size: var(--dw-slide-title);
+  font-weight: var(--dw-w-bold);
+  border-bottom: none;
+  margin: 0 0 var(--dw-s5);
+}
+.slide h1::after {
+  content: "";
+  display: block;
+  width: 120px;
+  height: 4px;
+  background: var(--dw-accent);
+  margin-top: 24px;
+}
+.slide h2 { font-size: var(--dw-slide-h2); border-bottom: none; }
+.slide p, .slide li { font-size: var(--dw-slide-body); line-height: 1.5; }
+.slide li { margin-bottom: var(--dw-s3); }
+.slide table { font-size: var(--dw-slide-meta); }
+.slide td, .slide th { font-size: inherit; padding: var(--dw-s3) var(--dw-s4); }
+.slide .slide-sub {
+  font-family: var(--dw-font-mono);
+  font-size: var(--dw-slide-meta);
+  color: var(--dw-muted);
+}
+.slide .src {
+  position: absolute;
+  bottom: 32px;
+  right: 48px;
+  font-family: var(--dw-font-mono);
+  font-size: var(--dw-slide-meta);
+  color: var(--dw-muted);
+}
+.slide-bar { display: flex; align-items: center; gap: var(--dw-s3); flex: none; }
+.slide-bar button {
+  background: transparent;
+  color: var(--dw-chrome-text);
+  border: 1px solid var(--dw-chrome-border);
+  border-radius: var(--dw-r1);
+  padding: var(--dw-s2) var(--dw-s4);
+  font: inherit;
+  font-size: var(--dw-fs-sm);
+  font-weight: var(--dw-w-medium);
+  cursor: pointer;
+}
+.slide-bar button:hover { background: var(--dw-chrome-2); }
+.slide-bar button:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
+.slide-bar button:disabled { opacity: 0.45; cursor: default; }
+.slide-bar .ctr {
+  color: var(--dw-chrome-muted);
+  font-family: var(--dw-font-mono);
+  font-size: var(--dw-fs-sm);
+}
+.hint { color: var(--dw-chrome-muted); font-size: var(--dw-fs-xs); flex: none; }
+
+/* ---- Structured slide layouts (data-layout) -------------------------------------------- */
+/* Scoped to .slide.active so the base .slide { display:none } still hides inactive slides.  */
+
+/* Shared reset for all layouts: flex column with gap; reset h1/slide-sub margins           */
+.slide.active[data-layout] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--dw-s4);
+}
+.slide.active[data-layout] > h1 { margin: 0; }
+.slide.active[data-layout] > .slide-sub { margin: 0; color: var(--dw-muted); }
+
+/* Region base: allow children to shrink; images contained */
+.slide-region { min-height: 0; }
+.slide-region img { max-width: 100%; max-height: 100%; object-fit: contain; }
+
+/* title-content: title row, optional subtitle, then body fills the rest */
+.slide.active[data-layout="title-content"] .slide-region[data-region="body"] { flex: 1; }
+
+/* two-column: title (row 1) + optional subtitle (row 2) as auto-height header rows that
+   span both columns, then left | right equal columns in the 1fr content row (row 3).
+   Pinning title/subtitle to their own auto rows is what keeps an EMPTY edit-mode subtitle
+   (always rendered for editability) from auto-placing into the 1fr row and stretching into
+   a tall box that shoves the columns down (edit == ship). An empty subtitle row collapses
+   to the placeholder's one-line min-height; with a subtitle it sits naturally above the
+   columns — identical to the read/present render, which only emits a non-empty subtitle. */
+.slide.active[data-layout="two-column"] {
+  display: grid;
+  grid-template-rows: auto auto 1fr;
+  grid-template-columns: 1fr 1fr;
+  column-gap: var(--dw-s5);
+}
+.slide.active[data-layout="two-column"] > h1 { grid-row: 1; grid-column: 1 / -1; }
+.slide.active[data-layout="two-column"] > .slide-sub { grid-row: 2; grid-column: 1 / -1; }
+.slide.active[data-layout="two-column"] > .src { grid-column: 1 / -1; }
+.slide.active[data-layout="two-column"] .slide-region { grid-row: 3; align-self: start; min-height: 0; }
+
+/* big-media: title row, then media region fills the rest. The media LEFT-aligns (a sized
+   linked block / image sits at the left like every other layout — full-width media fills
+   regardless), and is vertically centred in the tall region. */
+.slide.active[data-layout="big-media"] .slide-region[data-region="media"] {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;       /* stack blocks (image + caption + text) top-down */
+  align-items: stretch;         /* fill the column width; a sized linked block keeps its width (sits left) */
+  justify-content: flex-start;  /* TOP-aligned, directly under the title. Was align-items:center, which
+                                   let tall content (a big image/table) spill UP over the title and made
+                                   short content float in the middle of the slide. Downward overflow is
+                                   handled by slides.js pagination, never by spilling over the heading. */
+}
+
+/* section-header: full-frame centered title + subtitle; no regions */
+.slide.active[data-layout="section-header"] {
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+.slide.active[data-layout="section-header"] > h1 { font-size: 2em; }
+
+/* ---- Footer ------------------------------------------------------------------------------- */
+footer {
+  flex: none;
+  border-top: 1px solid var(--dw-border);
+  background: var(--dw-surface-2);
+  color: var(--dw-muted);
+  font-size: var(--dw-fs-xs);
+  padding: var(--dw-s2) var(--dw-s4);
+  display: flex;
+  justify-content: space-between;
+}
+
+/* ---- Focus view (lightbox for handover pictures & tables) ----------------
+   Progressive enhancement injected by site.js. The button reveals on figure
+   hover / keyboard focus; the overlay is one reusable dialog. Themed via the
+   --dw-* tokens so it tracks light/dark. */
+/* min-height fits the hover button (top inset + its 2rem height + matching
+   bottom inset) so it never overflows a degenerate tiny figure — e.g. a 1×1
+   placeholder image. No effect on real (taller) figures. */
+.dw-focusable { position: relative; min-height: calc(2rem + 2 * var(--dw-s2)); }
+
+.dw-focus-btn {
+  position: absolute; top: var(--dw-s2); right: var(--dw-s2);
+  display: grid; place-items: center;
+  width: 2rem; height: 2rem; padding: 0;
+  border: 1px solid var(--dw-border-strong);
+  border-radius: var(--dw-r1);
+  background: color-mix(in srgb, var(--dw-surface) 88%, transparent);
+  color: var(--dw-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .12s ease, color .12s ease, border-color .12s ease;
+}
+.dw-focus-btn svg { width: 1.1rem; height: 1.1rem; }
+.dw-focusable:hover .dw-focus-btn,
+.dw-focus-btn:focus-visible { opacity: 1; }
+.dw-focus-btn:hover { color: var(--dw-text); border-color: var(--dw-muted); }
+.dw-focus-btn:focus-visible { box-shadow: var(--dw-focus-ring); outline: none; }
+
+.dw-focus-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  display: grid; grid-template-rows: minmax(0, 1fr) auto;  /* minmax(0,..): the row may shrink below content so the host bounds to the viewport (a bare 1fr has min-height:auto and would grow past the screen) */
+  gap: var(--dw-s2);
+  background: var(--dw-overlay);
+  /* top padding clears the fixed close button (top var(--dw-s3) + 2.5rem) so a
+     full-bleed table panel never tucks under it; sides/bottom stay responsive. */
+  padding: 3.5rem clamp(1rem, 4vw, 3rem) clamp(1rem, 4vw, 3rem);
+}
+.dw-focus-overlay[hidden] { display: none; }
+
+/* Image host = flex so the image's max-height:100% resolves against the host's
+   bounded height and the image SHRINKS to fit (a grid cell's implicit auto row
+   sizes to the image instead, so max-height:100% never bit → tall images leaked). */
+.dw-focus-host { min-height: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+/* Table host: just centre the panel (overflow:hidden). The PANEL itself is the
+   scroll container (below), so the scrollbars ride on the table's edge instead of
+   the far viewport edge — a narrow tall table no longer gets a detached scrollbar. */
+
+.dw-focus-img {
+  max-width: 100%; max-height: 100%;
+  object-fit: contain;
+  cursor: zoom-in;
+  touch-action: none;          /* we own pinch/pan; stop the page zooming under it */
+  will-change: transform;
+  transform-origin: center center;
+}
+
+.dw-focus-tablewrap {
+  background: var(--dw-surface); color: var(--dw-text);
+  border: 1px solid var(--dw-border);
+  border-radius: var(--dw-r1);
+  padding: var(--dw-s3);
+  /* The panel is the scroll container: it hugs the table (width:max-content) but is
+     bounded to the host (max-width/height:100%), so its OWN scrollbars sit on the
+     table's edge — not detached at the far viewport edge. min-*:0 lets a flex item
+     shrink below content so overflow:auto engages. */
+  width: max-content;
+  max-width: 100%; max-height: 100%;
+  min-width: 0; min-height: 0;
+  overflow: auto;
+}
+/* Natural-size, content-sized columns that scroll; the in-column colgroup
+   proportions are stripped by site.js so they don't fight auto layout here. */
+.dw-focus-tablewrap table { width: max-content; table-layout: auto; margin: 0; }
+
+.dw-focus-cap {
+  color: var(--dw-chrome-text);
+  text-align: center;
+  font-size: var(--dw-fs-sm);
+  line-height: var(--dw-lh-snug);
+}
+.dw-focus-cap[hidden] { display: none; }
+
+.dw-focus-close {
+  position: fixed; top: var(--dw-s3); right: var(--dw-s3);
+  display: grid; place-items: center;
+  width: 2.5rem; height: 2.5rem; padding: 0;
+  border: 1px solid var(--dw-chrome-border);
+  border-radius: var(--dw-r1);
+  background: var(--dw-chrome-2); color: var(--dw-chrome-text);
+  cursor: pointer;
+}
+.dw-focus-close svg { width: 1.25rem; height: 1.25rem; }
+.dw-focus-close:hover { color: var(--dw-chrome-text); border-color: var(--dw-chrome-muted); }
+.dw-focus-close:focus-visible { box-shadow: var(--dw-focus-ring); outline: none; }
+
+/* ---- Print (handover pages) ----------------------------------------------------------------- */
+@media print {
+  header, #sidebar, footer, .prevnext, #searchBox, #themeBtn { display: none !important; }
+  .dw-focus-btn, .dw-focus-overlay { display: none !important; }
+  .shell { display: block; }
+  body, article { background: #fff; color: #000; }
+  main { overflow: visible; padding: 0; }
+  article { max-width: none; }
+  /* No breakout on paper — the page IS the full width. */
+  .dw-figure.dw-table-figure { transform: none; margin-left: 0; max-width: 100%; width: auto; }
+  table { break-inside: avoid; }
+  thead { display: table-header-group; }
+  a { color: #000; }
+  a[href^="http"]::after { content: " (" attr(href) ")"; font-size: 90%; }
+}
+
+/* Attachment note substituted for an external PDF that print/single-file HTML can't embed
+   (ChapterDocumentAssembler.ReplaceEmbeddedPdfs). Inert on normal handover pages. */
+.pdf-attachment-note {
+  border: 1px dashed var(--dw-border); padding: 6px 10px; margin: 8px 0;
+  font-style: italic; color: var(--dw-muted); background: var(--dw-surface-2);
+}

@@ -1,0 +1,188 @@
+# DocWiz — Roadmap
+
+**Current Stage:** Stage 5 — pilot on a real customer project. Stages 1, 2, and 4 complete;
+Stage 3 (editor MVP) functionally complete (live editor shipped; single exe verified on a
+clean machine).
+**V1.0:** both agreed V1.0 features — **PDF export** and **content-only zoom** — are built and
+merged to `main`. Remaining for the v1.0 tag: close the pilot loop + release hygiene (tag, prune).
+ADR-004 (amended), ADR-005, ADR-006, ADR-007, and ADR-008 are all written in
+[ARCHITECTURE.md](ARCHITECTURE.md).
+**Last Updated:** 2026-09-17 — sample project replaced by the Stockroom demo, template library
+reset to the Software Handbook template, documentation consolidated.
+
+Stage transitions require human approval. Success criteria are the checkpoints.
+
+---
+
+## Stage 0 — Vision & Architecture (complete)
+
+- [x] Capture vision ([VISION.md](VISION.md))
+- [x] Define content model ([CONTENT_MODEL.md](CONTENT_MODEL.md))
+- [x] Propose architecture + ADRs ([ARCHITECTURE.md](ARCHITECTURE.md))
+- [x] Sample DocWiz project demonstrating the content model (`samples/stockroom-demo/`)
+- [x] Human review: approve/adjust ADR-001..006 — all six accepted 2026-06-10
+
+**Success criteria:** stakeholder signs off on the architecture and the mockup direction. ✔ Met 2026-06-10.
+
+## Stage 1 — Build pipeline core (complete)
+
+- [x] Solution scaffold: `DocWiz.Core`, `DocWiz.Build`, `DocWiz.Cli`, tests (net8.0,
+      warnings-as-errors, Markdig + YamlDotNet only)
+- [x] Project loader + validator (`docwiz check`): manifest, chapters, frontmatter,
+      duplicate/missing IDs, unknown audiences, dangling `dw:` links and view includes,
+      missing assets/attachments (warnings)
+- [x] Markdown pipeline: Markdig + audience containers (`data-aud` markup) + heading
+      anchors (explicit `{#id}` + GitHub auto-ids) + `dw:` link rewriting + missing-image
+      placeholders — single pipeline shared with the editor preview (ADR-004)
+- [x] `docwiz build`: full manual — nav tree, prev/next, cross-links, assets, light/dark
+- [x] Client-side search over the manual: build-time index emitted as
+      `_dw/search-index.js` (`window.__dwSearch`, loaded via a script tag so it works
+      from `file://` — local `fetch` is browser-blocked), sidebar search box with
+      ranked results + highlighted snippets (`search.js`)
+- [x] PDF attachments: an Attachments page (chrome tab when any exist) lists every
+      file grouped by subfolder; PDFs embed inline via a browser-native `<iframe>` and
+      everything has an "open ↗" link. **Decided against vendored PDF.js** — PDF.js
+      must `fetch` the PDF bytes, which is blocked from `file://`, whereas the native
+      `<iframe>` PDF viewer renders local PDFs in Chromium; also zero dependency.
+- [x] `file://` vs embedded-server decision: **static folder, open the entry page in a
+      Chromium browser (Edge/Chrome) — no server, no install.** Everything is
+      file://-safe: no `fetch` anywhere (search index is a script tag; nav/links are
+      plain `<a>`; PDFs use the native viewer). Embedded-server fallback dropped as
+      unnecessary (YAGNI).
+
+**Success criteria:** `docwiz build samples/stockroom-demo` produces a navigable offline
+handover that a colleague can open and browse without instructions. ✔ Met 2026-06-10.
+
+## Stage 2 — Audience views engine (complete)
+
+- [x] View loader (`views/*.yaml`) + validation (dangling includes fail `docwiz check`)
+- [x] Transclusion resolver (chapter / `#anchor` granularity via AST spans; heading-line
+      attribute leak covered by a regression test)
+- [x] Audience filtering: matching `::: audience` blocks unwrap into the flow,
+      non-matching blocks are removed (manual keeps everything, tagged)
+- [x] `mode: document` rendering (filtered sections + "open in manual" source links)
+- [x] `mode: slides` rendering (auto title slide, per-slide source attribution,
+      arrow-key/space nav, fullscreen, hash deep links)
+- [x] Audience switcher tabs in the shell on every page
+- [x] External HTML documentation packages integrated as-is (ADR-006) — verified
+      against a real multi-hundred-file export
+
+**Success criteria:** the user-training view of the demo project works as a
+presentation, and editing the source chapter changes the slides on rebuild.
+✔ Met 2026-06-10 — slides transclude at build time; nothing is copied.
+
+## Stage 3 — Editor app MVP (functionally complete)
+
+- [x] `DocWiz.App` + `docwiz edit <project> [--port n] [--no-browser]`: localhost
+      server, chapter tree, frontmatter form (id immutable per ADR-005, unknown
+      frontmatter keys preserved on save), edit/save chapters
+- [x] Live editing surface (ADR-007): the one surface IS the rendered page; ProseMirror
+      view layer over Markdig-segmented blocks; byte-surgical saves; fidelity harness
+- [x] Image insertion → uploaded to `assets/` (name de-duplication); paste/drop lands in
+      `assets/` with a subfolder picker
+- [x] Link insertion UI: `dw:` chapter/anchor picker, audience-block inserter, anchor
+      helper, attachment link dialog
+- [x] Chapter templates per discipline (setup/operations/troubleshooting/reference/
+      integration/generic); new-chapter flow with section auto-numbering
+- [x] Reading view rendered by the real pipeline, same CSS as the handover
+- [x] `docwiz check`/`build` from the editor; built handover served at /handover
+- [x] Zero-terminal launch: DocWiz.exe is a WinExe (no console window); no-args /
+      pathless `edit` opens a native folder picker, offers to scaffold a project into
+      an empty folder; Quit button in the UI stops the server
+- [x] Welcome screen: recent projects history (%APPDATA%\DocWiz\recent.json), Open
+      project (server-side native picker), New blank project, Start from template —
+      built-in `blank` and `software-handbook` scaffolds plus a file-based template
+      library (real on-disk folders under `Templates\`)
+- [x] Native shell: the editor runs inside a DocWiz.exe-owned WebView2 window with a
+      custom title bar; startup splash; ReadyToRun publish for fast cold start
+- [x] Table/picture context tools (one shared definition), in-cell picture editing,
+      drag-to-resize for pictures, tables, and linked blocks; L/C/R block alignment
+- [x] Light/dark theme for the editor and the slide canvas; content-only zoom
+- [x] Publish as self-contained single exe; smoke test on a clean machine
+      (stakeholder verified `dist\DocWiz.exe` runs with no .NET runtime installed)
+
+**Success criteria:** a non-programmer colleague edits a chapter, inserts a picture and
+a link, and rebuilds — without help and without seeing raw Markdown.
+
+## Stage 4 — View manager + handover polish (complete)
+
+- [x] View CRUD in the editor (`/api/view`); visual view editor with title/audience/mode,
+      ordered slide cards, up/down/remove, "+ New view" in the tree; view duplication
+- [x] Slides v2: structured layouts (section-header, title-content, two-column,
+      big-media), live on-canvas slide authoring, inline `::: embed` linked blocks with
+      detach/relink, draft-from-manual, auto-pagination of too-tall slides
+- [x] Anchor auto-creation when a section is first used in a view (`/api/ensure-anchor`)
+- [x] Single-file HTML export (ADR-003): `SingleFileExporter` inlines CSS/JS and
+      base64-embeds images into one self-contained file
+- [x] `docwiz build --zip` packaging; clean handover output root (one project-named
+      html + `_site/`)
+- [x] External documentation packages: `external:` is a map of named packages; each
+      non-null path is embedded under `external/<key>/` with its own tab; validator
+      checks folder + entry page; editor "Documentation packages" manager
+- [x] Handover focus view (fullscreen lightbox for figures and tables)
+- [x] Content element library (`:::` callouts, steps, cards, buttons, details,
+      center/right, group)
+
+**Success criteria:** a colleague builds a training view from existing chapters in the
+editor and presents it from the handover. ✔ Met.
+
+## Stage 5 — Pilot on a real customer project (in progress)
+
+- [x] Word/PDF migration pipeline: `docwiz import-docx` (bundled Pandoc + DocWiz
+      post-processing), editor **Import…** with section selection and a review worklist,
+      **New project from Word**; EMF/WMF → PNG conversion on import and on demand
+- [x] First real migration: several Word sources → a validated project with 0 errors
+- [x] User-training view template shipped inside the file-based template library
+- [x] PDF export (manual + views) via native Chromium print; per-chapter selection and a
+      PDF | single-file HTML format toggle
+- [x] Content-only zoom
+- [ ] Deliver a training from the user view to a real audience
+- [ ] A non-programmer colleague edits a chapter unaided; collect feedback
+- [ ] Release hygiene: tag v1.0, prune merged branches
+
+**Success criteria:** the pilot project is handed over as a DocWiz package; the training
+is delivered from the generated view; feedback from a non-programmer author is collected.
+
+## Backlog
+
+Open items (everything shipped is in Recent Changes):
+
+- Ctrl+K focuses the full-text search box
+- Slide display on wide monitors: show the whole slide rather than stretching
+- Images inside note/warning/danger callouts
+- Items library sidebar (assets, attachments, reusable elements)
+- Adjustable slide preset layouts
+- Subchapter display in the handover navigation
+- "White to alpha" picture button
+- Free positioning of linked blocks on slides (free-canvas stage)
+- Multi-language projects and a broader template library (vNext)
+
+## Recent Changes
+
+| Date | Stage | Description |
+|------|-------|-------------|
+| 2026-09-17 | Release hygiene | Sample project replaced by the Stockroom demo (user / support / admin audiences; setup / operations / troubleshooting / reference / integration disciplines; `api_reference` / `release_notes` / `integration_guide` external packages); template library reset to the Software Handbook template; consumed planning docs removed; docs consolidated |
+| 2026-07-08 | Stage 5 | Chapter export + single-file HTML + print code-wrap fix: Export modal gains per-chapter selection and a PDF/HTML format toggle; printed code blocks wrap instead of baking a scrollbar |
+| 2026-06-30 | Stage 5 | External-doc tabs open inside a DocWiz back-strip wrapper; `_blank` links fixed in the native window |
+| 2026-06-30 | Quality | Codebase review + remediation (single-source/parity findings dispositioned) |
+| 2026-06-29 | Stage 5 | Content-only zoom shipped (second V1.0 feature) |
+| 2026-06-29 | Stage 4 | External doc-package tabs prefer a navigable `handover.html` entry over `index.html` |
+| 2026-06-29 | Stage 5 | PDF export engine pivoted to native Chromium print (`Page.printToPDF`) |
+| 2026-06-26 | Stage 5 | PDF export (manual + views) shipped (first V1.0 feature) |
+| 2026-06-26 | Stage 4 | Handover output root cleaned up: one project-named html + `_site/` |
+| 2026-06-25 | Stage 3 | Editor top-bar overflow fixed on small screens ("⋯ More" dropdown); handover focus view; light theme for slides + editor light/dark toggle; sidebar heading outline to 3 levels |
+| 2026-06-24 | Stage 3 | Project settings UI + Documentation packages manager complete |
+| 2026-06-23 | Stage 5 | `:::group` first real use in the template's training deck; view-link validation gap closed |
+| 2026-06-22 | Stage 5 | Embeddable group container (`:::group`); blockquote style; new-slide title field; maximized-window DPI fix |
+| 2026-06-22 | Workflow | Coding discipline (simplicity first, surgical changes) added to CLAUDE.md |
+| 2026-06-20 | Stage 5 | User-training view template shipped; slide auto-pagination; whole-chapter linking |
+| 2026-06-18 | Backlog | Markdown-native editing tools: task lists, indent/outdent |
+| 2026-06-17 | Backlog | Table/picture contextual-toolbar redesign (one shared definition + right-click menus); divergence audit remediated (ADR-008); EMF/WMF → PNG support; editing-robustness fixes |
+| 2026-06-16 | Stage 3 | Native shell (WebView2 window + custom title bar); Word import shipped as an editor feature; file-based template library |
+| 2026-06-15 | Stage 3 | Slides v2 merged; resize + alignment for tables and linked blocks; startup speed fix (ReadyToRun) |
+| 2026-06-14 | Stage 3 | Native app window, distributable branded exe, startup splash |
+| 2026-06-13 | Design | Editor redesign (tokens, welcome canvas, chrome header, chapter bar, toolbars); in-cell picture drag-resize |
+| 2026-06-12 | Live editor | Live editor M1–M5 shipped and flipped on: ProseMirror view layer over pipeline HTML, byte-surgical saves, tables + images first-class, toolbar redesign |
+| 2026-06-12 | Stage 5 | First real migration of Word sources into a validated project; migration pipeline approved |
+| 2026-06-11 | Stage 4+ | Content element library; WYSIWYG view editor; external docs generalized to named packages; auto anchors; numbering scheme fixed; design pass applied |
+| 2026-06-10 | Stage 0–4 | Project scaffolded; ADR-001..006 accepted; pipeline core, views engine, editor MVP, welcome screen, guided insert dialogs, native pickers, view manager, single-file export |

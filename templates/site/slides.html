@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{TITLE}} — {{CODE}}</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIiByb2xlPSJpbWciIGFyaWEtbGFiZWw9IkRvY1dpeiI+CiAgCiAgPHJlY3Qgd2lkdGg9IjUxMiIgaGVpZ2h0PSI1MTIiIHJ4PSI5NiIgZmlsbD0iIzFmNGU3OSI+PC9yZWN0PgogIAogIDx0ZXh0IHg9IjI1NiIgeT0iMzMwIiBmb250LWZhbWlseT0iR2VvcmdpYSwgJiMzOTtUaW1lcyBOZXcgUm9tYW4mIzM5OywgJiMzOTtCb29rIEFudGlxdWEmIzM5Oywgc2VyaWYiIGZvbnQtc2l6ZT0iMjEwIiBmb250LXdlaWdodD0iYm9sZCIgZmlsbD0id2hpdGUiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGxldHRlci1zcGFjaW5nPSItNSI+RFc8L3RleHQ+Cjwvc3ZnPg==">
+<script>
+  (function () {
+    var t = localStorage.getItem('dw-theme');
+    if (!t) t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+</script>
+<link rel="stylesheet" href="{{BASE}}_dw/tokens.css">
+<link rel="stylesheet" href="{{BASE}}_dw/site.css">
+</head>
+<body>
+
+<header data-theme="dark">
+  <span class="brand">{{PROJECT}}<small>{{CODE}} · v{{VERSION}}</small></span>
+  <nav class="tabs">
+{{TABS}}
+  </nav>
+  <button id="themeBtn" type="button">Dark</button>
+</header>
+
+<!-- The slide CANVAS follows the page theme (light/dark toggle). The letterbox
+     surround stays dark in both themes because .slides-surface is painted with the
+     theme-independent --dw-chrome, and the controls use chrome tokens (see site.css). -->
+<section class="slides-surface" id="slidesSurface">
+  <div class="slide-stage" id="slideStage">
+    <div class="slide-frame" id="slideFrame">
+{{SLIDES}}
+    </div>
+  </div>
+  <div class="slide-bar">
+    <button id="prevBtn" type="button">← Prev</button>
+    <span class="ctr" id="slideCtr"></span>
+    <button id="nextBtn" type="button">Next →</button>
+    <button id="fsBtn" type="button">Fullscreen</button>
+  </div>
+  <div class="hint">Arrow keys navigate · F or the button for fullscreen · Esc exits</div>
+</section>
+
+<footer>
+  <span>{{PROJECT}} · {{CODE}}</span>
+  <span>{{GENERATED}}</span>
+</footer>
+
+<script src="{{BASE}}_dw/site.js"></script>
+<script src="{{BASE}}_dw/slides.js"></script>
+<!-- Visual self-check probe (dev/verification only): inert unless the URL carries ?probe=1. -->
+<script src="{{BASE}}_dw/probe.js" defer></script>
+</body>
+</html>

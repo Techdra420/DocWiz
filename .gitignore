@@ -1,0 +1,34 @@
+# Generated handovers
+output/
+
+# Local conversion tools (fetched per tools/README.md, never shipped)
+tools/pandoc/
+
+# Fidelity harness scratch output (contains project/customer content)
+tools/fidelity/out/
+
+# Published binaries
+dist/
+
+# .NET
+bin/
+obj/
+*.user
+.vs/
+
+# Editors
+.vscode/
+.idea/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Logs / temp
+*.log
+*.tmp
+
+# Recovery folders inside shipped project templates are never committed (output/ already ignored globally)
+templates/projects/**/_emf-originals/
+templates/projects/**/_rotated-originals/
+templates/projects/**/output/

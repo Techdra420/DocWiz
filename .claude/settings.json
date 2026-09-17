@@ -1,0 +1,40 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet build *)",
+      "Bash(dotnet test *)",
+      "Bash(dotnet publish *)",
+      "Bash(dotnet run *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git checkout *)",
+      "Bash(rtk git *)",
+      "Bash(rtk grep *)",
+      "Bash(rtk find *)",
+      "Bash(rtk ls *)",
+      "Bash(rtk read *)",
+      "Bash(rtk dotnet *)",
+      "Bash(rtk curl *)",
+      "Bash(cd /c/Git_Projects/DocWiz *)",
+      "PowerShell(dotnet build *)",
+      "PowerShell(dotnet test *)",
+      "PowerShell(dotnet publish *)",
+      "PowerShell(dotnet run *)",
+      "PowerShell(git -C c:\\\\Git_Projects\\\\DocWiz status --short)",
+      "PowerShell(git -C c:\\\\Git_Projects\\\\DocWiz log *)",
+      "PowerShell(git -C c:\\\\Git_Projects\\\\DocWiz diff *)",
+      "PowerShell(git -C c:\\\\Git_Projects\\\\DocWiz add *)",
+      "PowerShell(git -C c:\\\\Git_Projects\\\\DocWiz branch --show-current)",
+      "PowerShell(powershell -NoProfile -ExecutionPolicy Bypass -File c:\\\\Git_Projects\\\\DocWiz\\\\tests\\\\fixtures\\\\make-import-sample.ps1)",
+      "PowerShell(powershell -NoProfile -ExecutionPolicy Bypass -File c:\\\\Git_Projects\\\\DocWiz\\\\tools\\\\fidelity\\\\run-all.ps1)",
+      "PowerShell(powershell -NoProfile -ExecutionPolicy Bypass -File c:\\\\Git_Projects\\\\DocWiz\\\\tools\\\\fidelity\\\\run-probe.ps1 *)",
+      "PowerShell(powershell -NoProfile -ExecutionPolicy Bypass -File c:\\\\Git_Projects\\\\DocWiz\\\\tools\\\\fidelity\\\\run-l2.ps1 -Project c:\\\\Git_Projects\\\\DocWiz\\\\samples\\\\stockroom-demo *)",
+      "PowerShell(powershell -NoProfile -ExecutionPolicy Bypass -File c:\\\\Git_Projects\\\\DocWiz\\\\tools\\\\fidelity\\\\run-edit-scenario.ps1 -SourceProject c:\\\\Git_Projects\\\\DocWiz\\\\samples\\\\stockroom-demo *)",
+      "PowerShell(Get-Process docwiz -ErrorAction SilentlyContinue)",
+      "Edit(/.claude/skills/docwiz-design/**)"
+    ],
+    "additionalDirectories": [
+      "C:\\tmp"
+    ]
+  }
+}

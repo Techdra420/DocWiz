@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>L2 fidelity — touched-block round trip</title>
+<!-- Fidelity harness L2 (ADR-007): for EVERY block of EVERY chapter of the mounted
+     project, pretend the block was touched: serialize the ingested ProseMirror node
+     back to markdown and verify (1) byte identity or a whitelisted normalization,
+     (2) semantic identity — Markdig renders source and serialization to the same
+     HTML (/api/dev/render-block), (3) stability — re-ingesting the re-rendered
+     output serializes to the same text. Driven headlessly by tools/fidelity/run-l2.ps1. -->
+<script type="importmap">
+{
+  "imports": {
+    "prosemirror-model": "/app/vendor/prosemirror/prosemirror-model/index.js",
+    "prosemirror-state": "/app/vendor/prosemirror/prosemirror-state/index.js",
+    "prosemirror-view": "/app/vendor/prosemirror/prosemirror-view/index.js",
+    "prosemirror-transform": "/app/vendor/prosemirror/prosemirror-transform/index.js",
+    "prosemirror-commands": "/app/vendor/prosemirror/prosemirror-commands/index.js",
+    "prosemirror-keymap": "/app/vendor/prosemirror/prosemirror-keymap/index.js",
+    "prosemirror-history": "/app/vendor/prosemirror/prosemirror-history/index.js",
+    "prosemirror-inputrules": "/app/vendor/prosemirror/prosemirror-inputrules/index.js",
+    "prosemirror-dropcursor": "/app/vendor/prosemirror/prosemirror-dropcursor/index.js",
+    "prosemirror-gapcursor": "/app/vendor/prosemirror/prosemirror-gapcursor/index.js",
+    "prosemirror-schema-list": "/app/vendor/prosemirror/prosemirror-schema-list/index.js",
+    "orderedmap": "/app/vendor/prosemirror/orderedmap/index.js",
+    "w3c-keyname": "/app/vendor/prosemirror/w3c-keyname/index.js",
+    "rope-sequence": "/app/vendor/prosemirror/rope-sequence/index.js"
+  }
+}
+</script>
+</head>
+<body>
+<pre id="progress"></pre>
+<script type="module">
+  import { DOMParser as PmDomParser } from 'prosemirror-model';
+  import { createSchema } from './schema.js';
+  import { buildDoc, nodesFor } from './ingest.js';
+  import { serializeBlock } from './serialize.js';
+
+  const schema = createSchema();
+  const parser = PmDomParser.fromSchema(schema);
+  const progress = document.getElementById('progress');
+
+  function normalizeHtml(html) {
+    const parts = html.split(/(<pre[\s\S]*?<\/pre>)/g);
+    return parts.map((p, i) => (i % 2 === 1 ? p : p.replace(/[ \t]*\n[ \t]*/g, ' '))).join('');
+  }
+
+  function pmModelEqual(a, srcA, b, srcB) {
+    try {
+      if (a.blocks.length !== 1 || b.blocks.length !== 1 || a.blocks[0].type !== b.blocks[0].type) return false;
+      const na = nodesFor(schema, parser, { kind: 'block', blockType: a.blocks[0].type, html: a.blocks[0].html, src: srcA });
+      const nb = nodesFor(schema, parser, { kind: 'block', blockType: b.blocks[0].type, html: b.blocks[0].html, src: srcB });
+      return na.length === nb.length && na.every((n, i) => n.eq(nb[i]));
+    } catch {
+      return false;
+    }
+  }
+
+  async function renderBlock(markdown) {
+    const res = await fetch('/api/dev/render-block', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ markdown }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    return res.json();
+  }
+
+  const summary = { chapters: 0, blocks: 0, identical: 0, normalized: 0, broken: 0, errors: 0 };
+  const findings = [];
+
+  try {
+    const project = await (await fetch('/api/project')).json();
+    const files = [];
+    for (const s of project.sections) for (const c of s.chapters) files.push(c.file);
+
+    for (const file of files) {
+      summary.chapters++;
+      progress.textContent = 'chapter ' + summary.chapters + '/' + files.length + ': ' + file;
+      const dto = await (await fetch('/api/editor-doc?file=' + encodeURIComponent(file))).json();
+      const doc = buildDoc(schema, dto);
+      const tasks = [];
+      doc.content.forEach((node) => {
+        const srcId = node.attrs.srcId;
+        if (srcId === null || srcId === undefined) return;
+        tasks.push({ node, seg: dto.segments[srcId] });
+      });
+
+      for (const { node, seg } of tasks) {
+        summary.blocks++;
+        let out;
+        try {
+          out = serializeBlock(node);
+        } catch (e) {
+          summary.errors++;
+          findings.push({ file, type: seg.blockType, kind: 'serialize-error', detail: String(e.message || e), src: seg.src.slice(0, 200) });
+          continue;
+        }
+        if (out === seg.src) {
+          summary.identical++;
+          continue;
+        }
+        // Not byte-identical: must be semantically identical + stable. Soft line
+        // breaks render as '\n' in HTML but mean the same as a space everywhere
+        // except inside <pre> — compare whitespace-normalized outside pre blocks.
+        try {
+          const [a, b] = [await renderBlock(seg.src), await renderBlock(out)];
+          // Mark nesting (em around link vs link around em) is not recoverable from
+          // the PM model and renders the same — accept PM-model equality as semantic
+          // identity when raw HTML differs only structurally.
+          const semantic = normalizeHtml(a.html) === normalizeHtml(b.html) || pmModelEqual(a, seg.src, b, out);
+          let stable = false;
+          if (b.blocks.length === 1) {
+            const reNodes = nodesFor(schema, parser, {
+              kind: 'block', blockType: b.blocks[0].type, html: b.blocks[0].html, src: out,
+            });
+            stable = reNodes.length === 1 && serializeBlock(reNodes[0]) === out;
+          }
+          if (semantic && stable) {
+            summary.normalized++;
+            findings.push({ file, type: seg.blockType, kind: 'normalized', src: seg.src.slice(0, 160), out: out.slice(0, 160) });
+          } else {
+            summary.broken++;
+            findings.push({
+              file, type: seg.blockType, kind: semantic ? 'unstable' : 'SEMANTIC-DIFF',
+              src: seg.src.slice(0, 400), out: out.slice(0, 400),
+              htmlA: semantic ? undefined : a.html.slice(0, 400),
+              htmlB: semantic ? undefined : b.html.slice(0, 400),
+            });
+          }
+        } catch (e) {
+          summary.errors++;
+          findings.push({ file, type: seg.blockType, kind: 'check-error', detail: String(e.message || e) });
+        }
+      }
+    }
+  } catch (e) {
+    summary.errors++;
+    findings.push({ kind: 'fatal', detail: String(e.message || e) });
+  }
+
+  const pre = document.createElement('pre');
+  pre.id = 'out';
+  pre.textContent = JSON.stringify({ summary, findings });
+  document.body.appendChild(pre);
+  document.title = 'DONE';
+</script>
+</body>
+</html>
