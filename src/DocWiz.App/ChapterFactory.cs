@@ -9,8 +9,9 @@ namespace DocWiz.App;
 /// templates guide the author through the expected structure).</summary>
 public static partial class ChapterFactory
 {
-    /// <summary>Returns the absolute path of the created file.</summary>
-    public static string Create(string projectRoot, NewChapterDto dto)
+    /// <summary>Returns the absolute path of the created file. <paramref name="projectAudiences"/>
+    /// (the manifest's audience ids) are the default when the request names none.</summary>
+    public static string Create(string projectRoot, NewChapterDto dto, IEnumerable<string> projectAudiences)
     {
         var contentDir = Path.Combine(projectRoot, ProjectLayout.ContentFolder);
         Directory.CreateDirectory(contentDir);
@@ -21,7 +22,9 @@ public static partial class ChapterFactory
         var fileName = $"{NextPrefix(Directory.GetFiles(sectionDir, "*.md"))}-{Slugify(dto.Slug)}.md";
         var path = Path.Combine(sectionDir, fileName);
 
-        var audiences = dto.Audiences.Count > 0 ? dto.Audiences : ["user", "support", "admin"];
+        // No explicit choice → every audience the project defines (never a hardcoded set the
+        // project may not have, which would fail Check on every new chapter).
+        var audiences = dto.Audiences.Count > 0 ? dto.Audiences : projectAudiences.ToList();
         File.WriteAllText(path,
             ChapterTemplates.ChapterFile(dto.Id, dto.Title, dto.Discipline, audiences));
         return path;

@@ -2,9 +2,24 @@ namespace DocWiz.Core.Loading;
 
 /// <summary>Per-discipline chapter body skeletons. Used by the editor's new-chapter
 /// flow and by project templates — the structure guides non-programmer authors.</summary>
-public static class ChapterTemplates
+public static partial class ChapterTemplates
 {
-    public static string Body(string discipline) => discipline switch
+    private const string AdminNoteAudience = "admin";
+
+    /// <summary>The skeleton for a discipline. Some skeletons carry a sample
+    /// `::: audience admin` block; it is kept only when <paramref name="includeAdminNote"/> —
+    /// i.e. the chapter is tagged for an `admin` audience — so a new chapter never names an
+    /// audience the chapter (or project) doesn't have.</summary>
+    public static string Body(string discipline, bool includeAdminNote = true)
+    {
+        var body = Skeleton(discipline);
+        return includeAdminNote ? body : AdminNoteRegex().Replace(body, "");
+    }
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"(\r?\n)+::: audience admin\r?\n[\s\S]*?\r?\n:::")]
+    private static partial System.Text.RegularExpressions.Regex AdminNoteRegex();
+
+    private static string Skeleton(string discipline) => discipline switch
     {
         "setup" =>
             """
@@ -97,10 +112,13 @@ public static class ChapterTemplates
     /// (ADR-008): frontmatter via <see cref="ChapterComposer"/> (block-style YAML, minimal
     /// quoting handled by YamlDotNet), so a created chapter is byte-stable on its first editor
     /// save.</summary>
-    public static string ChapterFile(string id, string title, string discipline, IEnumerable<string> audiences) =>
-        ChapterComposer.Compose(
-            ChapterComposer.Frontmatter(id, title, discipline, audiences),
-            $"# {title}\n\n{Body(discipline)}");
+    public static string ChapterFile(string id, string title, string discipline, IEnumerable<string> audiences)
+    {
+        var list = audiences.ToList();
+        return ChapterComposer.Compose(
+            ChapterComposer.Frontmatter(id, title, discipline, list),
+            $"# {title}\n\n{Body(discipline, list.Contains(AdminNoteAudience))}");
+    }
 
     /// <summary>Single-quoted YAML scalar (safe for any content; inner ' doubled).</summary>
     public static string YamlQuote(string value) => "'" + value.Replace("'", "''") + "'";

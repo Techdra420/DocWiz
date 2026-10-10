@@ -390,7 +390,7 @@ public static class EditorServer
             if (project.FindChapter(dto.Id) is not null)
                 return Results.BadRequest($"Chapter id '{dto.Id}' already exists.");
 
-            var path = ChapterFactory.Create(holder.Root!, dto);
+            var path = ChapterFactory.Create(holder.Root!, dto, project.Manifest.Audiences.Select(a => a.Id));
             return Results.Json(new { file = RelPath(holder.Root!, path) });
         });
 
@@ -870,6 +870,21 @@ public static class EditorServer
                     System.Text.RegularExpressions.Regex.IsMatch(v, @"^[+-]?(\d+\.?\d*|\.\d+)$");  // looks numeric
                 return needs ? ChapterTemplates.YamlQuote(v) : v;
             }
+            // Audiences dropped from the list: a view filtered by one blocks the save (it needs
+            // another audience first); chapter tags are stripped after the manifest is written.
+            var current = ProjectLoader.Load(holder.Root!);
+            var keep = (dto.Audiences ?? []).Select(a => a.Id).ToHashSet(StringComparer.Ordinal);
+            var removed = current.Manifest.Audiences.Where(a => !keep.Contains(a.Id)).ToList();
+            var blocking = current.Views.Where(v => removed.Any(a => a.Id == v.Audience)).ToList();
+            if (blocking.Count > 0)
+            {
+                var v = blocking[0];
+                var title = removed.First(a => a.Id == v.Audience).Title;
+                return Results.Text(
+                    $"Not saved: the output “{v.Title}” is for {title}. Pick another audience for it first, then delete {title}.",
+                    "text/plain", statusCode: 409);
+            }
+
             var path = Path.Combine(holder.Root!, "docwiz.yaml");
             var yaml = File.ReadAllText(path);
             yaml = ManifestWriter.SetScalar(yaml, "project", Q(dto.Project));
@@ -881,7 +896,25 @@ public static class EditorServer
             yaml = ManifestWriter.SetAudiences(yaml,
                 (dto.Audiences ?? []).Select(a => (a.Id, (string)Q(a.Title))));
             File.WriteAllText(path, yaml);
+            AudienceRemoval.StripFromChapters(current, removed.Select(a => a.Id).ToList());
             return Results.Ok();
+        });
+
+        // What deleting an audience would affect, for the confirmation: chapter tags (removed on
+        // save), `::: audience` blocks naming it (kept — Check lists them), views filtered by it
+        // (they block the delete).
+        app.MapGet("/api/audience-usage", (string id) =>
+        {
+            if (NoProject() is { } guard)
+                return guard;
+            var (project, _) = LoadParsed(holder.Root!);
+            var usage = AudienceUsage.Find(project, id);
+            return Results.Json(new
+            {
+                chapters = usage.TaggedChapters.Select(c => new { c.Title, file = RelPath(project.Root, c.FilePath) }),
+                blocks = usage.BlockChapters.Select(b => new { b.Chapter.Title, file = RelPath(project.Root, b.Chapter.FilePath), count = b.Count }),
+                views = usage.Views.Select(v => new { v.Title }),
+            });
         });
 
         app.MapPost("/api/asset", async (string name, string? folder, HttpRequest request) =>

@@ -172,10 +172,10 @@ public static class ProjectValidator
                 issues.Add(new(IssueSeverity.Warning, src,
                     "a group has no {#id} — it can't be referenced or embedded."));
 
-            if (!string.Equals(container.Info, "audience", StringComparison.OrdinalIgnoreCase))
+            if (!AudienceFilter.IsAudienceContainer(container))
                 continue;
 
-            var args = (container.Arguments ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var args = AudienceFilter.AudienceIds(container);
             if (args.Length == 0)
                 issues.Add(new(IssueSeverity.Error, src, "'::: audience' without audience ids."));
             foreach (var a in args.Where(a => !knownAudiences.Contains(a)))
