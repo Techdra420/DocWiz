@@ -62,9 +62,10 @@
       get: function () { return dirty; },
       set: function (v) {
         dirty = !!v;
-        // Chapter bar gets a 'dirty' class that shows the amber save dot.
-        var cb = document.querySelector('.chapterbar');
-        if (cb) cb.classList.toggle('dirty', dirty);
+        // The chapter's and the output's bars get a 'dirty' class that shows the amber save dot.
+        Array.prototype.forEach.call(document.querySelectorAll('.chapterbar'), function (cb) {
+          cb.classList.toggle('dirty', dirty);
+        });
         // Legacy class on the yaml save button.
         var yb = $('yamlSaveBtn');
         if (yb) yb.classList.toggle('dirty', dirty);
@@ -1681,9 +1682,12 @@
       });
   }
 
-  function setStatus(text, cls) {
-    var s = $('status');
+  // The chapter bar's status line; setViewStatus is the output bar's.
+  function setStatus(text, cls) { statusLine($('status'), text, cls); }
+  function setViewStatus(text, cls) { statusLine($('vStatus'), text, cls); }
+  function statusLine(s, text, cls) {
     s.textContent = text;
+    s.title = text; // the line is cut short when the bar is narrow
     // Preserve the structural class ('cb-status') and only toggle ok/err modifiers.
     s.className = 'cb-status' + (cls ? ' ' + cls : '');
   }
@@ -1691,12 +1695,8 @@
   // Messages from the live surface (link, image, embed tools) go to the status line of the
   // editor that is on screen — the chapter bar's line is hidden while a view is edited.
   function editorStatus(text, cls) {
-    if (!$('viewEditor').hidden) {
-      $('vStatus').textContent = text;
-      $('vStatus').className = cls || '';
-    } else {
-      setStatus(text, cls);
-    }
+    if (!$('viewEditor').hidden) setViewStatus(text, cls);
+    else setStatus(text, cls);
   }
 
   // True when the slide-zone editors hold edits not yet saved (Task 7c). state.dirty is
@@ -2487,76 +2487,163 @@
   // scrolled to in the canvas. Kept in range across deletes/reorders.
   var activeSlideIndex = 0;
 
-  // Rebuild the slide panel from state.viewSlides. Document mode hides the whole panel
-  // (the document preview is a single filtered page, not a slide deck). Called from
-  // refreshEditSurface after the canvas is (re)injected so the two stay in sync.
-  function renderSlidePanel() {
-    var panel = $('vPanel');
-    var list = $('vPanelList');
-    if (!panel || !list) return;
-    var slidesMode = $('vMode').value === 'slides';
-    panel.hidden = !slidesMode;
-    // The "+ Add slide" belt and its slide-canvas hint mean nothing on a document page.
-    var belt = document.querySelector('#viewEditor .toolbelt');
-    if (belt) belt.hidden = !slidesMode;
-    $('vReadBtn').setAttribute('data-tip', slidesMode
-      ? 'Open the deck the way your audience sees it — full-screen-ready slides, one at a time.'
-      : 'Open this document the way your audience sees it — one tidy page, exactly like the handover.');
-    if (!slidesMode) return;
+  function viewIsSlides() { return state.viewMode === 'slides'; }
 
+  // The number people see for working-model slide i: a deck counts its title slide as 1, as
+  // the presentation does ("2 of 12"); a document numbers its sections from 1.
+  function slideNo(i) { return viewIsSlides() ? i + 2 : i + 1; }
+
+  /* The rail (Stage 6). A deck shows real miniatures of its slides, a document the list of its
+     sections. Click goes there; drag moves; the + between two adds one right there; ⋯ moves,
+     changes a slide's layout, or deletes. Rebuilt with every canvas render so the two stay in
+     lock-step; miniatures refresh shortly after a zone edit. */
+  var draggedSlide = null;
+  function renderSlidePanel() {
+    var list = $('vPanelList');
+    if (!list) return;
+    var deck = viewIsSlides(), noun = deck ? 'slide' : 'section';
     var slides = state.viewSlides || [];
     if (activeSlideIndex >= slides.length) activeSlideIndex = Math.max(0, slides.length - 1);
     list.innerHTML = '';
-    if (slides.length === 0) {
-      list.appendChild(el('div', 'vpanel-empty', 'No slides yet — use “+ Add slide”.'));
-      return;
+    list.classList.toggle('is-deck', deck);
+    // A deck opens with a title slide made from the output's title — shown first, as on the
+    // canvas and in the presentation, but not editable here.
+    var titleSlide = deck && $('vEditSurface').querySelector('.slide[data-layout="title-slide"]');
+    if (titleSlide) {
+      var auto = el('div', 'vpanel-item is-auto');
+      auto.setAttribute('role', 'listitem');
+      auto.setAttribute('data-tip', 'The title slide — made from the output’s title, always first.');
+      auto.appendChild(el('span', 'vpanel-num', '1'));
+      var autoThumb = el('div', 'vthumb dw-live-surface');
+      autoThumb.inert = true;
+      autoThumb.setAttribute('aria-hidden', 'true');
+      autoThumb.appendChild(titleSlide.cloneNode(true));
+      auto.appendChild(autoThumb);
+      auto.onclick = function () { titleSlide.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
+      list.appendChild(auto);
     }
+    if (slides.length === 0) list.appendChild(el('div', 'vpanel-empty', 'No ' + noun + 's yet — add the first one below.'));
     slides.forEach(function (slide, i) {
+      list.appendChild(railGap(i, noun));
       var item = el('div', 'vpanel-item' + (i === activeSlideIndex ? ' active' : ''));
       item.setAttribute('role', 'listitem');
       item.setAttribute('tabindex', '0');
+      item.draggable = true;
       item.dataset.i = i;
-      item.setAttribute('data-tip', 'Slide ' + (i + 1) + '. Click to jump to it on the canvas.');
-
-      item.appendChild(el('span', 'vpanel-num', String(i + 1)));
-      item.appendChild(el('span', 'vpanel-badge', layoutLabel(slide.layout)));
-      item.appendChild(el('span', 'vpanel-label', slideLabelFor(slide)));
-
-      var tools = el('div', 'vpanel-tools');
-      var up = el('button', 'vpanel-tbtn', '▲');
-      up.type = 'button';
-      up.disabled = i === 0;
-      up.setAttribute('data-tip', 'Move this slide one position up.');
-      up.onclick = function (e) { e.stopPropagation(); moveSlide(i, -1); };
-      tools.appendChild(up);
-      var down = el('button', 'vpanel-tbtn', '▼');
-      down.type = 'button';
-      down.disabled = i === slides.length - 1;
-      down.setAttribute('data-tip', 'Move this slide one position down.');
-      down.onclick = function (e) { e.stopPropagation(); moveSlide(i, 1); };
-      tools.appendChild(down);
-      var del = el('button', 'vpanel-tbtn vpanel-tbtn-danger', 'Delete');
-      del.type = 'button';
-      del.setAttribute('data-tip', 'Delete this slide. You will be asked to confirm if it has content.');
-      del.onclick = function (e) { e.stopPropagation(); deleteSlide(i); };
-      tools.appendChild(del);
-      item.appendChild(tools);
-
+      item.setAttribute('aria-label', (deck ? 'Slide ' : 'Section ') + slideNo(i) + ': ' + slideLabelFor(slide));
+      item.appendChild(el('span', 'vpanel-num', String(slideNo(i))));
+      if (deck) item.appendChild(thumbFor(i));
+      else {
+        var label = el('span', 'vpanel-label', slideLabelFor(slide));
+        label.title = slideLabelFor(slide);
+        item.appendChild(label);
+      }
+      var more = el('button', 'vpanel-more');
+      more.type = 'button';
+      more.innerHTML = TREE_ICONS.more;
+      more.setAttribute('aria-label', (deck ? 'Slide ' : 'Section ') + slideNo(i) + ' actions');
+      more.setAttribute('aria-haspopup', 'menu');
+      more.setAttribute('data-tip', deck ? 'Move this slide, change its layout, or delete it.' : 'Move or delete this section.');
+      more.onclick = function (e) { e.stopPropagation(); slideMenu(more, i); };
+      item.appendChild(more);
       item.onclick = function () { gotoSlide(i); };
       item.onkeydown = function (e) {
+        if (e.target !== item) return;
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); gotoSlide(i); }
       };
+      item.addEventListener('dragstart', function (e) {
+        draggedSlide = i;
+        item.classList.add('dragging');
+        try { e.dataTransfer.setData('text/plain', slideLabelFor(slide)); } catch (x) { /* some hosts refuse */ }
+      });
+      item.addEventListener('dragend', function () { draggedSlide = null; item.classList.remove('dragging'); });
       list.appendChild(item);
     });
+    if (slides.length) list.appendChild(railGap(slides.length, noun));
   }
 
-  // The canvas renders slides as [auto title slide, slides[0], slides[1], …] in slides
-  // mode, so working-model slide i is the (i+1)-th .slide element.
+  // The space between two rail items: a + that adds a slide (section) there, and the drop
+  // target while one is dragged.
+  function railGap(at, noun) {
+    var gap = el('div', 'vrail-gap');
+    var add = el('button', 'vrail-insert');
+    add.type = 'button';
+    add.setAttribute('aria-label', 'Add a ' + noun + ' here');
+    add.setAttribute('data-tip', 'Add a ' + noun + ' here.');
+    add.innerHTML = TREE_ICONS.plus;
+    add.onclick = function () { if (viewIsSlides()) addSlide(at); else addSection(at); };
+    gap.appendChild(add);
+    gap.addEventListener('dragover', function (e) { if (draggedSlide !== null) { e.preventDefault(); gap.classList.add('drop'); } });
+    gap.addEventListener('dragleave', function () { gap.classList.remove('drop'); });
+    gap.addEventListener('drop', function (e) {
+      e.preventDefault();
+      gap.classList.remove('drop');
+      if (draggedSlide === null) return;
+      moveSlideTo(draggedSlide, draggedSlide < at ? at - 1 : at);
+    });
+    return gap;
+  }
+
+  // A miniature of canvas slide i: the rendered slide cloned into a 192×108 box — the same
+  // 1920×1080 frame at zoom .1 inside the .dw-live-surface scope, so site.css draws it exactly
+  // like the canvas. Display only (inert, nothing editable or focusable inside).
+  function thumbFor(i) {
+    var box = el('div', 'vthumb dw-live-surface');
+    box.setAttribute('aria-hidden', 'true');
+    box.inert = true;
+    var src = canvasSlideEl(i);
+    if (!src) { box.appendChild(el('span', 'vthumb-label', slideLabelFor(state.viewSlides[i]))); return box; }
+    var clone = src.cloneNode(true);
+    clone.removeAttribute('id');
+    Array.prototype.forEach.call(clone.querySelectorAll('[contenteditable], [id], [tabindex]'), function (n) {
+      n.removeAttribute('contenteditable');
+      n.removeAttribute('id');
+      n.removeAttribute('tabindex');
+    });
+    box.appendChild(clone);
+    return box;
+  }
+
+  // Zone edits show in the miniatures a moment after typing stops.
+  var thumbTimer = null;
+  function scheduleThumbs() {
+    if (!viewIsSlides()) return;
+    clearTimeout(thumbTimer);
+    thumbTimer = setTimeout(function () {
+      Array.prototype.forEach.call(document.querySelectorAll('#vPanelList .vpanel-item'), function (item) {
+        var old = item.querySelector('.vthumb');
+        if (old) old.replaceWith(thumbFor(parseInt(item.dataset.i, 10)));
+      });
+    }, 800);
+  }
+
+  function slideMenu(anchor, i) {
+    var deck = viewIsSlides(), noun = deck ? 'slide' : 'section';
+    var items = [];
+    if (i > 0) items.push({ text: 'Move up', run: function () { moveSlide(i, -1); } });
+    if (i < state.viewSlides.length - 1) items.push({ text: 'Move down', run: function () { moveSlide(i, 1); } });
+    if (deck) {
+      if (items.length) items.push('-');
+      items.push({ text: 'Layout' });
+      LAYOUT_ORDER.forEach(function (name) {
+        items.push({
+          text: LAYOUT_INFO[name].label,
+          hint: LAYOUT_INFO[name].desc,
+          checked: function () { return !!state.viewSlides[i] && state.viewSlides[i].layout === name; },
+          run: function () { closeActionMenu(); changeLayout(i, name); },
+        });
+      });
+    }
+    if (items.length) items.push('-');
+    items.push({ text: 'Delete ' + noun + '…', danger: true, run: function () { deleteSlide(i); } });
+    actionMenu(anchor, items);
+  }
+
+  // The canvas card of working-model slide i — each carries data-slide-index (RenderSlides /
+  // RenderDocument); a deck's automatic title slide has none.
   function canvasSlideEl(i) {
     var surface = $('vEditSurface');
-    if (!surface) return null;
-    var all = surface.querySelectorAll('.slide');
-    return all[i + 1] || null;
+    return surface ? surface.querySelector('[data-slide-index="' + i + '"]') : null;
   }
 
   // Navigate: scroll the canvas to slide i and highlight its panel item.
@@ -2585,17 +2672,16 @@
       scrollSyncQueued = false;
       var surface = $('vEditSurface');
       if (!surface || surface.hidden) return;
-      var all = surface.querySelectorAll('.slide');
+      var all = surface.querySelectorAll('[data-slide-index]');
       if (!all.length) return;
       var mid = surface.parentNode.getBoundingClientRect();
       var center = mid.top + mid.height / 2;
-      var best = -1, bestDist = Infinity;
-      Array.prototype.forEach.call(all, function (el, domIdx) {
-        var r = el.getBoundingClientRect();
+      var idx = -1, bestDist = Infinity;
+      Array.prototype.forEach.call(all, function (card) {
+        var r = card.getBoundingClientRect();
         var d = Math.abs((r.top + r.height / 2) - center);
-        if (d < bestDist) { bestDist = d; best = domIdx; }
+        if (d < bestDist) { bestDist = d; idx = parseInt(card.getAttribute('data-slide-index'), 10); }
       });
-      var idx = best - 1; // subtract the auto title slide at DOM index 0
       if (idx >= 0 && idx !== activeSlideIndex) { activeSlideIndex = idx; highlightPanel(idx); }
     });
   }
@@ -2603,17 +2689,55 @@
   // Reorder: move slide i by dir (-1 up / +1 down). Collect any in-flight zone edit
   // BEFORE re-rendering (else unmountAll drops it), reorder the working model, keep the
   // moved slide active, mark dirty, re-render (which rebuilds the panel + remounts zones).
-  function moveSlide(i, dir) {
+  function moveSlide(i, dir) { moveSlideTo(i, i + dir); }
+
+  // Move slide `from` to position `to` (a drag in the rail, or Move up / down).
+  function moveSlideTo(from, to) {
     var slides = state.viewSlides;
-    var j = i + dir;
-    if (j < 0 || j >= slides.length) return;
+    if (to < 0 || to >= slides.length || to === from) return;
     collectZoneEdits();
-    var moved = slides.splice(i, 1)[0];
-    slides.splice(j, 0, moved);
-    activeSlideIndex = j;
+    var moved = slides.splice(from, 1)[0];
+    slides.splice(to, 0, moved);
+    activeSlideIndex = to;
     state.dirty = true;
     scrollActiveOnRender = true;
     renderViewEditor();
+  }
+
+  /* Change a slide's layout after the fact (Stage 6). Regions the new layout has keep their
+     content; content from regions it lacks moves into its first free region, so nothing is
+     lost — except into a section header, which has no content area: that asks first (History
+     keeps the earlier version either way). */
+  function changeLayout(i, layout) {
+    collectZoneEdits();
+    var slide = state.viewSlides[i];
+    if (!slide || slide.layout === layout) return;
+    var to = SLIDE_REGIONS[layout] || [];
+    var regions = {}, leftover = [];
+    (SLIDE_REGIONS[slide.layout] || []).forEach(function (name) {
+      var md = slide.regions[name];
+      if (typeof md !== 'string' || !md.trim()) return;
+      if (to.indexOf(name) >= 0) regions[name] = md; else leftover.push(md);
+    });
+    var apply = function () {
+      if (leftover.length && to.length) {
+        var target = to.filter(function (n) { return !regions[n]; })[0] || to[0];
+        regions[target] = [regions[target]].concat(leftover).filter(Boolean).join('\n\n');
+      }
+      slide.layout = layout;
+      slide.regions = regions;
+      activeSlideIndex = i;
+      state.dirty = true;
+      scrollActiveOnRender = true;
+      renderViewEditor();
+    };
+    if (leftover.length && !to.length) {
+      confirmDialog('Make slide ' + slideNo(i) + ' a section header?',
+        'A section header has only a title and a subtitle, so this slide’s content is removed. History keeps the version before the change.',
+        'Change layout', apply, true);
+      return;
+    }
+    apply();
   }
 
   // Delete slide i. Confirm only when it has authored/linked content (an empty slide is a
@@ -2631,6 +2755,7 @@
     var slides = state.viewSlides;
     var slide = slides[i];
     if (!slide) return;
+    var noun = viewIsSlides() ? 'slide' : 'section';
     var proceed = function () {
       collectZoneEdits();
       slides.splice(i, 1);
@@ -2640,11 +2765,11 @@
       renderViewEditor();
     };
     if (!slideHasContent(slide)) { proceed(); return; }
-    openModal('Delete slide',
-      '<p class="mhelp">Delete slide <b>' + (i + 1) + '</b> (' + esc(slideLabelFor(slide)) + ')? ' +
-      'Its content is removed from this view. Linked blocks just stop being shown here — ' +
-      'the source chapter is not touched.</p>',
-      function () { proceed(); }, null, { okLabel: 'Delete slide', danger: true });
+    openModal('Delete ' + noun,
+      '<p class="mhelp">Delete ' + noun + ' <b>' + slideNo(i) + '</b> (' + esc(slideLabelFor(slide)) + ')? ' +
+      'Its content is removed from this output. Linked blocks just stop being shown here — ' +
+      'the chapter they come from is not touched.</p>',
+      function () { proceed(); }, null, { okLabel: 'Delete ' + noun, danger: true });
   }
 
 
@@ -2722,22 +2847,90 @@
         state.dirty = true;
         if (!zoneEditorsLive()) schedulePreview(PREVIEW_DEBOUNCE_TITLE);
       };
-      $('vAudience').innerHTML = state.project.audiences.map(function (a) {
-        return '<option value="' + esc(a.id) + '"' + (a.id === v.audience ? ' selected' : '') + '>' + esc(a.title) + '</option>';
-      }).join('');
-      // Audience changes how embeds filter, so a re-render IS wanted — re-render and
-      // re-mount the zones cleanly (refreshEditSurface unmounts first).
-      $('vAudience').onchange = function () { state.dirty = true; schedulePreview(0); };
-      $('vMode').value = v.mode === 'slides' ? 'slides' : 'document';
-      $('vMode').onchange = function () { state.dirty = true; renderViewEditor(); };
+      state.viewAudience = v.audience;
+      state.viewMode = v.mode === 'slides' ? 'slides' : 'document';
+      syncOutputBar();
       // Working copy of the slides, normalized to the structured layout+regions
       // model (legacy include/markdown slides become title-content body regions).
       state.viewSlides = (v.slides || []).map(normalizeSlide);
       activeSlideIndex = 0;
-      $('vStatus').textContent = '';
+      setViewStatus('');
       renderViewEditor();
       renderTree(state.project);
     });
+  }
+
+  /* ---------- the output bar (Stage 6) — the chapter's document-bar pattern ---------- */
+
+  var PLAY_ICON = '<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M5 3.5v9l7-4.5z"/></svg>';
+  var READ_ICON = '<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/></svg>';
+
+  // Kind, audience, Slides / Document and the rail's words follow the output's kind.
+  function syncOutputBar() {
+    var deck = viewIsSlides();
+    $('vKind').textContent = deck ? 'Slide deck' : 'Document';
+    $('vForLabel').textContent = audienceTitle(state.viewAudience);
+    Array.prototype.forEach.call(document.querySelectorAll('#vModeSeg [data-vmode]'), function (b) {
+      b.setAttribute('aria-pressed', String(b.getAttribute('data-vmode') === state.viewMode));
+    });
+    var read = $('vReadBtn');
+    read.innerHTML = (deck ? PLAY_ICON : READ_ICON) + '<span>' + (deck ? 'Present' : 'Read') + '</span>';
+    read.setAttribute('data-tip', deck
+      ? 'Present the deck the way your audience sees it — full-screen-ready slides, one at a time.'
+      : 'Read this document the way your audience sees it — one tidy page, exactly like the handover.');
+    $('vPanel').setAttribute('aria-label', deck ? 'Slides' : 'Sections');
+    $('vPanelHead').textContent = deck ? 'Slides' : 'Sections';
+    $('vPanelAdd').textContent = deck ? '+ Add slide' : '+ Add section';
+    $('vPanelAdd').setAttribute('data-tip', deck
+      ? 'Add a slide at the end — pick a layout, then fill it in on the slide itself.'
+      : 'Add a section at the end, then fill it in on the page.');
+  }
+
+  // Who the output is for: one audience (its chapters and blocks are filtered to it).
+  function forMenu(anchor) {
+    var items = [{ text: 'Who is this output for?' }];
+    state.project.audiences.forEach(function (a) {
+      items.push({
+        text: a.title, hint: a.description || '',
+        checked: function () { return state.viewAudience === a.id; },
+        run: function () {
+          closeActionMenu();
+          if (state.viewAudience === a.id) return;
+          state.viewAudience = a.id;
+          state.dirty = true;
+          syncOutputBar();
+          schedulePreview(0); // embeds re-filter for the new audience
+        },
+      });
+    });
+    items.push('-', { text: 'Manage audiences…', run: function () { openSettings('audiences'); } });
+    actionMenu(anchor, items, state.project.audiences.length >= READERS_FILTER_FROM ? { filter: 'Find an audience' } : null);
+  }
+
+  function setViewMode(mode) {
+    if (mode === state.viewMode) return;
+    state.viewMode = mode;
+    state.dirty = true;
+    syncOutputBar();
+    renderViewEditor();
+  }
+
+  function outputMenu(anchor) {
+    var deck = viewIsSlides();
+    actionMenu(anchor, [
+      { text: 'Duplicate…', hint: 'A copy with all its ' + (deck ? 'slides' : 'sections') + ' — the start of the next one', run: duplicateView },
+      { text: 'Export as one HTML file', hint: 'Self-contained — e-mail it or open it in any browser', run: exportView },
+      '-',
+      { text: 'Delete output…', danger: true, run: deleteView },
+    ]);
+  }
+
+  function exportView() {
+    var go = function () {
+      window.location = '/api/export-view?file=' + encodeURIComponent(state.currentView);
+    };
+    if (state.dirty) saveView().then(go).catch(quiet); // failed save = no export
+    else go();
   }
 
   function chapterTitleFor(id) {
@@ -2776,8 +2969,8 @@
     return {
       id: viewIdFromFile(state.currentView),
       title: $('vTitle').value,
-      audience: $('vAudience').value,
-      mode: $('vMode').value,
+      audience: state.viewAudience,
+      mode: state.viewMode,
       slides: state.viewSlides.map(slidePayload),
     };
   }
@@ -2844,7 +3037,7 @@
   // "Read / present" view.
   function refreshEditSurface() {
     if (!state.currentView) return;
-    var slides = $('vMode').value === 'slides';
+    var slides = viewIsSlides();
     var surface = $('vEditSurface');
     var docFrame = $('vDocSurface');
     // Pull any live zone edits back into state.viewSlides BEFORE tearing the editors
@@ -2896,23 +3089,12 @@
           // Scale every 1920×1080 frame to the column (WYSIWYG with Read) before mounting
           // zones, so the zones mount inside an already-zoomed frame and carets are correct.
           fitSlideZoom();
-          // Rebuild the slide panel from the (possibly mutated) working model so it stays
-          // in lock-step with the canvas, and keep the canvas scroll → active-item sync.
+          // Rebuild the rail from the (possibly mutated) working model so it stays in
+          // lock-step with the canvas — its miniatures are cloned from the canvas now, before
+          // the zones mount — and keep the canvas scroll → active-item sync.
           renderSlidePanel();
           surface.parentNode.onscroll = onCanvasScroll;
-          if (scrollLastOnRender) {
-            scrollLastOnRender = false;
-            var allLast = surface.querySelectorAll('.slide');
-            if (allLast.length) {
-              activeSlideIndex = Math.max(0, state.viewSlides.length - 1);
-              highlightPanel(activeSlideIndex);
-              allLast[allLast.length - 1].scrollIntoView({ block: 'center' });
-            }
-          } else if (scrollActiveOnRender) {
-            scrollActiveOnRender = false;
-            var elActive = canvasSlideEl(activeSlideIndex);
-            if (elActive) elActive.scrollIntoView({ block: 'center' });
-          }
+          revealActiveOnRender();
           // Task 7b: mount a live ProseMirror editor on every .slide-region zone and let
           // the shared chapter toolbar follow whichever zone has focus. Per-zone save is
           // Task 7c — here editing is live but only marks the view dirty.
@@ -2920,24 +3102,26 @@
             window.DocWizSlideEdit.mountAll({
               surface: surface,
               slides: state.viewSlides,
-              audience: $('vAudience').value,
-              onZoneDirty: function () { state.dirty = true; },
+              audience: state.viewAudience,
+              onZoneDirty: function () { state.dirty = true; scheduleThumbs(); },
             });
           }
         } else {
           // Document mode is now a LIVE surface (parent document), like slides — natural
-          // reading width (no slide frame/zoom). The iframe is only used by "Read / present".
+          // reading width (no slide frame/zoom). The iframe is only used by "Read".
           docFrame.hidden = true;
           surface.hidden = false;
           surface.innerHTML = html; // surface look already set synchronously above
-          renderSlidePanel(); // document mode → keeps the slide panel hidden
+          renderSlidePanel(); // the section list
+          surface.onscroll = onCanvasScroll;
+          revealActiveOnRender();
           // Mount a ProseMirror editor on every .view-sec card's zones; the shared chapter
           // toolbar follows the focused zone. Embeds resolve read-only; save is unchanged.
           if (window.DocWizSlideEdit) {
             window.DocWizSlideEdit.mountAll({
               surface: surface,
               slides: state.viewSlides,
-              audience: $('vAudience').value,
+              audience: state.viewAudience,
               cardSelector: '.view-sec',
               onZoneDirty: function () { state.dirty = true; },
             });
@@ -2968,10 +3152,11 @@
   }
 
   // Add slide → layout gallery: pick one of the four structured layouts. The new
-  // slide is empty ({ layout, title:'', subtitle:'', regions:{} }) and is appended
-  // to the end of the deck; the author fills it in live on the canvas (Task 7b
-  // mounts a per-zone editor on each region). Default highlight is title-content.
-  function addSlide() {
+  // slide is empty ({ layout, title:'', subtitle:'', regions:{} }) and lands at `at` (the +
+  // between two slides in the rail) or at the end; the author fills it in live on the canvas
+  // (Task 7b mounts a per-zone editor on each region).
+  function addSlide(at) {
+    if (typeof at !== 'number') at = null; // a click event from "+ Add slide" = the end
     var cards = LAYOUT_ORDER.map(function (name) {
       var info = LAYOUT_INFO[name];
       return '<button type="button" class="vlay-gallery-card" data-layout="' + esc(name) + '" ' +
@@ -2983,13 +3168,13 @@
     }).join('');
     openModal('Add a slide',
       '<p class="mhelp">Pick a layout for the new slide, then fill in its content ' +
-      'directly on the slide canvas.</p>' +
+      'directly on the slide. You can change the layout later from the slide’s ⋯ in the rail.</p>' +
       '<div class="vlay-gallery">' + cards + '</div>',
       null,
       function (root) {
         Array.prototype.forEach.call(root.querySelectorAll('.vlay-gallery-card'), function (btn) {
           btn.onclick = function () {
-            insertSlide(btn.dataset.layout);
+            insertSlide(btn.dataset.layout, at);
             $('modal').close();
           };
         });
@@ -2997,19 +3182,34 @@
       { hideOk: true });
   }
 
-  // Set when a structural change should reveal the last slide once the canvas
-  // re-renders (the canvas lives in this document now, so we scroll it directly
+  // Set when an add / move / delete / layout change should reveal the (clamped) active slide
+  // once the canvas re-renders (the canvas lives in this document, so it scrolls directly
   // after the fragment is injected — no iframe onload).
-  var scrollLastOnRender = false;
-  // Set when a reorder/delete should re-reveal the (clamped) active slide after re-render.
   var scrollActiveOnRender = false;
+  function revealActiveOnRender() {
+    if (!scrollActiveOnRender) return;
+    scrollActiveOnRender = false;
+    highlightPanel(activeSlideIndex);
+    var elActive = canvasSlideEl(activeSlideIndex);
+    if (elActive) elActive.scrollIntoView({ block: 'center' });
+    var item = document.querySelector('#vPanelList .vpanel-item[data-i="' + activeSlideIndex + '"]');
+    if (item) item.scrollIntoView({ block: 'nearest' });
+  }
 
-  function insertSlide(layout) {
-    state.viewSlides.push({ layout: layout, title: '', subtitle: '', regions: {} });
+  // A new, empty slide (section) at position `at` (default: the end), filled in on the canvas.
+  function insertSlide(layout, at) {
+    var slides = state.viewSlides;
+    var i = at == null ? slides.length : Math.max(0, Math.min(at, slides.length));
+    collectZoneEdits();
+    slides.splice(i, 0, { layout: layout, title: '', subtitle: '', regions: {} });
+    activeSlideIndex = i;
     state.dirty = true;
-    scrollLastOnRender = true;
+    scrollActiveOnRender = true;
     renderViewEditor();
   }
+
+  // A document's sections have one content area each — no layout to pick.
+  function addSection(at) { insertSlide(DEFAULT_LAYOUT, at); }
 
   // Saves of the open view queue behind each other (autosave, Ctrl+S, Build) — see autosave.
   var viewSaving = Promise.resolve();
@@ -3028,8 +3228,7 @@
     var payload = currentViewPayload();
     var gen = editGen;
     var savedView = state.currentView;
-    $('vStatus').textContent = 'Saving…';
-    $('vStatus').className = '';
+    setViewStatus('Saving…');
     return api.send('PUT', '/api/view?file=' + encodeURIComponent(state.currentView), payload)
       .then(function () {
         if (state.currentView !== savedView) return loadProject(); // another screen is open now
@@ -3043,8 +3242,7 @@
         } else {
           scheduleAutosave();
         }
-        $('vStatus').textContent = 'Saved ' + clockTime(new Date());
-        $('vStatus').className = 'ok';
+        setViewStatus('Saved ' + clockTime(new Date()), 'ok');
         if (opts && opts.auto) return loadProject();
         // Re-check after a save, but only interrupt with the panel when something is broken
         // (the Check button shows the full list, warnings included, any time).
@@ -3055,8 +3253,7 @@
           });
       })
       .catch(function (e) {
-        $('vStatus').textContent = e.message;
-        $('vStatus').className = 'err';
+        setViewStatus(e.message, 'err');
         throw e; // callers chaining Build/Export must not proceed on stale content
       });
   }
@@ -3100,19 +3297,19 @@
     if (!state.currentView) return;
     saveView().then(function () {
       var srcTitle = $('vTitle').value;
-      openModal('Duplicate view',
-        '<p class="mhelp">Creates a copy of "<b>' + esc(srcTitle) + '</b>" with all its ' +
-        'slides — start a new training or handover from a structure that already works.</p>' +
+      openModal('Duplicate output',
+        '<p class="mhelp">Creates a copy of “<b>' + esc(srcTitle) + '</b>” with all its ' +
+        (viewIsSlides() ? 'slides' : 'sections') + ' — start the next training or reference from a structure that already works.</p>' +
         '<div class="row"><label>Title</label><input id="dvTitle"></div>',
         function (root) {
           var title = root.querySelector('#dvTitle').value.trim();
           var id = slugify(title);
           if (!title || !id) return modalWarn(root, 'Give the copy a title.');
           api.send('POST', '/api/view', {
-            id: id, title: title, audience: $('vAudience').value, mode: $('vMode').value,
+            id: id, title: title, audience: state.viewAudience, mode: state.viewMode,
           }).then(function (res) {
             return api.send('PUT', '/api/view?file=' + encodeURIComponent(res.file), {
-              id: id, title: title, audience: $('vAudience').value, mode: $('vMode').value,
+              id: id, title: title, audience: state.viewAudience, mode: state.viewMode,
               // saveView() above already pulled edited zones into state.viewSlides (7c).
               slides: state.viewSlides.map(slidePayload),
             }).then(function () { return res.file; });
@@ -3130,9 +3327,10 @@
   }
 
   function deleteView() {
-    confirmDialog('Delete this view?',
-      '“' + ($('vTitle').value || 'This view') + '” and all its slides will be removed. The chapters it shows are not affected.',
-      'Delete view', deleteViewConfirmed, true);
+    confirmDialog('Delete this output?',
+      '“' + ($('vTitle').value || 'This output') + '” and all its ' + (viewIsSlides() ? 'slides' : 'sections') +
+      ' are removed (Recently deleted in History can bring it back). The chapters it shows are not affected.',
+      'Delete output', deleteViewConfirmed, true);
   }
 
   function deleteViewConfirmed() {
@@ -3143,10 +3341,7 @@
         show('welcome');
         return loadProject();
       })
-      .catch(function (e) {
-        $('vStatus').textContent = 'Delete failed: ' + e.message;
-        $('vStatus').className = 'err';
-      });
+      .catch(function (e) { setViewStatus('Delete failed: ' + e.message, 'err'); });
   }
 
   function newView() {
@@ -3154,19 +3349,19 @@
     var audiences = state.project.audiences.map(function (a) {
       return '<option value="' + esc(a.id) + '">' + esc(a.title) + '</option>';
     }).join('');
-    openModal('New view',
-      '<p class="mhelp">A view is an audience-specific output assembled from chapter sections — ' +
-      'a user training deck, a support quick reference, an administrator guide.</p>' +
+    openModal('New output',
+      '<p class="mhelp">An output is made from the manual for one audience — a slide deck for a ' +
+      'training, or a document such as a quick reference or a guide. It shows the manual’s ' +
+      'current content, so it never goes out of date.</p>' +
       '<div class="row"><label>Title</label><input id="nvTitle" placeholder="User Training"></div>' +
-      '<div class="row"><label>ID</label><input id="nvId" placeholder="user-training"></div>' +
-      '<div class="row"><label>Audience</label><select id="nvAud">' + audiences + '</select></div>' +
-      '<div class="row"><label>Mode</label><select id="nvMode">' +
-      '<option value="slides">Slides (presentation)</option>' +
-      '<option value="document">Document (page)</option></select></div>',
+      '<div class="row"><label>For</label><select id="nvAud">' + audiences + '</select></div>' +
+      '<div class="row"><label>Kind</label><select id="nvMode">' +
+      '<option value="slides">Slide deck (a presentation)</option>' +
+      '<option value="document">Document (one page of sections)</option></select></div>',
       function (root) {
         var title = root.querySelector('#nvTitle').value.trim();
-        var id = slugify(root.querySelector('#nvId').value || title);
-        if (!title || !id) return modalWarn(root, 'Give the view a title.');
+        var id = slugify(title);
+        if (!title || !id) return modalWarn(root, 'Give the output a title.');
         api.send('POST', '/api/view', {
           id: id, title: title,
           audience: root.querySelector('#nvAud').value,
@@ -3176,12 +3371,7 @@
           return loadProject().then(function () { openView(res.file); });
         }).catch(function (e) { modalWarn(root, e.message); });
         return false; // async: closes on success, keeps the input and warns on failure
-      },
-      function (root) {
-        var t = root.querySelector('#nvTitle');
-        var idEl = root.querySelector('#nvId');
-        t.oninput = function () { idEl.value = slugify(t.value); };
-      });
+      }, null, { okLabel: 'Create output' });
   }
 
   // Draft-deck-from-manual (Slides v2, Task 10): pick a chapter, POST /api/draft-view,
@@ -4423,16 +4613,17 @@
     if (ver) ver.addEventListener('input', function () { setDirty(true); validateVersion(); });
   })();
   on('yamlSaveBtn', function () { saveYaml().catch(quiet); });
+  // The output bar: For, Slides / Document, Present (Read), ⋯.
   on('vReadBtn', presentDeck);
-  on('vExportBtn', function () {
-    var go = function () {
-      window.location = '/api/export-view?file=' + encodeURIComponent(state.currentView);
-    };
-    if (state.dirty) saveView().then(go).catch(quiet); // failed save = no export
-    else go();
-  });
-  on('vDeleteBtn', deleteView);
-  on('vDuplicateBtn', duplicateView);
+  on('vFor', function () { forMenu($('vFor')); });
+  on('vMoreBtn', function () { outputMenu($('vMoreBtn')); });
+  (function wireOutputBar() {
+    var seg = $('vModeSeg');
+    if (seg) seg.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-vmode]');
+      if (b) setViewMode(b.getAttribute('data-vmode'));
+    });
+  })();
   // The document bar: Readers, Edit · Source · Read, Properties, ⋯ (History is wired below).
   on('cbReaders', function () { readersMenu($('cbReaders')); });
   on('previewBtn', function () { previewMenu($('previewBtn')); });
@@ -4463,8 +4654,7 @@
     if (openMenu) { var anchor = openMenu.anchor; closeActionMenu(); anchor.focus(); return; }
     if (!$('setSheet').hidden && !$('modal').open) { e.preventDefault(); closeSettings(); }
   });
-  on('vAddSlide', addSlide);
-  on('vPanelAdd', addSlide);
+  on('vPanelAdd', function () { if (viewIsSlides()) addSlide(); else addSection(); });
   on('checkBtn', runCheck);
   on('buildBtn', runBuild);
   on('wImportBtn', newProjectFromWord);

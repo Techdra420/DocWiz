@@ -221,7 +221,7 @@
   // surface contains .slide elements, falling back to the slide canvas / first match.
   function pickSurface(sel) {
     if (sel && sel !== '.dw-live-surface') return document.querySelector(sel);
-    var all = Array.prototype.slice.call(document.querySelectorAll('.dw-live-surface'));
+    var all = Array.prototype.slice.call(document.querySelectorAll('.dw-live-surface:not(.vthumb)')) // never an outputs-rail miniature;
     var withSlides = all.filter(function (s) { return s.querySelector('.slide'); });
     return withSlides[0] || document.getElementById('vEditSurface') || all[0] || null;
   }
@@ -609,7 +609,7 @@
     }
 
     function hasSlideSurface() {
-      var all = Array.prototype.slice.call(document.querySelectorAll('.dw-live-surface'));
+      var all = Array.prototype.slice.call(document.querySelectorAll('.dw-live-surface:not(.vthumb)')) // never an outputs-rail miniature;
       return all.some(function (s) { return s.querySelector('.slide'); });
     }
 

@@ -588,8 +588,8 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 0;
 /* ---- Chapter editor -------------------------------------------------------------- */
 #chapterEditor { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
-/* Input / select shared recipe (used by view editor + dialogs too) */
-#viewEditor select, dialog#modal input, dialog#modal select {
+/* Input / select shared recipe (dialogs) */
+dialog#modal input, dialog#modal select {
   font: inherit;
   font-weight: var(--dw-w-regular);
   border: 1px solid var(--dw-border-strong);
@@ -598,7 +598,7 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 0;
   background: var(--dw-surface);
   color: var(--dw-text);
 }
-#viewEditor select:focus, dialog#modal input:focus, dialog#modal select:focus {
+dialog#modal input:focus, dialog#modal select:focus {
   outline: none;
   border-color: var(--dw-accent);
   box-shadow: var(--dw-focus-ring);
@@ -714,25 +714,10 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 0;
 }
 .fm input:disabled { background: var(--dw-surface-2); color: var(--dw-muted); font-family: var(--dw-font-mono); }
 
-/* Toolbelt: ghost buttons grouped into one bordered strip â€” reads as one tool */
-.toolbelt { display: flex; align-items: center; }
-.toolbelt button {
-  border: 1px solid var(--dw-border);
-  border-right: 0;
-  background: var(--dw-surface-2);
-  color: var(--dw-muted);
-  border-radius: 0;
-  padding: var(--dw-s2) var(--dw-s3);
-}
-.toolbelt button:first-of-type { border-radius: var(--dw-r1) 0 0 var(--dw-r1); }
-.toolbelt button:last-of-type {
-  border-right: 1px solid var(--dw-border);
-  border-radius: 0 var(--dw-r1) var(--dw-r1) 0;
-}
-.toolbelt button:hover { background: var(--dw-accent-bg); color: var(--dw-text); }
-#status, #yamlStatus, #vStatus { color: var(--dw-muted); font-size: var(--dw-fs-sm); margin-left: auto; }
-#status.ok, #yamlStatus.ok, #vStatus.ok { color: var(--dw-ok); }
-#status.err, #yamlStatus.err, #vStatus.err { color: var(--dw-bad); }
+/* The YAML editor's status (the chapter's and the output's are .cb-status in their bars). */
+#yamlStatus { color: var(--dw-muted); font-size: var(--dw-fs-sm); margin-left: auto; }
+#yamlStatus.ok { color: var(--dw-ok); }
+#yamlStatus.err { color: var(--dw-bad); }
 
 .split { flex: 1; min-height: 0; display: flex; }
 
@@ -746,11 +731,9 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 0;
    typography) all come from site.css unchanged. The present (scaled) deck lives behind
    "Read / present"; document mode uses the #vDocSurface iframe. 7a is read-only scaffold;
    7b adds per-zone editing. */
-#viewEditor { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: var(--dw-s2); padding: var(--dw-s3); }
-.vhint { color: var(--dw-muted); font-size: var(--dw-fs-sm); margin-left: var(--dw-s3); }
-/* The surface row: slide organization panel + the canvas, side by side. Document mode
-   hides the panel (app.js) and the iframe canvas fills the row. */
-.vedit-layout { flex: 1; min-height: 0; display: flex; gap: var(--dw-s3); }
+#viewEditor { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+/* The surface row: the rail + the canvas, side by side, under the output bar. */
+.vedit-layout { flex: 1; min-height: 0; display: flex; gap: var(--dw-s3); padding: var(--dw-s3); }
 .vsurface {
   flex: 1;
   min-height: 0;
@@ -764,11 +747,26 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 0;
   overflow-anchor: none;
 }
 
-/* ---- Slide organization panel (filmstrip) — navigate / reorder / delete ----
-   A PowerPoint-style vertical list of slides left of the canvas. Each item shows the
-   slide number, layout badge and a short label; clicking scrolls the canvas to that
-   slide and highlights the item; ▲▼ reorder; the danger control deletes. Editor chrome
-   only (Rule 20) — tokens only; the canvas/slide look stays in site.css. */
+/* ---- The output bar (Stage 6): the chapter's document bar (.chapterbar) with an inline
+        title field, a "For …" pill (the .cb-readers recipe), Slides / Document (.dw-seg) and
+        a Present button (secondary). ---------------------------------------------------- */
+.cb-title-input {
+  field-sizing: content; min-width: 8ch; max-width: 42ch;
+  font: inherit; font-size: var(--dw-fs-sm); font-weight: var(--dw-w-medium); color: var(--dw-text);
+  background: transparent; border: 1px solid transparent; border-radius: var(--dw-r0);
+  padding: 2px var(--dw-s1); margin: -3px 0;
+}
+.cb-title-input:hover { border-color: var(--dw-border); }
+.cb-title-input:focus { outline: none; border-color: var(--dw-accent); background: var(--dw-surface); box-shadow: var(--dw-focus-ring); }
+.cb-readers-label b { font-weight: var(--dw-w-bold); }
+.cb-present { display: inline-flex; align-items: center; gap: var(--dw-s2); height: 30px; padding: 0 var(--dw-s3); font-size: var(--dw-fs-xs); }
+.cb-present svg { color: var(--dw-muted); }
+
+/* ---- The rail (Stage 6) — a deck's slide miniatures, a document's sections ----
+   Click goes there; drag moves (the gaps between items are the drop targets); the + in a gap
+   adds one right there; ⋯ (revealed on hover / focus, keyboard-reachable) moves, changes a
+   slide's layout, or deletes. Editor chrome only (Rule 20) — the miniature IS the slide,
+   drawn by site.css inside its own .dw-live-surface scope. */
 .vpanel {
   flex: none;
   width: 232px;
@@ -790,86 +788,83 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 0;
   color: var(--dw-muted);
   border-bottom: 1px solid var(--dw-border);
 }
-.vpanel-list { flex: 1; min-height: 0; overflow: auto; padding: var(--dw-s2); display: flex; flex-direction: column; gap: var(--dw-s2); }
+.vpanel-list { flex: 1; min-height: 0; overflow: auto; padding: var(--dw-s1) var(--dw-s2); display: flex; flex-direction: column; }
 .vpanel-empty { color: var(--dw-muted); font-size: var(--dw-fs-sm); padding: var(--dw-s2); }
-/* One slide item: number + badge + label, with reveal-on-hover reorder/delete tools. */
 .vpanel-item {
   position: relative;
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: 18px minmax(0, 1fr);
   align-items: start;
-  gap: var(--dw-s1) var(--dw-s2);
-  padding: var(--dw-s2);
-  border: 1px solid var(--dw-border);
+  gap: var(--dw-s2);
+  padding: var(--dw-s2) var(--dw-s1);
+  border: 1px solid transparent;
   border-radius: var(--dw-r1);
-  background: var(--dw-surface);
   cursor: pointer;
-  text-align: left;
-  transition: background 0.12s ease, border-color 0.12s ease;
 }
 .vpanel-item:hover { background: var(--dw-surface-2); }
 .vpanel-item:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
-.vpanel-item.active { border-color: var(--dw-accent); background: var(--dw-accent-bg); }
+.vpanel-item.active { background: var(--dw-accent-bg); }
+.vpanel-item.dragging { opacity: .45; }
 .vpanel-num {
-  grid-row: 1 / span 2;
-  align-self: center;
-  min-width: var(--dw-s5);
-  text-align: center;
+  padding-top: 2px;
+  text-align: right;
   font-family: var(--dw-font-mono);
-  font-size: var(--dw-fs-sm);
-  color: var(--dw-faint);
-}
-.vpanel-item.active .vpanel-num { color: var(--dw-accent); }
-.vpanel-badge {
-  justify-self: start;
   font-size: var(--dw-fs-xs);
-  font-weight: var(--dw-w-medium);
-  text-transform: uppercase;
-  letter-spacing: var(--dw-track-caps);
   color: var(--dw-muted);
+  font-variant-numeric: tabular-nums;
 }
+.vpanel-item.active .vpanel-num { color: var(--dw-accent); font-weight: var(--dw-w-bold); }
 .vpanel-label {
-  grid-column: 2;
+  padding-right: var(--dw-s5); /* room for ⋯ */
   font-size: var(--dw-fs-sm);
   color: var(--dw-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.vpanel-label.is-auto { color: var(--dw-faint); font-style: italic; }
-/* Reorder/delete tools — revealed on hover/focus (kept reachable by keyboard). */
-.vpanel-tools {
-  grid-column: 1 / -1;
-  display: flex;
-  gap: var(--dw-s1);
-  margin-top: var(--dw-s1);
+.vpanel-more {
+  position: absolute; top: var(--dw-s1); right: var(--dw-s1);
+  width: 24px; height: 24px; padding: 0;
+  display: inline-grid; place-items: center;
+  border: 1px solid var(--dw-border); border-radius: var(--dw-r0);
+  background: var(--dw-surface); color: var(--dw-muted);
   opacity: 0;
-  transition: opacity 0.12s ease;
 }
-.vpanel-item:hover .vpanel-tools,
-.vpanel-item:focus-within .vpanel-tools { opacity: 1; }
-.vpanel-tbtn {
-  border: 1px solid var(--dw-border);
+.vpanel-item:hover .vpanel-more, .vpanel-more:focus-visible, .vpanel-more[aria-expanded="true"] { opacity: 1; }
+.vpanel-more:hover { color: var(--dw-text); background: var(--dw-surface-2); }
+/* A miniature: the 1920×1080 slide at 176 px wide (zoom 176/1920). */
+.vthumb {
+  width: 176px; height: 99px; overflow: hidden;
+  border: 1px solid var(--dw-border); border-radius: var(--dw-r0);
+  background: var(--dw-surface); color: var(--dw-text);
+  pointer-events: none;
+}
+.vpanel-item.active .vthumb { border-color: var(--dw-accent); box-shadow: 0 0 0 1px var(--dw-accent); }
+.vthumb .slide.active[data-layout] {
+  position: relative; width: 1920px; height: 1080px; overflow: hidden;
+  zoom: 0.0916667;
   background: var(--dw-surface);
-  color: var(--dw-muted);
-  border-radius: var(--dw-r0);
-  font-size: var(--dw-fs-xs);
-  line-height: 1;
-  padding: var(--dw-s1) var(--dw-s2);
-  cursor: pointer;
 }
-.vpanel-tbtn:hover { color: var(--dw-accent); border-color: var(--dw-accent); background: var(--dw-accent-bg); }
-.vpanel-tbtn:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
-.vpanel-tbtn:disabled { opacity: 0.45; cursor: default; }
-/* Delete uses the danger OUTLINE recipe — never solid red at rest (Rule 8). */
-.vpanel-tbtn-danger { color: var(--dw-bad); margin-left: auto; }
-.vpanel-tbtn-danger:hover { color: var(--dw-bad); border-color: var(--dw-bad); background: var(--dw-bad-bg); }
-/* "+ Add slide" entry under the list — secondary, never the view's primary button. */
+.vthumb-label { display: block; padding: var(--dw-s2); font-size: var(--dw-fs-xs); color: var(--dw-muted); }
+/* Between two items: the insert + (shown on hover / focus) and the drop line of a drag. */
+.vrail-gap { position: relative; height: var(--dw-s2); flex: none; }
+.vrail-gap.drop::before { content: ""; position: absolute; left: var(--dw-s1); right: var(--dw-s1); top: 50%; height: 2px; margin-top: -1px; background: var(--dw-accent); }
+.vrail-insert {
+  position: absolute; left: calc(50% - 11px); top: calc(50% - 11px); z-index: 1;
+  width: 22px; height: 22px; padding: 0;
+  display: inline-grid; place-items: center;
+  border: 1px solid var(--dw-accent); border-radius: var(--dw-r1);
+  background: var(--dw-surface); color: var(--dw-accent);
+  opacity: 0;
+}
+.vrail-gap:hover .vrail-insert, .vrail-insert:focus-visible { opacity: 1; }
+.vrail-insert:hover { background: var(--dw-accent-bg); }
+/* "+ Add slide" / "+ Add section" under the list — secondary, never a primary button. */
 .vpanel-add {
   flex: none;
   margin: var(--dw-s2);
   padding: var(--dw-s2);
-  border: 1px dashed var(--dw-border);
+  border: 1px dashed var(--dw-border-strong);
   border-radius: var(--dw-r1);
   background: var(--dw-surface);
   color: var(--dw-muted);
@@ -877,8 +872,7 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 0;
   cursor: pointer;
 }
 .vpanel-add:hover { color: var(--dw-accent); border-color: var(--dw-accent); background: var(--dw-accent-bg); }
-.vpanel-add:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
-/* The document-mode preview still rides in an iframe (display-only filtered page). */
+.vpanel-add:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }/* The document-mode preview still rides in an iframe (display-only filtered page). */
 .vedit-surface {
   width: 100%;
   height: 100%;

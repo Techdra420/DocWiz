@@ -391,42 +391,54 @@
     </section>
 
     <section id="viewEditor" hidden>
-      <div class="fm">
-        <label data-tip="The view's title, shown as its tab in the handover.">Title <input id="vTitle"></label>
-        <label data-tip="Who this view is for. Included sections are filtered to this audience — admin-only blocks won't show in a user view.">Audience <select id="vAudience"></select></label>
-        <label data-tip="Slides = a click-through presentation (the PowerPoint replacement). Document = one tidy filtered page.">Mode
-          <select id="vMode">
-            <option value="slides">Slides (presentation)</option>
-            <option value="document">Document (page)</option>
-          </select></label>
-        <button id="vReadBtn" type="button" data-tip="Open the deck the way your audience sees it — full-screen-ready slides, one at a time. This is the present/handover view; editing happens on the surface below.">Read / present</button>
-        <button id="vExportBtn" type="button" data-tip="Export this view as a single self-contained .html file — emailable, opens in any browser. Save first.">Export single file</button>
-        <button id="vDuplicateBtn" type="button" data-tip="Save, then copy this view with all its slides — build the next training or handover from a structure that already works.">Duplicate</button>
-        <button id="vDeleteBtn" type="button" data-tip="Delete this view (its file is removed).">Delete view</button>
-        <span id="vStatus"></span>
+      <!-- The output bar (Stage 6): the chapter's document-bar pattern — what it is and its
+           title, who it is for, save state, Slides or Document, Present, ⋯. Changes save by
+           themselves. -->
+      <div class="chapterbar output-bar">
+        <div class="cb-crumb">
+          <span class="cb-crumb-sec" id="vKind"></span>
+          <span class="cb-crumb-sep" aria-hidden="true">/</span>
+          <input id="vTitle" class="cb-title-input" aria-label="Title of this output" spellcheck="false"
+            data-tip="The output's title — its tab in the handover and the first slide of a deck.">
+        </div>
+        <button type="button" class="cb-readers" id="vFor" aria-haspopup="menu" aria-expanded="false"
+          data-tip="Who this output is for. Its chapters and blocks are filtered to this audience — another audience's blocks never show in it.">
+          <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="6" cy="5.5" r="2.3"/><path d="M1.8 13c.6-2.3 2.2-3.6 4.2-3.6s3.6 1.3 4.2 3.6"/><path d="M10.6 3.4a2.2 2.2 0 0 1 0 4.3M12 9.6c1.2.5 2 1.6 2.3 3.4"/></svg>
+          <span class="cb-readers-label">For <b id="vForLabel"></b></span>
+          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
+        </button>
+        <div class="cb-actions">
+          <span class="cb-save-dot" aria-hidden="true"></span>
+          <span id="vStatus" class="cb-status" role="status"></span>
+          <div class="dw-seg cb-mode" id="vModeSeg" role="group" aria-label="Kind of output">
+            <button type="button" data-vmode="slides" aria-pressed="false"
+              data-tip="A slide deck — a click-through presentation, one slide at a time.">Slides</button>
+            <button type="button" data-vmode="document" aria-pressed="false"
+              data-tip="A document — one tidy page of sections, like a quick reference.">Document</button>
+          </div>
+          <button id="vReadBtn" type="button" class="cb-present"></button>
+          <button type="button" class="cb-kebab-btn" id="vMoreBtn" aria-haspopup="menu" aria-expanded="false"
+            data-tip="More — duplicate this output, export it as one file, or delete it.">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+          </button>
+        </div>
       </div>
-      <div class="toolbelt">
-        <button id="vAddSlide" type="button"
-          data-tip="Add a slide after the last one — pick a layout (title + content, two columns, big media, or a section divider). You fill in its content on the slide itself.">+ Add slide</button>
-        <span class="vhint">This is the slide canvas — every slide shown full-size, laid out exactly as your audience sees it. Use “Read / present” for the click-through deck.</span>
-      </div>
-      <!-- Slides mode lays out a left organization panel (the slide list — navigate,
-           reorder, delete) beside the slide canvas; document mode hides the panel and
-           shows the filtered-page iframe full width. The canvas is rendered in THIS
-           (parent) document, like the chapter editor's #editor2.dw-live-surface: site.css
-           applies inside .dw-live-surface via the /app/site-scoped.css @scope wrapper. The
-           slide canvas follows the editor page theme (no pinned data-theme — Rule 16). app.js
-           injects the RenderSlides fragment into #vEditSurface and marks each .slide .active. 7b
-           mounts per-zone editors in here (one document — no cross-document ProseMirror).
-           Document mode swaps in the #vDocSurface iframe instead (a filtered page). -->
+      <!-- The rail (slide miniatures, or a document's sections) sits beside the canvas. The
+           canvas is rendered in THIS (parent) document, like the chapter editor's
+           #editor2.dw-live-surface: site.css applies inside .dw-live-surface via the
+           /app/site-scoped.css @scope wrapper. The slide canvas follows the editor page theme
+           (no pinned data-theme — Rule 16). app.js injects the RenderSlides fragment into
+           #vEditSurface and marks each .slide .active; zone editors mount in here (one
+           document — no cross-document ProseMirror). A document renders its sections there
+           too; the #vDocSurface iframe is only the read view. -->
       <div id="vEditLayout" class="vedit-layout">
-        <!-- PowerPoint-style slide organization panel: a vertical list of slides to
-             navigate, reorder (▲▼) and delete. Built by app.js renderSlidePanel(). -->
+        <!-- The rail (Stage 6): miniatures of the slides (a deck) or the list of sections (a
+             document) — click to go there, drag to reorder, ⋯ for move / layout / delete, and
+             add between any two. Built by app.js renderSlidePanel(). -->
         <aside id="vPanel" class="vpanel" aria-label="Slides">
-          <div class="vpanel-head">Slides</div>
+          <div class="vpanel-head" id="vPanelHead"></div>
           <div id="vPanelList" class="vpanel-list" role="list"></div>
-          <button id="vPanelAdd" type="button" class="vpanel-add"
-            data-tip="Add a slide after the last one — pick a layout, then fill in its content on the slide itself.">+ Add slide</button>
+          <button id="vPanelAdd" type="button" class="vpanel-add"></button>
         </aside>
         <div id="vSurface" class="vsurface">
           <div id="vEditSurface" class="dw-live-surface dw-slide-edit"></div>

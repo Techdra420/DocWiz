@@ -264,6 +264,24 @@ Readers picker) · right: save state (amber `.cb-save-dot` while edits are pendi
 (`.cb-kebab-btn`, 34px, r1; pressed = `--dw-accent-bg` + accent) for History, Properties and
 ⋯. No ID chip, no Save button, no audience toggles.
 
+**Output bar** (`.chapterbar.output-bar`, Stage 6) — the document bar's pattern for an output:
+`Slide deck / <title>` (the title is a `.cb-title-input` — reads as text, a hairline on hover,
+the input ring on focus, sized to its content) · "For **User** ▾" (the `.cb-readers` pill, a
+single-choice audience menu) · save state · `.dw-seg` Slides · Document · Present (deck) or
+Read (document) as a secondary button with an icon · ⋯ (Duplicate…, Export as one HTML
+file, Delete output…). No primary button — outputs autosave.
+
+**The rail** (`#vPanel`, Stage 6) — 232px surface column beside the canvas. A deck shows real
+miniatures: each canvas slide cloned into a `.vthumb` (176×99, r0, border; the 1920×1080 slide
+at zoom 176/1920 inside its own `.dw-live-surface` scope, so site.css draws it; inert), the
+automatic title slide first as number 1 (numbers match the presentation's "2 of 12"). A
+document lists its sections as one-line labels. Items: mono tabular number · miniature or
+label; active = `--dw-accent-bg` (+ accent ring on the miniature); ⋯ (`.vpanel-more`, 24px,
+revealed on hover / focus) for Move up / down, Layout (the four layouts, checkable, with their
+one-line descriptions) and Delete. Between items, `.vrail-gap`: a 22px accent-outlined + on
+hover adds one right there, and a 2px accent line marks the drop point of a drag. "+ Add
+slide / section" (dashed) closes the list.
+
 **`.props-panel`** (Stage 6) — Properties: the side-panel recipe of History (300px surface,
 left border, `.hist-head` / `.hist-body`), holding a `.props-list` definition list: `dt` CAPS
 xs tracked muted, `dd` rows — the Section select (moves the chapter), Readers as neutral
@@ -293,9 +311,6 @@ succeeds.
 **`.fm`** — frontmatter row: labels `--dw-fs-sm` 600 `--dw-muted`; inputs surface bg,
 `--dw-border-strong` border, r1, padding s2 s3, mono for `ID`. F: accent border + ring.
 Audience checkboxes: accent `accent-color`.
-
-**`.toolbelt`** — ghost buttons grouped in a single bordered strip (`--dw-surface-2` bg, r1),
-separated by 1px `--dw-border` dividers — reads as one tool, not four stray buttons.
 
 **`.split` / `#editor` / `#splitter` / `#preview`** — `#splitter`: 6px, transparent;
 H/drag: `--dw-accent-glow`. `#preview`: `--dw-surface`, left border `--dw-border`; preview

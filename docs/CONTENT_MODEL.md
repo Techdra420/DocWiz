@@ -377,6 +377,10 @@ API site goes); any key works — the tab title derives from the key.
 
 A view is an ordered composition of transcluded source sections plus minimal glue.
 Views contain **no duplicated content** — only references and small connective text.
+The editor calls them **outputs** (Stage 6): a *slide deck* (`mode: slides`) or a *document*
+(`mode: document`, whose slides are shown as sections); the file format is unchanged. A
+slide's `layout` can be changed at any time — regions the new layout has keep their markdown,
+the rest moves into its first free region.
 
 ```yaml
 id: user-training
