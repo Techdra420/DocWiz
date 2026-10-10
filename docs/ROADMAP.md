@@ -7,8 +7,8 @@ clean machine).
 merged to `main`. Remaining for the v1.0 tag: close the pilot loop + release hygiene (tag, prune).
 ADR-004 (amended), ADR-005, ADR-006, ADR-007, and ADR-008 are all written in
 [ARCHITECTURE.md](ARCHITECTURE.md).
-**Last Updated:** 2026-09-17 — sample project replaced by the Stockroom demo, template library
-reset to the Software Handbook template, documentation consolidated.
+**Last Updated:** 2026-10-10 — editor scenario harness: stale `cellimgtools` / `undo` control
+selectors fixed (harness only, no editor behaviour change).
 
 Stage transitions require human approval. Success criteria are the checkpoints.
 
@@ -161,6 +161,7 @@ Open items (everything shipped is in Recent Changes):
 
 | Date | Stage | Description |
 |------|-------|-------------|
+| 2026-10-10 | Quality | Editor scenario harness (`editor2/scenario.html`): `cellimgtools` locates the cell-image Align-right control by capability (`[data-cap="place"]`, third button) instead of its reworded tooltip; `undo` finds the +Row button in `.e2-contextbar` instead of `.e2-maintoolbar`. Assertions unchanged; both modes and `run-all.ps1` pass |
 | 2026-09-17 | Release hygiene | Sample project replaced by the Stockroom demo (user / support / admin audiences; setup / operations / troubleshooting / reference / integration disciplines; `api_reference` / `release_notes` / `integration_guide` external packages); template library reset to the Software Handbook template; consumed planning docs removed; docs consolidated |
 | 2026-07-08 | Stage 5 | Chapter export + single-file HTML + print code-wrap fix: Export modal gains per-chapter selection and a PDF/HTML format toggle; printed code blocks wrap instead of baking a scrollbar |
 | 2026-06-30 | Stage 5 | External-doc tabs open inside a DocWiz back-strip wrapper; `_blank` links fixed in the native window |
