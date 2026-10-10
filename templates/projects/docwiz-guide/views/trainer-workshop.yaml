@@ -1,0 +1,69 @@
+# Training with DocWiz — a short workshop for trainers: how decks are made from the manual
+# and how to present them. Shows every slide layout, a sized linked block and a group.
+id: trainer-workshop
+title: Training with DocWiz
+audience: trainer
+mode: slides
+slides:
+  - layout: title-content
+    title: Today
+    regions:
+      body: |
+        1. Why decks come from the manual
+        2. Layouts and linked sections
+        3. Presenting
+        4. Your turn: a deck for your own training
+
+  - layout: two-column
+    title: Why decks come from the manual
+    regions:
+      left: |
+        A slide that **copies** the manual is out of date the day the manual changes.
+
+        A slide that **links** to the manual shows the current text every time it is built.
+      right: |
+        ::: note
+        Keep your own words on slides short: an agenda, a question, a summary. The *how* lives in the manual.
+        :::
+
+  - layout: title-content
+    title: Four layouts
+    regions:
+      body: |
+        ::: embed dw:slide-decks#slide-layouts width=80% align=center
+        :::
+
+  - layout: big-media
+    title: The deck editor
+    regions:
+      media: |
+        ::: embed dw:slide-decks#slide-deck-editor
+        :::
+
+  - layout: title-content
+    title: Show a few blocks of a chapter
+    subtitle: A group in the chapter, linked on the slide
+    regions:
+      body: |
+        ::: embed dw:building-blocks#group-example
+        :::
+
+  - layout: section-header
+    title: In front of the group
+    subtitle: Presenting from the handover
+
+  - layout: title-content
+    title: Presenting
+    regions:
+      body: |
+        ::: embed dw:slide-decks#presenting-keys width=60% align=center
+        :::
+
+  - layout: title-content
+    title: Your turn
+    regions:
+      body: |
+        - On the **Outputs** tab, click **Draft slides from a chapter…** and pick a chapter
+        - Delete the slides you don't need
+        - Add an agenda at the start and a *Questions?* slide at the end
+        - Click **Present**

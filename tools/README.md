@@ -60,3 +60,20 @@ PDF→Word is a reconstruction, not a conversion.
    Heading 1, strip typed numbering, convert NOTE/WARNING paragraphs to callouts, route
    images into `assets/`, and produce a review report.
 4. Work through the review worklist + Check results on the live editing surface.
+
+## guide/refresh-guide-assets.ps1 (DocWiz Guide screenshots and PDF)
+
+The **DocWiz Guide** template (`templates/projects/docwiz-guide`) shows real screenshots of
+the editor and the handover, and attaches a quick-reference PDF made by DocWiz's own export.
+After a UI change, regenerate them, then look at every changed picture before committing:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\guide\refresh-guide-assets.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File tools\guide\refresh-guide-assets.ps1 -Only welcome,history
+```
+
+It works on a throw-away copy (`C:\tmp\DocWiz Guide` by default — a neutral path, because the
+project folder shows in some screenshots), drives headless Edge over the DevTools protocol
+(`tools/guide/cdp.ps1`) to open menus and dialogs, and removes its copy from the recent-projects
+list afterwards. Each shot is a short list of steps in the script; when a label or a layout in
+the editor changes, adjust that shot's steps.

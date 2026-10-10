@@ -1,0 +1,64 @@
+# Administrator Guide — the technical sections of the manual on one page, filtered for
+# administrators (their audience blocks show; author and trainer blocks don't).
+id: admin-guide
+title: Administrator Guide
+audience: admin
+mode: document
+slides:
+  - layout: title-content
+    title: Requirements
+    regions:
+      body: |
+        ::: embed dw:install#requirements
+        :::
+
+        ::: embed dw:install#setup
+        :::
+
+  - layout: title-content
+    title: Sharing projects
+    regions:
+      body: |
+        ::: embed dw:install#sharing
+        :::
+
+  - layout: title-content
+    title: Templates
+    regions:
+      body: |
+        ::: embed dw:templates#save-as-template
+        :::
+
+  - layout: title-content
+    title: Word import
+    regions:
+      body: |
+        ::: embed dw:word-import#what-it-does
+        :::
+
+        ::: embed dw:word-import#word-pictures
+        :::
+
+  - layout: title-content
+    title: Documentation packages
+    regions:
+      body: |
+        ::: embed dw:documentation-packages
+        :::
+
+  - layout: title-content
+    title: The command line
+    regions:
+      body: |
+        ::: embed dw:command-line#commands
+        :::
+
+        ::: embed dw:command-line#good-to-know
+        :::
+
+  - layout: title-content
+    title: The project folder
+    regions:
+      body: |
+        ::: embed dw:project-folder#layout
+        :::

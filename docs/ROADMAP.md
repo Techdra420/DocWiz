@@ -14,7 +14,8 @@ ADR-004 (amended), ADR-005, ADR-006, ADR-007, and ADR-008 are all written in
 structure you can edit, history then autosave, shell and document bar, audiences, outputs
 editor, consolidation; approved with its decisions and steps the same day; Claude desktop app
 setup; then a toolbar design pass (formatting toolbar, context bars, document bar, slide
-toolbar; scroll bars in the theme).
+toolbar; scroll bars in the theme); then the DocWiz Guide template — the user manual,
+written in DocWiz, as a demo of every feature.
 
 Stage transitions require human approval. Success criteria are the checkpoints.
 
@@ -142,6 +143,9 @@ editor and presents it from the handover. ✔ Met.
 - [x] PDF export (manual + views) via native Chromium print; per-chapter selection and a
       PDF | single-file HTML format toggle
 - [x] Content-only zoom
+- [x] DocWiz Guide template (`templates/projects/docwiz-guide`): the user manual and tutorial,
+      written in DocWiz and offered on the welcome screen; demo of every feature; its
+      screenshots and PDF card regenerate with `tools/guide/refresh-guide-assets.ps1`
 - [ ] Deliver a training from the user view to a real audience
 - [ ] A non-programmer colleague edits a chapter unaided; collect feedback
 - [ ] Release hygiene: tag v1.0, prune merged branches
@@ -229,6 +233,7 @@ Open items (everything shipped is in Recent Changes):
 
 | Date | Stage | Description |
 |------|-------|-------------|
+| 2026-10-10 | Stage 5 | DocWiz Guide template (`templates/projects/docwiz-guide`, on the welcome screen next to the Software Handbook): the user manual and tutorial for DocWiz, written in DocWiz — 25 chapters in six sections (Getting started with a fifteen-minute tour, Writing chapters, Organizing the manual, Outputs and the handover, Administration, Help), each built with the feature it explains; three audiences (Author, Trainer, Administrator) with tagged blocks and a tagged step; four outputs using every slide layout, sized linked blocks and groups (Getting Started and Training with DocWiz decks, Quick Reference and Administrator Guide documents); a printable quick-reference PDF and a practice Word file as attachments; a Command Line documentation package. 15 screenshots of the real editor and handover, captured headlessly — `tools/guide/refresh-guide-assets.ps1` (a small CDP client in `tools/guide/cdp.ps1`) regenerates them and the PDF on a throw-away copy. `ShippedTemplatesTests` checks every template in `templates/projects` (zero issues, every linked section resolves) |
 | 2026-10-10 | Stage 6 | Toolbar design pass (designed on a Claude Design canvas, approved by the stakeholder): the formatting toolbar is one row at a 1280px window — Undo · Redo, Normal text ▾, the text marks, the lists and Quote, one **Align ▾** menu (the button shows the current alignment), **Link ▾** (web address, chapter or section, attachment, copy link to this section), **Picture**, **Table**, **Insert ▾** (picture, table, building block, group, special character, divider — each with a one-line hint) and **Readers**, the inserts and Readers with their names; the words fold away on a narrow window and groups wrap whole; the anchor button and the heading-anchor chip are gone (the Link menu copies a section's link). What can be inserted is one list (`editor2/inserts.js`) shared with the slide zones' slash menu (it said "Image" / "Linked element"). Readers uses the people icon everywhere (the eye is Preview as). The context bar is tinted so it reads as tools for the selection, every selection gets the same badge (PICTURE, TABLE, a callout's name …), groups carry their words (Size, Place, Rows, Columns, Align text — the right-click menu's words), paragraph above / below are icons instead of ¶↑ ¶↓, and **⋯** opens the same menu as right-clicking (where Copy link, Auto column widths and Focus now live, named); the capability audit counts a menu's items. The document bar: Read sits beside Edit · Source (it opens a tab), History and Properties carry their names, and a long title is cut short instead of wrapping the bar. The slide editor's toolbar spans the whole column above the slide list and the canvas, so it is one row (it wrapped to two) and has no Readers. The page title gets the handover's top spacing under the bars. Scroll bars and form controls follow the theme (`color-scheme` in tokens.css — they were light in dark mode, in the editor and the handover). Menus opened from a toolbar are real buttons: arrow keys move, Esc returns to the button |
 | 2026-10-10 | Stage 6 | History › All chapters: every chapter's saved changes in one list, newest first by day (`GET /api/history/all`, sharing the per-chapter timeline code; the "before history started" entries left out), 50 at a time; a row opens its chapter and compares that version with now, and the list stays for going through changes one after another |
 | 2026-10-10 | Stage 6 | Ctrl+Z for the sidebar: renaming, moving, adding and deleting sections and chapters (menus, drag, Properties, New chapter) records an undo step; Ctrl+Z / Ctrl+Y and the toolbar's Undo / Redo take sidebar changes and page edits newest first (compared by the page's undo depth), a toast names each change with an Undo link, a deleted chapter comes back from Recently deleted (and reopens if it was open). Renaming or moving the open chapter now updates it in place instead of reopening it, so its typing history survives; nothing undoes behind an open dialog. Also fixed: typing on a slide threw an error when refreshing the title slide's miniature |

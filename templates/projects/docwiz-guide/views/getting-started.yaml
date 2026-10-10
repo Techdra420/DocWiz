@@ -1,0 +1,82 @@
+# Getting Started — the introductory training for authors. Every slide but the agenda and
+# the last one shows a part of the manual, so the deck is always as current as the guide.
+id: getting-started
+title: Getting Started with DocWiz
+audience: author
+mode: slides
+slides:
+  - layout: title-content
+    title: What you will learn
+    regions:
+      body: |
+        - **The idea** — one source, many outputs
+        - **The editor** — the parts of the window
+        - **Writing** — pictures, tables and building blocks
+        - **Readers** — one manual for several audiences
+        - **The handover** — check it, build it, send it
+
+  - layout: title-content
+    title: One source, many outputs
+    regions:
+      body: |
+        ::: embed dw:welcome#the-idea
+        :::
+
+  - layout: big-media
+    title: The editor
+    regions:
+      media: |
+        ::: embed dw:editor-tour#editor-overview
+        :::
+
+  - layout: title-content
+    title: The parts of the window
+    regions:
+      body: |
+        ::: embed dw:editor-tour#editor-areas
+        :::
+
+  - layout: title-content
+    title: Open your own copy
+    regions:
+      body: |
+        ::: embed dw:first-steps#open-a-copy-steps
+        :::
+
+  - layout: two-column
+    title: Pictures
+    regions:
+      left: |
+        - **Paste** a screenshot with Ctrl+V
+        - **Insert** one from the toolbar
+        - **Click** it to size and place it
+        - The caption doubles as its description
+      right: |
+        ::: embed dw:pictures#picture-tools
+        :::
+
+  - layout: title-content
+    title: Building blocks
+    regions:
+      body: |
+        ::: embed dw:building-blocks#block-list
+        :::
+
+  - layout: title-content
+    title: One procedure, several readers
+    subtitle: The step for administrators is left out of this deck — it is for authors
+    regions:
+      body: |
+        ::: embed dw:readers#tag-a-step
+        :::
+
+  - layout: title-content
+    title: Build the handover
+    regions:
+      body: |
+        ::: embed dw:first-steps#build-it
+        :::
+
+  - layout: section-header
+    title: Questions?
+    subtitle: Everything in this deck is in the manual — start with "Your first fifteen minutes"

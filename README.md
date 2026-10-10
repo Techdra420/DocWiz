@@ -67,6 +67,9 @@ theme). Decisions and steps are in [docs/ROADMAP.md](docs/ROADMAP.md).
 4. [docs/ROADMAP.md](docs/ROADMAP.md) — stages, checklists, success criteria
 5. [samples/stockroom-demo/](samples/stockroom-demo/) — a small example DocWiz project
    (a fictional inventory application with user / support / admin views)
+6. [templates/projects/docwiz-guide/](templates/projects/docwiz-guide/) — the **DocWiz Guide**:
+   the user manual and tutorial, written in DocWiz. Open it from the welcome screen
+   (Start from template › DocWiz Guide); every chapter uses the feature it explains
 
 ## Quick start
 
@@ -125,7 +128,8 @@ are converted to PNG automatically on import; for projects imported before this,
 **Convert N Word images to PNG…** project-menu action (or `docwiz convert-emf <project>`) does the same
 on demand — originals are moved to a kept-but-unshipped `_emf-originals/` folder.
 Authoring rules live in [docs/CONTENT_MODEL.md](docs/CONTENT_MODEL.md);
-[samples/stockroom-demo/](samples/stockroom-demo/) is a worked example of every feature.
+[samples/stockroom-demo/](samples/stockroom-demo/) is the development fixture, and the DocWiz
+Guide template is the user manual that demonstrates every feature.
 
 ## Repository layout
 

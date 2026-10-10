@@ -1,0 +1,64 @@
+# Quick Reference — one page for authors, made of sections of the manual. Exported as PDF
+# to attachments/quick-reference.pdf (the printable card the chapters link to).
+id: quick-reference
+title: Quick Reference
+audience: author
+mode: document
+slides:
+  - layout: title-content
+    title: About this page
+    regions:
+      body: |
+        The essentials of the DocWiz editor on one page. Every section links to the full chapter in the manual.
+
+  - layout: title-content
+    title: The editor window
+    regions:
+      body: |
+        ::: embed dw:editor-tour#editor-areas
+        :::
+
+  - layout: title-content
+    title: Building blocks
+    regions:
+      body: |
+        ::: embed dw:building-blocks#block-list
+        :::
+
+  - layout: title-content
+    title: Links
+    regions:
+      body: |
+        ::: embed dw:links#add-a-link
+        :::
+
+  - layout: title-content
+    title: One procedure, several readers
+    regions:
+      body: |
+        ::: embed dw:readers#tag-a-step
+        :::
+
+  - layout: title-content
+    title: Keys for writing
+    regions:
+      body: |
+        ::: embed dw:shortcuts#keys-writing
+        :::
+
+        ::: embed dw:shortcuts#keys-tables
+        :::
+
+  - layout: title-content
+    title: Typing shortcuts
+    regions:
+      body: |
+        ::: embed dw:text#typing-shortcuts
+        :::
+
+  - layout: title-content
+    title: Before you send a handover
+    regions:
+      body: |
+        ::: embed dw:handover#check
+        :::

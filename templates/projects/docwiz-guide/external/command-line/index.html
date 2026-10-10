@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DocWiz command-line reference</title>
+<!-- A stand-in for a generated reference site: self-contained (no external fonts, scripts
+     or images), so it works offline inside the handover like any documentation package. -->
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1b1f24; --muted: #57606a; --line: #d8dee4;
+    --head: #1f4e79; --head-fg: #ffffff; --code-bg: #f3f5f7; --accent: #1f4e79;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #15191e; --fg: #e3e7eb; --muted: #9aa4ae; --line: #2f363d;
+      --head: #0f2a43; --head-fg: #e3e7eb; --code-bg: #1f252c; --accent: #79b0e8;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font: 15px/1.55 "Segoe UI", system-ui, sans-serif; }
+  header { background: var(--head); color: var(--head-fg); padding: 14px 24px; }
+  header strong { font-size: 17px; }
+  header span { opacity: .75; margin-left: 10px; font-size: 13px; }
+  .wrap { display: flex; max-width: 1100px; margin: 0 auto; }
+  nav { flex: 0 0 210px; padding: 20px 16px; border-right: 1px solid var(--line);
+        position: sticky; top: 0; align-self: flex-start; }
+  nav a { display: block; color: var(--fg); text-decoration: none; padding: 3px 6px;
+          border-radius: 4px; font-family: Consolas, monospace; font-size: 13.5px; }
+  nav a:hover { background: var(--code-bg); }
+  nav p { margin: 14px 6px 4px; font-size: 11px; letter-spacing: .06em;
+          text-transform: uppercase; color: var(--muted); }
+  main { flex: 1; padding: 8px 32px 48px; min-width: 0; }
+  h1 { font-size: 26px; margin: 20px 0 6px; }
+  h2 { font-size: 19px; margin: 34px 0 8px; padding-top: 10px;
+       border-top: 1px solid var(--line); font-family: Consolas, monospace; color: var(--accent); }
+  h3 { font-size: 14px; margin: 18px 0 6px; text-transform: uppercase;
+       letter-spacing: .05em; color: var(--muted); }
+  code, pre { font-family: Consolas, "Cascadia Mono", monospace; font-size: 13.5px; }
+  code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+  pre { background: var(--code-bg); padding: 10px 14px; border-radius: 6px; overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 6px 0 12px; }
+  th, td { text-align: left; vertical-align: top; padding: 6px 10px;
+           border-bottom: 1px solid var(--line); }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+  td:first-child { white-space: nowrap; }
+  .lead { color: var(--muted); max-width: 70ch; }
+</style>
+</head>
+<body>
+<header><strong>DocWiz command-line reference</strong><span>documentation package · DocWiz Guide</span></header>
+<div class="wrap">
+<nav>
+  <p>General</p>
+  <a href="#usage">Usage</a>
+  <a href="#exit-codes">Exit codes</a>
+  <p>Commands</p>
+  <a href="#edit">edit</a>
+  <a href="#new">new</a>
+  <a href="#check">check</a>
+  <a href="#build">build</a>
+  <a href="#export-pdf">export-pdf</a>
+  <a href="#export-view">export-view</a>
+  <a href="#draft-view">draft-view</a>
+  <a href="#import-docx">import-docx</a>
+  <a href="#convert-emf">convert-emf</a>
+</nav>
+<main>
+<h1>Command-line reference</h1>
+<p class="lead">Every command and option of <code>DocWiz.exe</code>. This page is a
+documentation package: a self-contained website that the handover shows in its own tab,
+the way a generated API reference would be shipped. For task-oriented recipes, see the
+chapter <em>The command line</em> in the manual.</p>
+
+<h2 id="usage">Usage</h2>
+<pre><code>DocWiz.exe &lt;command&gt; &lt;arguments&gt; [options] | Out-Host</code></pre>
+<ul>
+  <li>Arguments and options must appear in the order shown on this page.</li>
+  <li>DocWiz.exe is a Windows program: in scripts, pipe its output (for example
+      <code>| Out-Host</code> in PowerShell) so the script waits for it and receives
+      its exit code.</li>
+  <li>Without a command, DocWiz.exe opens the editor — the same as double-clicking it.</li>
+  <li>A command DocWiz doesn't recognize prints the list of commands.</li>
+</ul>
+
+<h2 id="exit-codes">Exit codes</h2>
+<table>
+  <tr><th>Code</th><th>Meaning</th></tr>
+  <tr><td><code>0</code></td><td>Success. For <code>check</code> and <code>build</code>, warnings alone still give 0.</td></tr>
+  <tr><td><code>1</code></td><td>Failure: validation errors, a missing project, or a failed export.</td></tr>
+  <tr><td><code>2</code></td><td>The command or its options were not understood; the list of commands was printed.</td></tr>
+</table>
+
+<h2 id="edit">edit</h2>
+<pre><code>DocWiz.exe edit [&lt;project-folder&gt;] [--port &lt;n&gt;] [--no-browser]</code></pre>
+<p>Starts the editor. Without a folder it opens the welcome screen. An empty folder is
+turned into a new blank project first.</p>
+<table>
+  <tr><th>Option</th><th>Meaning</th></tr>
+  <tr><td><code>--port &lt;n&gt;</code></td><td>The local port of the editor. Default <code>5210</code>. If DocWiz is already running on that port, the running editor is opened instead.</td></tr>
+  <tr><td><code>--no-browser</code></td><td>Start the editor without opening a window — open <code>http://127.0.0.1:&lt;port&gt;</code> yourself.</td></tr>
+</table>
+
+<h2 id="new">new</h2>
+<pre><code>DocWiz.exe new &lt;folder&gt; [--template &lt;id&gt;]</code></pre>
+<p>Creates a new project in an empty or new folder.</p>
+<table>
+  <tr><th>Option</th><th>Meaning</th></tr>
+  <tr><td><code>--template blank</code></td><td>One introduction chapter and a user-training deck (the default).</td></tr>
+  <tr><td><code>--template software-handbook</code></td><td>Overview, installation, operations, troubleshooting and integration chapters with three outputs.</td></tr>
+</table>
+<p>The templates shown on the editor's welcome screen are not available here; start those from the editor.</p>
+
+<h2 id="check">check</h2>
+<pre><code>DocWiz.exe check &lt;project-folder&gt;</code></pre>
+<p>Validates the project and prints every error and warning, errors first, followed by a
+summary line such as <code>DW-GUIDE: 25 chapters, 4 views — 0 error(s), 0 warning(s).</code>
+Exits 1 when there are errors.</p>
+
+<h2 id="build">build</h2>
+<pre><code>DocWiz.exe build &lt;project-folder&gt; [-o &lt;out-dir&gt;] [--zip]</code></pre>
+<p>Checks the project and, when there are no errors, builds the handover.</p>
+<table>
+  <tr><th>Option</th><th>Meaning</th></tr>
+  <tr><td><code>-o &lt;out-dir&gt;</code></td><td>Where to write the handover. Default <code>&lt;project&gt;\output\handover</code>. <strong>The folder is deleted and rewritten.</strong></td></tr>
+  <tr><td><code>--zip</code></td><td>Also packs the handover as <code>&lt;code&gt;-v&lt;version&gt;.zip</code> in the parent of the output folder.</td></tr>
+</table>
+
+<h2 id="export-pdf">export-pdf</h2>
+<pre><code>DocWiz.exe export-pdf &lt;project-folder&gt; [-o &lt;dir&gt;] [--all]</code></pre>
+<p>Exports the manual as PDF using Microsoft Edge. Each file is reported as
+<code>OK</code> or <code>FAIL</code>; the exit code is 0 only if all succeeded.</p>
+<table>
+  <tr><th>Option</th><th>Meaning</th></tr>
+  <tr><td><code>-o &lt;dir&gt;</code></td><td>Output folder. Default <code>&lt;project&gt;\output\PDF_Export</code>. It may not be inside the handover folder.</td></tr>
+  <tr><td><code>--all</code></td><td>Also export every slide deck and document.</td></tr>
+</table>
+<p>Exporting single chapters, or exporting as single HTML files, is done from the editor.</p>
+
+<h2 id="export-view">export-view</h2>
+<pre><code>DocWiz.exe export-view &lt;project-folder&gt; &lt;view-id&gt; [-o &lt;file.html&gt;]</code></pre>
+<p>Exports one slide deck or document as a single, self-contained HTML file. The view id is
+the output's file name in the <code>views</code> folder without <code>.yaml</code>, for
+example <code>quick-reference</code>. Default output: <code>&lt;project&gt;\output\&lt;view-id&gt;.html</code>.</p>
+
+<h2 id="draft-view">draft-view</h2>
+<pre><code>DocWiz.exe draft-view &lt;project-folder&gt; &lt;chapter-id&gt; [-o &lt;file.yaml&gt;]</code></pre>
+<p>Drafts a slide deck from one chapter: a section-header slide from the chapter title,
+then one slide per section, each linked to the manual. Writes
+<code>views\&lt;chapter-id&gt;-deck.yaml</code> (never overwriting an existing file) and
+then runs <code>check</code>.</p>
+
+<h2 id="import-docx">import-docx</h2>
+<pre><code>DocWiz.exe import-docx &lt;file.docx&gt; &lt;project-folder&gt; --section &lt;folder&gt; [--discipline &lt;d&gt;]</code></pre>
+<p>Imports every section of a Word document as chapters into the section folder
+<code>&lt;folder&gt;</code> under <code>content</code> (created if needed), and prints a
+list of anything to review. Needs the <code>pandoc</code> folder next to DocWiz.exe.</p>
+<table>
+  <tr><th>Option</th><th>Meaning</th></tr>
+  <tr><td><code>--section &lt;folder&gt;</code></td><td>The section folder, for example <code>"040-Imported"</code>.</td></tr>
+  <tr><td><code>--discipline &lt;d&gt;</code></td><td>Optional label recorded in each chapter's header.</td></tr>
+</table>
+
+<h2 id="convert-emf">convert-emf</h2>
+<pre><code>DocWiz.exe convert-emf &lt;project-folder&gt;</code></pre>
+<p>Converts Word vector pictures (EMF, WMF) to PNG and updates the links to them. The
+originals are moved to <code>_emf-originals</code>, which is never shipped.</p>
+</main>
+</div>
+</body>
+</html>

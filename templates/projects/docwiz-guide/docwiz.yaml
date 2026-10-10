@@ -1,0 +1,21 @@
+project: DocWiz Guide
+code: DW-GUIDE
+customer: Everyone who writes with DocWiz
+version: 1.0.0
+language: en
+
+audiences:
+  - id: author
+    title: Author
+    description: Writes and updates chapters in the editor
+  - id: trainer
+    title: Trainer
+    description: Builds slide decks and presents trainings
+  - id: admin
+    title: Administrator
+    description: Installs DocWiz, builds and ships handovers, uses the command line
+
+external:
+  # Paths to self-contained HTML documentation folders (each needs an index.html).
+  # Every non-null entry is embedded into the handover with its own tab.
+  command_line: external/command-line
