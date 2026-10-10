@@ -2325,12 +2325,14 @@ dialog#modal .mlbl { display: block; margin: var(--dw-s4) 0 var(--dw-s1); font-s
 .preview-banner #previewText { flex: 1 1 320px; min-width: 0; }
 
 /* While previewing, the page reads like that audience's output: other readers' blocks are
-   hidden (main.js stylesheet), the rest lose their margin marker, the tools rest, and a
-   chapter this audience doesn't get is faded. Editing chrome only — the shipped look is
-   site.css. */
+   hidden (main.js stylesheet), the rest lose their margin marker, the toolbar goes away
+   (faded, the sticky bar let the page show through it; the banner says editing is paused),
+   and a chapter this audience doesn't get is faded. Editing chrome only — the shipped look
+   is site.css. */
 #editor2.e2-previewing .aud { border-left: 0; padding-left: 0; margin-left: 0; }
 #editor2.e2-previewing .aud-tag { display: none; }
-#editor2.e2-previewing .e2-top { opacity: .45; pointer-events: none; }
+#editor2.e2-previewing .e2-top { display: none; }
+#editor2.e2-previewing > article { padding-top: var(--dw-s5); }
 #editor2.e2-previewing.e2-left-out article { opacity: .45; }
 .previewing .cb-mode [data-mode="source"] { opacity: .45; pointer-events: none; }
 .side-pane .tree-row.dim > a { opacity: .5; }
