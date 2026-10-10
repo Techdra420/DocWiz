@@ -50,7 +50,7 @@
     reportError((e.reason && e.reason.message) || 'request failed');
   });
 
-  var state = { project: null, currentFile: null, currentYaml: null, currentView: null, viewSlides: null };
+  var state = { project: null, currentFile: null, currentYaml: null, currentView: null, viewSlides: null, chapterAudiences: [] };
   var editGen = 0; // counts edits; see the dirty setter and the save paths
 
   // Unsaved changes are visible, not just tracked: every Save button grows a dot the
@@ -65,11 +65,9 @@
         // Chapter bar gets a 'dirty' class that shows the amber save dot.
         var cb = document.querySelector('.chapterbar');
         if (cb) cb.classList.toggle('dirty', dirty);
-        // Legacy class on yaml/view save buttons.
-        ['vSaveBtn', 'yamlSaveBtn'].forEach(function (id) {
-          var b = $(id);
-          if (b) b.classList.toggle('dirty', dirty);
-        });
+        // Legacy class on the yaml save button.
+        var yb = $('yamlSaveBtn');
+        if (yb) yb.classList.toggle('dirty', dirty);
         if (dirty) {
           editGen++; // a save only clears "dirty" if nothing was edited after it started
           scheduleAutosave(); // every edit source flips this, so autosave sees them all
@@ -114,16 +112,31 @@
     $('projName').textContent = p.project;
     $('projCode').textContent = p.code;
     $('projBlock').hidden = false;
-    $('navWrap').hidden = false;
     // The "Editing template" badge marks that every live save lands in the template
     // master — the footgun this whole workflow is designed around.
     $('tplBadge').hidden = !p.isTemplate;
-    // Word vector images need a one-shot conversion before they render — show the action
-    // (with the live count) only when the open project still has any.
-    var emfBtn = $('convertEmfBtn');
-    emfBtn.hidden = !(p.emfCount > 0);
-    if (p.emfCount > 0)
-      $('convertEmfLabel').textContent = 'Convert ' + p.emfCount + ' EMF/WMF…';
+  }
+
+  // The project menu (the project's name in the header): everything that acts on the whole
+  // project. Word vector images need a one-shot conversion before they render — that item
+  // shows (with the live count) only while the open project still has any. The program's
+  // build date closes the menu, so "which version am I running" is one click away.
+  function projectMenu(anchor) {
+    var p = state.project;
+    var items = [
+      { text: 'Switch project…', run: closeProject },
+      { text: 'Open project folder', run: function () { api.send('POST', '/api/open-folder', {}).catch(quiet); } },
+      '-',
+      { text: 'Import Word document…', run: importDocx },
+      { text: 'Export PDF or HTML…', run: openExportPdf },
+    ];
+    if (p && p.emfCount > 0)
+      items.push({ text: 'Convert ' + p.emfCount + ' Word image' + (p.emfCount === 1 ? '' : 's') + ' to PNG…', run: convertEmf });
+    items.push('-',
+      { text: 'Save a copy as…', run: saveAs },
+      { text: 'Save as template…', run: saveAsTemplate });
+    if (state.buildStamp) items.push('-', { text: 'DocWiz build ' + state.buildStamp });
+    actionMenu(anchor, items);
   }
 
   // True while a tree name is being edited inline — a re-render (e.g. after an autosave)
@@ -184,7 +197,9 @@
           });
         };
         row.appendChild(a);
-        row.appendChild(treeAction('more', 'Chapter actions', function (btn) { chapterMenu(btn, c, s, ci, p.sections, label); }));
+        row.appendChild(treeAction('more', 'Chapter actions', function (btn) {
+          chapterMenu(btn, c, s, ci, p.sections, function () { label.ondblclick(new Event('dblclick')); });
+        }));
         row.addEventListener('dragstart', function (e) {
           dragging = { file: c.file, folder: s.folder, index: ci };
           e.dataTransfer.effectAllowed = 'move';
@@ -222,53 +237,113 @@
       });
     };
     tree.appendChild(addSection);
+    renderOutputs(p);
+  }
 
-    tree.appendChild(el('div', 'grp', 'Views'));
-    p.views.forEach(function (v) {
-      var a = el('a', null, v.title + ' · ' + v.mode);
-      a.href = '#';
-      a.setAttribute('data-tip', 'Audience view for "' + v.audience + '" (' +
-        (v.mode === 'slides' ? 'presentation' : 'filtered page') +
-        '). Built from chapter sections — edit it visually here.');
-      if (v.file === state.currentView) a.classList.add('current');
-      a.onclick = function (e) { e.preventDefault(); openView(v.file); };
-      tree.appendChild(a);
+  /* ---------- sidebar tabs (Stage 6): Manual · Outputs · Files ----------
+     Opening something shows its tab; the tabs themselves only switch what the sidebar lists. */
+
+  function setSideTab(name) {
+    Array.prototype.forEach.call(document.querySelectorAll('.side-tabs [data-side]'), function (b) {
+      b.setAttribute('aria-selected', String(b.getAttribute('data-side') === name));
     });
-    var addView = el('a', 'tree-add', '+ New view');
-    addView.href = '#';
-    addView.onclick = function (e) { e.preventDefault(); newView(); };
-    tree.appendChild(addView);
-    var draftView = el('a', 'tree-add', 'Draft from manual…');
-    draftView.href = '#';
-    draftView.setAttribute('data-tip',
-      'Generate a starting slide deck from one chapter — a slide per section, each ' +
-      'showing the live chapter content. A first draft to trim and rearrange, not a ' +
-      'finished deck.');
-    draftView.onclick = function (e) { e.preventDefault(); draftFromManual(); };
-    tree.appendChild(draftView);
+    $('tree').hidden = name !== 'manual';
+    $('outputsPane').hidden = name !== 'outputs';
+    $('filesPane').hidden = name !== 'files';
+    if (name === 'files') renderFiles();
+  }
 
-    // Handover artifacts — things bundled into the handover beyond chapters/views.
-    tree.appendChild(el('div', 'grp', 'Handover artifacts'));
-    var attachItem = el('a', null, 'Attachments');
-    attachItem.href = '#';
-    attachItem.setAttribute('data-tip', 'Files in attachments/ (PDFs, datasheets) bundled on the handover Attachments tab.');
-    if (state.currentArtifact === 'attach') attachItem.classList.add('current');
-    attachItem.onclick = function (e) { e.preventDefault(); openAttach(); };
-    tree.appendChild(attachItem);
-    var docsItem = el('a', null, 'Documentation packages');
-    docsItem.href = '#';
-    docsItem.setAttribute('data-tip', 'External HTML documentation bundled as handover tabs — e.g. a generated API site shown under the API Reference tab.');
-    if (state.currentArtifact === 'docs') docsItem.classList.add('current');
-    docsItem.onclick = function (e) { e.preventDefault(); openDocs(); };
-    tree.appendChild(docsItem);
+  // A sidebar row: a link that opens something (the tree's row recipe), current when open.
+  function sideLink(text, tip, isCurrent, onOpen) {
+    var a = el('a');
+    a.appendChild(el('span', 'tree-label', text));
+    a.href = '#';
+    if (tip) a.setAttribute('data-tip', tip);
+    if (isCurrent) a.classList.add('current');
+    a.onclick = function (e) { e.preventDefault(); onOpen(); };
+    return a;
+  }
 
-    tree.appendChild(el('div', 'grp', 'Project'));
-    var m = el('a', null, 'Project settings');
-    m.href = '#';
-    m.setAttribute('data-tip', 'Project name, code, customer, version, language, audiences and handover output — plus app preferences. The interactive editor for docwiz.yaml (raw YAML lives under Advanced).');
-    if (state.currentArtifact === 'settings') m.classList.add('current');
-    m.onclick = function (e) { e.preventDefault(); openSettings(); };
-    tree.appendChild(m);
+  function sideAction(text, tip, run) {
+    var b = el('button', 'tree-new-section', text);
+    b.type = 'button';
+    if (tip) b.setAttribute('data-tip', tip);
+    b.onclick = run;
+    return b;
+  }
+
+  // Outputs: the slide decks and documents built from the manual, then what the handover
+  // bundles besides them.
+  function renderOutputs(p) {
+    var pane = $('outputsPane');
+    pane.innerHTML = '';
+    [['slides', 'Slide decks', 'A click-through presentation'], ['document', 'Documents', 'One filtered page']]
+      .forEach(function (kind) {
+        var views = p.views.filter(function (v) { return (v.mode === 'slides') === (kind[0] === 'slides'); });
+        if (!views.length) return;
+        pane.appendChild(el('div', 'grp', kind[1]));
+        views.forEach(function (v) {
+          var a = sideLink(v.title, kind[2] + ' for ' + audienceTitle(v.audience) +
+            ' — built from the manual; edit it visually here.', v.file === state.currentView,
+            function () { openView(v.file); });
+          a.appendChild(el('span', 'side-meta', audienceTitle(v.audience)));
+          pane.appendChild(a);
+        });
+      });
+    if (!p.views.length) pane.appendChild(el('p', 'side-empty', 'No outputs yet. An output is a slide deck or a document for one audience, built from the manual.'));
+    pane.appendChild(sideAction('+ New output',
+      'Create a slide deck or a document for one audience.', newView));
+    pane.appendChild(sideAction('Draft slides from a chapter…',
+      'Generate a starting slide deck from one chapter — a slide per section, each showing the live chapter ' +
+      'content. A first draft to trim and rearrange, not a finished deck.', draftFromManual));
+
+    pane.appendChild(el('div', 'grp', 'Bundled with the handover'));
+    pane.appendChild(sideLink('Documentation packages',
+      'Separate HTML documentation shipped as its own tab in the handover — e.g. a generated API reference.',
+      state.currentArtifact === 'docs', openDocs));
+  }
+
+  // Files: the project's pictures and attachments. Clicking one puts it into the page being
+  // edited — through the same Insert dialogs as the toolbar, with that file already picked.
+  var IMAGE_EXT = /\.(png|jpe?g|gif|svg|webp|bmp)$/i;
+  function renderFiles() {
+    var pane = $('filesPane');
+    Promise.all([api.json('/api/assets'), api.json('/api/attachments')]).then(function (r) {
+      pane.innerHTML = '';
+      var pictures = (r[0].files || []).filter(function (f) { return IMAGE_EXT.test(f); });
+      var attachments = r[1].files || [];
+      pane.appendChild(el('div', 'grp', 'Pictures'));
+      if (!pictures.length) pane.appendChild(el('p', 'side-empty', 'No pictures yet — paste a screenshot into a chapter, or insert one from the toolbar.'));
+      pictures.forEach(function (name) {
+        var a = sideLink(baseName(name), 'Put this picture into the page you are editing (' + name + ').', false,
+          function () { insertFromFiles('image', name); });
+        var img = el('img', 'side-thumb');
+        img.src = '/assets/' + name.split('/').map(encodeURIComponent).join('/');
+        img.alt = '';
+        img.loading = 'lazy';
+        a.insertBefore(img, a.firstChild);
+        pane.appendChild(a);
+      });
+      pane.appendChild(el('div', 'grp', 'Attachments'));
+      if (!attachments.length) pane.appendChild(el('p', 'side-empty', 'No attachments yet — PDFs and datasheets that ship with the handover.'));
+      attachments.forEach(function (name) {
+        pane.appendChild(sideLink(baseName(name), 'Link this file from the page you are editing (' + name + ').', false,
+          function () { insertFromFiles('attachment', name); }));
+      });
+      var manage = sideAction('Manage attachments…', 'Upload or delete attachments — they ship on the handover’s Attachments tab.', openAttach);
+      if (state.currentArtifact === 'attach') manage.classList.add('current');
+      pane.appendChild(manage);
+    }).catch(function (e) { reportError(e.message || String(e)); });
+  }
+
+  function insertFromFiles(kind, name) {
+    var surface = window.DocWizEditor2 && window.DocWizEditor2.getActiveView && window.DocWizEditor2.getActiveView();
+    if (!surface || (!state.currentFile && !state.currentView)) {
+      noticeDialog('Open a page first', 'Open a chapter (or click into a slide) and put the cursor where the ' +
+        (kind === 'image' ? 'picture' : 'link') + ' should go — then click the file again.');
+      return;
+    }
+    inserters[kind](name);
   }
 
   /* ---------- structure editing in the tree (Stage 6 step 2) ----------
@@ -309,7 +384,7 @@
               state.currentFile = file;
               mountLiveEditor();
             }
-            if (file) { renderTree(state.project); updateCrumb(); }
+            if (file) { renderTree(state.project); updateCrumb(); renderProps(); }
           }
           return res;
         });
@@ -374,26 +449,38 @@
     });
   }
 
-  // Tree ⋯ menus use the shared context-menu recipe (.e2-menu), not a new menu style.
-  var openTreeMenu = null;
-  function closeTreeMenu() {
-    if (!openTreeMenu) return;
-    openTreeMenu.menu.remove();
-    openTreeMenu.anchor.setAttribute('aria-expanded', 'false');
-    openTreeMenu = null;
+  // The editor's action menus — tree ⋯, the project menu, the document bar's ⋯ and Readers —
+  // are one function on the shared context-menu recipe (.e2-menu). Items: '-' (separator),
+  // { text } (a label), { text, run, danger }, or a checkable { text, checked, run } that
+  // stays open so several can be ticked in a row.
+  var openMenu = null;
+  function closeActionMenu() {
+    if (!openMenu) return;
+    openMenu.menu.remove();
+    openMenu.anchor.setAttribute('aria-expanded', 'false');
+    openMenu = null;
   }
-  function treeMenu(anchor, items) {
-    closeTreeMenu();
+  var CHECK_ICON = '<svg class="mcheck" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7"/></svg>';
+  function actionMenu(anchor, items) {
+    closeActionMenu();
     var menu = el('div', 'e2-menu tree-menu');
     menu.setAttribute('role', 'menu');
     items.forEach(function (it) {
       if (it === '-') { menu.appendChild(el('div', 'msep')); return; }
       if (!it.run) { menu.appendChild(el('div', 'mlabel', it.text)); return; }
-      var b = el('button', 'mi' + (it.danger ? ' danger' : ''));
+      var checkable = it.checked !== undefined;
+      var b = el('button', 'mi' + (it.danger ? ' danger' : '') + (checkable ? ' mcheckable' : ''));
       b.type = 'button';
-      b.setAttribute('role', 'menuitem');
+      b.setAttribute('role', checkable ? 'menuitemcheckbox' : 'menuitem');
       b.appendChild(el('span', 'mlbl', it.text));
-      b.onclick = function () { closeTreeMenu(); it.run(); };
+      if (checkable) {
+        b.insertAdjacentHTML('beforeend', CHECK_ICON);
+        var sync = function (on) { b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); };
+        sync(!!it.checked);
+        b.onclick = function () { sync(it.run()); };
+      } else {
+        b.onclick = function () { closeActionMenu(); it.run(); };
+      }
       menu.appendChild(b);
     });
     document.body.appendChild(menu);
@@ -403,14 +490,22 @@
     menu.style.top = top + 'px';
     menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - menu.offsetWidth - 8)) + 'px';
     anchor.setAttribute('aria-expanded', 'true');
-    openTreeMenu = { menu: menu, anchor: anchor };
+    openMenu = { menu: menu, anchor: anchor };
     var first = menu.querySelector('button');
     if (first) first.focus();
   }
   document.addEventListener('mousedown', function (e) {
-    if (openTreeMenu && !openTreeMenu.menu.contains(e.target) && !openTreeMenu.anchor.contains(e.target)) closeTreeMenu();
+    if (openMenu && !openMenu.menu.contains(e.target) && !openMenu.anchor.contains(e.target)) closeActionMenu();
   });
-  window.addEventListener('scroll', closeTreeMenu, true);
+  window.addEventListener('scroll', closeActionMenu, true);
+  // Arrow keys move between a menu's items (Tab still leaves it).
+  document.addEventListener('keydown', function (e) {
+    if (!openMenu || (e.key !== 'ArrowDown' && e.key !== 'ArrowUp')) return;
+    var btns = Array.prototype.slice.call(openMenu.menu.querySelectorAll('button'));
+    var i = btns.indexOf(document.activeElement), down = e.key === 'ArrowDown', n = btns.length;
+    e.preventDefault();
+    btns[i < 0 ? (down ? 0 : n - 1) : (i + (down ? 1 : n - 1)) % n].focus();
+  });
 
   function sectionMenu(anchor, s, si, sections, labelEl) {
     var items = [
@@ -420,11 +515,13 @@
     if (si > 0) items.push({ text: 'Move up', run: function () { structureChange('POST', '/api/section-move', { folder: s.folder, direction: -1 }).catch(quiet); } });
     if (si < sections.length - 1) items.push({ text: 'Move down', run: function () { structureChange('POST', '/api/section-move', { folder: s.folder, direction: 1 }).catch(quiet); } });
     items.push('-', { text: 'Delete section…', danger: true, run: function () { deleteSection(s); } });
-    treeMenu(anchor, items);
+    actionMenu(anchor, items);
   }
 
-  function chapterMenu(anchor, c, s, ci, sections, labelEl) {
-    var items = [{ text: 'Rename', run: function () { labelEl.ondblclick(new Event('dblclick')); } }];
+  // One chapter menu for the tree's ⋯ and the document bar's ⋯. rename() starts the inline
+  // rename on the chapter's tree row.
+  function chapterMenu(anchor, c, s, ci, sections, rename) {
+    var items = [{ text: 'Rename', run: rename }];
     if (ci > 0) items.push({ text: 'Move up', run: function () { structureChange('POST', '/api/chapter-move', { file: c.file, direction: -1 }).catch(quiet); } });
     if (ci < s.chapters.length - 1) items.push({ text: 'Move down', run: function () { structureChange('POST', '/api/chapter-move', { file: c.file, direction: 1 }).catch(quiet); } });
     var others = sections.filter(function (x) { return x.folder !== s.folder; });
@@ -437,7 +534,19 @@
       });
     }
     items.push('-', { text: 'Delete chapter…', danger: true, run: function () { deleteChapter(c.file); } });
-    treeMenu(anchor, items);
+    actionMenu(anchor, items);
+  }
+
+  // The document bar's ⋯: the open chapter's tree menu. Rename shows the Manual tab and
+  // renames on the chapter's row there.
+  function docBarMenu(anchor) {
+    var p = state.project, where = findChapterByFile(state.currentFile);
+    if (!where) return;
+    chapterMenu(anchor, where.chapter, where.section, where.section.chapters.indexOf(where.chapter), p.sections, function () {
+      setSideTab('manual');
+      var label = document.querySelector('#tree .tree-row.current .tree-label');
+      if (label) { label.scrollIntoView({ block: 'nearest' }); label.ondblclick(new Event('dblclick')); }
+    });
   }
 
   function deleteSection(s) {
@@ -486,12 +595,13 @@
     return state.dirty && state.currentFile ? saveChapter() : Promise.resolve();
   }
 
+  // History and Properties share the space beside the page: opening one closes the other.
   function toggleHistory(open) {
     hist.open = open === undefined ? !hist.open : !!open;
     $('histPanel').hidden = !hist.open;
     $('cbHistoryBtn').setAttribute('aria-pressed', String(hist.open));
     if (!hist.open) endCompare();
-    else refreshHistory();
+    else { toggleProps(false); refreshHistory(); }
   }
 
   function refreshHistory() {
@@ -629,6 +739,8 @@
         endCompare();
         return loadProject().then(function () {
           updateCrumb();
+          var where = findChapterByFile(state.currentFile);
+          if (where) setReaders(where.chapter.audiences || []); // the restored version's readers
           mountLiveEditor();
           return api.json('/api/history?file=' + encodeURIComponent(state.currentFile));
         });
@@ -868,15 +980,10 @@
       sessionStorage.removeItem('dwFlash');
       if (flash) showToast(flash.title, flash.message, 'success');
     } catch (e) { /* storage off or malformed — nothing to show */ }
-    // Build stamp in the header: makes "which binary am I running" answerable
-    // from any screenshot (stale-exe sessions are indistinguishable otherwise).
+    // Build stamp (shown at the foot of the project menu): makes "which binary am I running"
+    // answerable (stale-exe sessions are indistinguishable otherwise).
     fetch('/api/version').then(function (r) { return r.json(); }).then(function (v) {
-      var el = $('buildStamp');
-      if (el && v.built) {
-        el.textContent = v.built;
-        var meta = $('buildMeta');
-        if (meta) meta.hidden = false;
-      }
+      if (v.built) state.buildStamp = v.built;
     }).catch(quiet);
     fetch('/api/project').then(function (r) {
       if (r.status === 409) {
@@ -918,9 +1025,8 @@
     document.body.classList.add('welcome'); // enables the sanctioned hero wash
     $('welcomeScreen').hidden = false;
     $('editorShell').hidden = true;
-    ['checkBtn', 'buildBtn', 'buildMeta', 'handoverLink', 'packageLink'].forEach(function (id) { $(id).hidden = true; });
+    ['checkBtn', 'buildBtn', 'handoverLink', 'packageLink'].forEach(function (id) { $(id).hidden = true; });
     $('projBlock').hidden = true;
-    $('navWrap').hidden = true;
     $('projName').textContent = '';
     $('projCode').textContent = '';
 
@@ -1187,17 +1293,16 @@
       state.currentYaml = null;
       state.currentView = null;
       show('chapterEditor');
-      // fmId is now a read-only chip (div > .cb-id-slug span), not an input.
-      var slugEl = $('fmId').querySelector('.cb-id-slug');
-      if (slugEl) slugEl.textContent = ch.id;
+      setSideTab('manual');
       updateCrumb();
       historyChapterChanged();
-      renderAudienceChecks(ch.audiences);
+      setReaders(ch.audiences);
       state.dirty = false;
       setStatus('');
       renderTree(state.project);
       mountLiveEditor();
       refreshHistory(); // an open History panel follows to the newly opened chapter
+      renderProps();    // and so does an open Properties panel
     });
   }
 
@@ -1208,6 +1313,7 @@
   function mountLiveEditor() {
     if (!state.currentFile) return;
     if (window.DocWizEditor2) {
+      markMode('edit'); // a newly opened chapter shows the page
       window.DocWizEditor2
         .open(state.currentFile, {
           onDirty: function () { state.dirty = true; },
@@ -1219,47 +1325,156 @@
     }
   }
 
-  // Audience dot color map: maps audience id prefix to a token class.
-  var AUD_DOT_MAP = { user: 'cb-dot-op', support: 'cb-dot-ma', admin: 'cb-dot-en' };
+  /* ---------- the document bar (Stage 6) ---------- */
 
-  function renderAudienceChecks(selected) {
-    var container = $('fmAudiences');
-    container.innerHTML = '';
-    state.project.audiences.forEach(function (a) {
-      var btn = el('button');
-      btn.type = 'button';
-      btn.className = 'cb-aud-btn';
-      btn.dataset.aud = a.id;
-      btn.dataset.on = selected.indexOf(a.id) >= 0 ? '1' : '0';
+  // Readers: who this chapter is for (its `audiences:`), in the project's audience order.
+  function setReaders(ids) {
+    state.chapterAudiences = state.project.audiences
+      .map(function (a) { return a.id; })
+      .filter(function (id) { return ids.indexOf(id) >= 0; });
+    var titles = state.chapterAudiences.map(audienceTitle);
+    var all = state.project.audiences.length;
+    $('cbReadersLabel').textContent = !titles.length ? 'No readers'
+      : titles.length === all && all > 1 ? 'All readers'
+      : titles.length <= 2 ? titles.join(', ')
+      : titles.slice(0, 2).join(', ') + ' +' + (titles.length - 2);
+    $('cbReaders').classList.toggle('none', !titles.length);
+    renderPropsReaders();
+  }
 
-      // Color dot
-      var dot = el('span');
-      dot.className = 'cb-aud-dot ' + (AUD_DOT_MAP[a.id] || 'cb-dot-en');
-      dot.setAttribute('aria-hidden', 'true');
-      btn.appendChild(dot);
-
-      // Label text
-      btn.appendChild(document.createTextNode(a.title));
-
-      btn.onclick = function () {
-        var on = btn.dataset.on === '1';
-        btn.dataset.on = on ? '0' : '1';
-        state.dirty = true;
+  function readersMenu(anchor) {
+    var items = state.project.audiences.map(function (a) {
+      return {
+        text: a.title,
+        checked: state.chapterAudiences.indexOf(a.id) >= 0,
+        run: function () {
+          var on = state.chapterAudiences.indexOf(a.id) < 0;
+          setReaders(on ? state.chapterAudiences.concat(a.id)
+            : state.chapterAudiences.filter(function (id) { return id !== a.id; }));
+          state.dirty = true; // saves with the next autosave
+          return on;
+        },
       };
-      container.appendChild(btn);
     });
+    items.unshift({ text: 'Who reads this chapter?' });
+    items.push('-', { text: 'Manage audiences…', run: function () { openSettings('audiences'); } });
+    actionMenu(anchor, items);
   }
 
   // The title is the chapter's H1 (the server reads it on save), so only the audiences
   // travel with the body. `discipline` is no longer edited — it records the skeleton the
   // chapter started from and the server leaves it as it is.
   function chapterFormValues() {
-    return {
-      title: '',
-      audiences: Array.prototype.slice
-        .call($('fmAudiences').querySelectorAll('[data-on="1"]'))
-        .map(function (btn) { return btn.dataset.aud; }),
+    return { title: '', audiences: state.chapterAudiences.slice() };
+  }
+
+  // Edit · Source · Read. Read opens a tab and leaves the mode as it was.
+  function markMode(mode) {
+    Array.prototype.forEach.call(document.querySelectorAll('.cb-mode [data-mode]'), function (b) {
+      if (b.getAttribute('data-mode') !== 'read') b.setAttribute('aria-pressed', String(b.getAttribute('data-mode') === mode));
+    });
+  }
+  function setChapterMode(mode) {
+    if (!state.currentFile || !window.DocWizEditor2) return;
+    window.DocWizEditor2.setMode(mode).then(markMode).catch(quiet); // a failed save says why in the status line
+  }
+
+  // Properties: the chapter's section (change it to move the chapter), readers, where it is
+  // used, its permanent link id and its file. Remembered open or closed on this computer.
+  var props = { open: false };
+  try { props.open = localStorage.getItem('dw-props-open') === '1'; } catch (e) { /* storage off */ }
+  function toggleProps(open) {
+    props.open = open === undefined ? !props.open : !!open;
+    try { localStorage.setItem('dw-props-open', props.open ? '1' : '0'); } catch (e) { /* storage off */ }
+    $('propsPanel').hidden = !props.open;
+    $('cbPropsBtn').setAttribute('aria-pressed', String(props.open));
+    if (props.open) { toggleHistory(false); renderProps(); }
+  }
+
+  function renderProps() {
+    if (!props.open || !state.currentFile) return;
+    var where = findChapterByFile(state.currentFile);
+    var body = $('propsBody');
+    if (!where) { body.innerHTML = ''; return; }
+    var c = where.chapter;
+    body.innerHTML = '';
+    var dl = el('dl', 'props-list');
+    function row(label, content) {
+      dl.appendChild(el('dt', null, label));
+      var dd = el('dd');
+      content.forEach(function (n) { dd.appendChild(n); });
+      dl.appendChild(dd);
+      return dd;
+    }
+
+    var sec = el('select', 'props-select');
+    sec.setAttribute('aria-label', 'Section');
+    state.project.sections.forEach(function (s) {
+      var o = el('option', null, s.title);
+      o.value = s.folder;
+      o.selected = s === where.section;
+      sec.appendChild(o);
+    });
+    sec.onchange = function () {
+      var target = state.project.sections.filter(function (s) { return s.folder === sec.value; })[0];
+      structureChange('POST', '/api/chapter-move-to', { file: c.file, folder: target.folder, index: target.chapters.length })
+        .catch(function () { renderProps(); });
     };
+    row('Section', [sec]);
+
+    var readers = el('span', 'props-chips');
+    readers.id = 'propsReaders';
+    var change = el('button', 'hist-link', 'Change');
+    change.type = 'button';
+    change.onclick = function () { readersMenu($('cbReaders')); };
+    row('Readers', [readers, change]);
+
+    var used = row('Used in', [el('span', 'props-note', 'Looking…')]);
+    api.json('/api/chapter-usage?file=' + encodeURIComponent(c.file)).then(function (u) {
+      used.innerHTML = '';
+      u.outputs.forEach(function (o) {
+        var n = o.slides.length;
+        var a = el('a', 'props-used', o.title);
+        a.href = '#';
+        a.appendChild(el('small', null, o.mode === 'slides'
+          ? (n === 1 ? 'slide ' : 'slides ') + o.slides.join(', ')
+          : (n === 1 ? 'section ' : 'sections ') + o.slides.join(', ')));
+        a.onclick = function (e) { e.preventDefault(); openView(o.file); };
+        used.appendChild(a);
+      });
+      u.linkedFrom.forEach(function (ch) {
+        var a = el('a', 'props-used', ch.title);
+        a.href = '#';
+        a.appendChild(el('small', null, 'links here'));
+        a.onclick = function (e) { e.preventDefault(); openChapter(ch.file); };
+        used.appendChild(a);
+      });
+      if (!u.outputs.length && !u.linkedFrom.length)
+        used.appendChild(el('span', 'props-note', 'Not in any output yet, and no chapter links here.'));
+    }).catch(function (e) { used.innerHTML = ''; used.appendChild(el('span', 'props-note', e.message || String(e))); });
+
+    var copy = el('button', 'hist-link', 'Copy link');
+    copy.type = 'button';
+    copy.setAttribute('data-tip', 'Copies dw:' + c.id + ' — paste it wherever a chapter link is asked for.');
+    copy.onclick = function () {
+      if (navigator.clipboard) navigator.clipboard.writeText('dw:' + c.id).then(function () {
+        setStatus('Link copied', 'ok');
+      }).catch(quiet);
+    };
+    row('Link ID', [el('code', 'props-code', c.id), copy,
+      el('small', 'props-note', 'Never changes, so links and slides keep working after renames.')]);
+    row('File', [el('code', 'props-code props-path', c.file)]);
+
+    body.appendChild(dl);
+    renderPropsReaders();
+  }
+
+  function renderPropsReaders() {
+    var box = $('propsReaders');
+    if (!box) return;
+    box.innerHTML = '';
+    if (!state.chapterAudiences.length) box.appendChild(el('span', 'props-note', 'No one — it appears only in the full manual.'));
+    state.chapterAudiences.forEach(function (id) { box.appendChild(el('span', 'props-chip', audienceTitle(id))); });
   }
 
   // The chapter bar's "Section / Title" label, from the loaded project (titles follow the H1).
@@ -1345,6 +1560,7 @@
         return loadProject().then(function () {
           updateCrumb();
           if (!hist.comparing) refreshHistory(); // the save is the newest entry now
+          if (doc && doc.file !== savedFile) renderProps(); // renamed: a new file name
         });
       })
       .catch(function (e) {
@@ -1562,8 +1778,9 @@
   }
 
   /* Selectable file list used by the image and attachment dialogs: the project's
-     files are the visible, primary choice — not a dropdown, not a browser picker. */
-  function createFileList(listEl, files, thumbPrefix, onSelect) {
+     files are the visible, primary choice — not a dropdown, not a browser picker. `initial`
+     (optional) is the file picked when the list opens; otherwise the first one. */
+  function createFileList(listEl, files, thumbPrefix, onSelect, initial) {
     var selected = null;
     function add(name, doSelect) {
       var row = el('button', 'file-row');
@@ -1596,8 +1813,10 @@
       if (row) row.classList.add('selected');
       onSelect(name);
     }
-    files.forEach(function (f) { add(f, false); });
-    if (files.length > 0) listEl.querySelector('.file-row').click();
+    var initialRow = null;
+    files.forEach(function (f) { var row = add(f, false); if (f === initial) initialRow = row; });
+    if (initialRow) { initialRow.click(); initialRow.scrollIntoView({ block: 'nearest' }); }
+    else if (files.length > 0) listEl.querySelector('.file-row').click();
     return {
       get: function () { return selected; },
       add: function (name) { add(name, true); },
@@ -1788,7 +2007,7 @@
         { hideOk: true }); // a row click inserts and closes; an OK button would do nothing
     },
 
-    image: function () {
+    image: function (picked) {
       api.json('/api/assets').then(function (res) {
         var files = res.files || [];
         var fileList = null;
@@ -1836,7 +2055,7 @@
             var listEl = root.querySelector('#mImgList');
             if (files.length === 0)
               listEl.innerHTML = '<p class="mhelp warn">No images in this project yet — upload one below.</p>';
-            fileList = createFileList(listEl, files, '/assets/', autoAlt);
+            fileList = createFileList(listEl, files, '/assets/', autoAlt, picked);
             root.querySelector('#mImgUpload').onchange = function (e) {
               var file = e.target.files[0];
               if (!file) return;
@@ -1917,7 +2136,7 @@
     // (No add-anchor dialog: anchors are automatic on save; the toolbar's anchor
     // button copies a heading's section link.)
 
-    attachment: function () {
+    attachment: function (picked) {
       api.json('/api/attachments').then(function (res) {
         var files = res.files || [];
         var fileList = null;
@@ -1952,7 +2171,7 @@
             var listEl = root.querySelector('#mAttList');
             if (files.length === 0)
               listEl.innerHTML = '<p class="mhelp warn">No attachments in this project yet — upload one below, or copy files into the attachments folder.</p>';
-            fileList = createFileList(listEl, files, null, autoText);
+            fileList = createFileList(listEl, files, null, autoText, picked);
             root.querySelector('#mAttUpload').onchange = function (e) {
               var file = e.target.files[0];
               if (!file) return;
@@ -2401,6 +2620,7 @@
       state.currentYaml = null;
       state.dirty = false;
       show('viewEditor');
+      setSideTab('outputs');
       $('vTitle').value = v.title || '';
       // While zone editors are mounted, a debounced full re-render would clobber the
       // editor the author is typing in (Task 7b). The title shows on the auto title
@@ -3039,25 +3259,24 @@
     }).catch(showWelcomeError);
   }
 
-  // Header Convert EMF…: one-shot EMF/WMF → PNG for the open project. A multi-second
-  // synchronous request (up to 162 metafiles), so disable + show a busy label, then reload
-  // so every surface re-renders with the now-PNG links (and the button hides — emfCount 0).
+  // Project menu › Convert Word images: one-shot EMF/WMF → PNG for the open project. A
+  // multi-second synchronous request (up to 162 metafiles), so say it is running, then reload
+  // so every surface re-renders with the now-PNG links (and the item goes — emfCount 0).
+  var convertingEmf = false;
   function convertEmf() {
     var n = state.project && state.project.emfCount;
-    if (!n) return;
+    if (!n || convertingEmf) return;
     confirmDialog('Convert ' + n + ' Word image' + (n === 1 ? '' : 's') + ' to PNG?',
       'Browsers can’t show EMF/WMF images. The originals are moved to _emf-originals/ (kept, not shipped).',
       'Convert images', function () {
-        var btn = $('convertEmfBtn');
-        btn.disabled = true;
-        $('convertEmfLabel').textContent = 'Converting…';
+        convertingEmf = true;
+        showToast('Converting images…', 'The editor reloads when the conversion is done.', 'success');
         api.send('POST', '/api/convert-emf', {}).then(function (r) {
           flashAfterReload('Images converted', 'Converted ' + r.converted + ' image(s) to PNG and updated ' +
             r.linksRewritten + ' link(s).' + (r.failed ? ' ' + r.failed + ' could not be converted and were left in place.' : ''));
           location.reload();
         }).catch(function (e) {
-          btn.disabled = false;
-          $('convertEmfLabel').textContent = 'Convert ' + n + ' EMF/WMF…';
+          convertingEmf = false;
           showToast('Conversion failed', e.message, 'error');
         });
       });
@@ -3463,9 +3682,10 @@
 
   function openDocs() {
     if (!confirmDiscard(openDocs, arguments)) return;
-    state.currentArtifact = 'docs';
     state.currentFile = null; state.currentView = null; state.currentYaml = null;
     show('viewDocs');
+    state.currentArtifact = 'docs';
+    setSideTab('outputs');
     renderTree(state.project);
     loadPkgList();
   }
@@ -3578,13 +3798,16 @@
     state.currentFile = null; state.currentView = null; state.currentYaml = null;
     show('viewAttach');
     state.currentArtifact = 'attach';
+    setSideTab('files');
     renderTree(state.project);
     loadAttachList();
   }
 
   function loadAttachList() {
-    api.json('/api/attachments').then(function (r) { renderAttach(r.files || []); })
-      .catch(function (e) { reportError(e.message || String(e)); });
+    api.json('/api/attachments').then(function (r) {
+      renderAttach(r.files || []);
+      if (!$('filesPane').hidden) renderFiles(); // the sidebar lists them too
+    }).catch(function (e) { reportError(e.message || String(e)); });
   }
 
   function renderAttach(files) {
@@ -3628,17 +3851,61 @@
     ['pl', 'Polish'], ['sk', 'Slovak'], ['pt', 'Portuguese'], ['nl', 'Dutch'],
   ];
 
-  function openSettings(section) {
-    if (!confirmDiscard(openSettings, arguments)) return;
-    // "Back to editor" returns to whatever was open before Settings.
-    if (state.currentFile || state.currentView) state.settingsReturn = { file: state.currentFile, view: state.currentView };
-    state.currentFile = null; state.currentView = null; state.currentYaml = null;
-    show('setPane');
-    state.currentArtifact = 'settings';
-    renderTree(state.project);
-    loadSettings();
-    selectSettingsSection(section || 'general');
+  // Settings is a sheet over the editor (Stage 6): what was open stays open underneath (and
+  // keeps autosaving), so closing the sheet is going back. While it is open the rest of the
+  // window is inert — except the native window's own controls.
+  function setBehindSheet(inert) {
+    ['editorShell', 'projBlock'].forEach(function (id) { $(id).inert = inert; });
+    document.querySelector('.hd-right').inert = inert;
   }
+  var sheetOpener = null;
+  function openSettings(section) {
+    closeActionMenu();
+    var sheet = $('setSheet');
+    if (sheet.hidden) {
+      sheetOpener = document.activeElement;
+      sheet.hidden = false;
+      setBehindSheet(true);
+      loadSettings();
+    }
+    selectSettingsSection(typeof section === 'string' ? section : 'general');
+    applyTheme(); // marks the current Appearance choice
+    $('setPane').focus();
+  }
+
+  function closeSettings() {
+    if (settingsDirty()) {
+      confirmDialog('Discard unsaved changes?', 'Your Project settings changes haven’t been saved yet.',
+        'Discard changes', function () { setDirty(false); closeSettings(); }, true);
+      return;
+    }
+    $('setSheet').hidden = true;
+    setBehindSheet(false);
+    if (sheetOpener && document.contains(sheetOpener)) sheetOpener.focus();
+    sheetOpener = null;
+  }
+
+  // Appearance: follow Windows (no saved choice — the no-flash script in index.html reads the
+  // OS), or always light / always dark.
+  var darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
+  function themeChoice() {
+    try { return localStorage.getItem('dw-theme') || 'system'; } catch (e) { return 'system'; }
+  }
+  function applyTheme() {
+    var c = themeChoice();
+    document.documentElement.setAttribute('data-theme', c === 'system' ? (darkQuery.matches ? 'dark' : 'light') : c);
+    Array.prototype.forEach.call(document.querySelectorAll('#themeMode button'), function (b) {
+      b.classList.toggle('active', b.getAttribute('data-theme-mode') === c);
+    });
+  }
+  function setTheme(choice) {
+    try {
+      if (choice === 'system') localStorage.removeItem('dw-theme');
+      else localStorage.setItem('dw-theme', choice);
+    } catch (e) { /* storage off: applies for this session only */ }
+    applyTheme();
+  }
+  darkQuery.addEventListener('change', function () { if (themeChoice() === 'system') applyTheme(); });
 
   function setDirty(on) { $('setPane').classList.toggle('dirty', !!on); }
 
@@ -3798,7 +4065,15 @@
       // Refresh the project model + chrome (name/code may have changed) and the raw view.
       return api.json('/api/project');
     }).then(function (p) {
+      var renumbered = state.project && state.project.numbering !== p.numbering;
       state.project = p; setProjectHeader(p); renderTree(p);
+      // The open chapter stays open under the sheet: a deleted audience was stripped from its
+      // file on the server, so drop it here too (a renamed one just shows its new name), and
+      // numbering switched on or off redraws the page (after saving what is pending).
+      if (state.currentFile) {
+        setReaders(state.chapterAudiences);
+        if (renumbered) flushUntilSaved(3).then(mountLiveEditor).catch(quiet);
+      }
       return api.json('/api/yaml?path=docwiz.yaml');
     }).then(function (r) { $('setRawText').value = r.text || ''; })
       .catch(function (e) { showToast('Settings not saved', e.message || String(e), 'error'); });
@@ -3827,8 +4102,8 @@
     // never bypassed; re-entering a chapter re-opens cleanly (DocWizEditor2.open calls
     // close() itself), so we never close the view we're about to mount.
     if (sectionId !== 'chapterEditor' && window.DocWizEditor2) window.DocWizEditor2.close();
-    if (sectionId !== 'viewDocs' && sectionId !== 'viewAttach' && sectionId !== 'setPane') state.currentArtifact = null;
-    ['welcome', 'chapterEditor', 'yamlEditor', 'viewEditor', 'viewDocs', 'viewAttach', 'setPane'].forEach(function (id) {
+    if (sectionId !== 'viewDocs' && sectionId !== 'viewAttach') state.currentArtifact = null;
+    ['welcome', 'chapterEditor', 'yamlEditor', 'viewEditor', 'viewDocs', 'viewAttach'].forEach(function (id) {
       $(id).hidden = id !== sectionId;
     });
   }
@@ -3938,11 +4213,11 @@
     if (elm) elm.onclick = handler;
   }
 
-  on('homeBtn', function closeProject() {
+  function closeProject() {
     if (!confirmDiscard(closeProject, arguments)) return;
     api.send('POST', '/api/close-project', {}).then(function () { location.reload(); });
-  });
-  on('openFolderBtn', function () { api.send('POST', '/api/open-folder', {}).catch(quiet); });
+  }
+  on('projMenuBtn', function () { projectMenu($('projMenuBtn')); });
   on('wOpenBtn', function () { openProject(null); });
   on('wNewBtn', function () { newProject('blank'); });
   // Saves rethrow on failure (so chained Build/Export stop); for direct button
@@ -3956,14 +4231,14 @@
       if (f.files && f.files[0]) { uploadAttach(f.files[0]); f.value = ''; }
     });
   })();
-  // Settings surface wiring (static elements in index.html).
-  on('setBack', function backFromSettings() {
-    if (!confirmDiscard(backFromSettings, arguments)) return;
-    var back = state.settingsReturn; state.settingsReturn = null;
-    if (back && back.file) openChapter(back.file);
-    else if (back && back.view) openView(back.view);
-    else show('welcome');
-  });
+  // Settings sheet wiring (static elements in index.html).
+  on('settingsBtn', function () { openSettings(); });
+  on('setClose', closeSettings);
+  (function wireSettingsSheet() {
+    var sheet = $('setSheet');
+    // A click on the dimmed area around the sheet closes it (same guard as the × button).
+    if (sheet) sheet.addEventListener('mousedown', function (e) { if (e.target === sheet) closeSettings(); });
+  })();
   on('setOpenFolder', function () { api.send('POST', '/api/open-folder', {}).catch(quiet); });
   on('setSave', saveSettings);
   on('addAud', addAudience);
@@ -3986,6 +4261,11 @@
       var b = e.target.closest('button[data-mode]');
       if (b) setWindowMode(b.getAttribute('data-mode'));
     });
+    var tm = $('themeMode');
+    if (tm) tm.addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-theme-mode]');
+      if (b) setTheme(b.getAttribute('data-theme-mode'));
+    });
     ['setProject', 'setCode', 'setCustomer', 'setLanguage'].forEach(function (id) {
       var elx = $(id);
       if (elx) elx.addEventListener('input', function () { setDirty(true); });
@@ -3993,9 +4273,7 @@
     var ver = $('setVersion');
     if (ver) ver.addEventListener('input', function () { setDirty(true); validateVersion(); });
   })();
-  on('saveBtn', function () { saveChapter().catch(quiet); });
   on('yamlSaveBtn', function () { saveYaml().catch(quiet); });
-  on('vSaveBtn', function () { saveView().catch(quiet); });
   on('vReadBtn', presentDeck);
   on('vExportBtn', function () {
     var go = function () {
@@ -4006,72 +4284,38 @@
   });
   on('vDeleteBtn', deleteView);
   on('vDuplicateBtn', duplicateView);
-  on('chDeleteBtn', deleteChapter);
-  // Kebab popup: toggle on button click, close on outside click.
-  on('cbKebabBtn', function (e) {
-    var menu = $('cbKebabMenu');
-    var btn = $('cbKebabBtn');
-    if (!menu) return;
-    var open = menu.classList.toggle('cb-open');
-    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-    e.stopPropagation();
-  });
-  document.addEventListener('click', function (e) {
-    var menu = $('cbKebabMenu');
-    var btn = $('cbKebabBtn');
-    if (menu && menu.classList.contains('cb-open')) {
-      if (!menu.contains(e.target) && e.target !== btn) {
-        menu.classList.remove('cb-open');
-        if (btn) btn.setAttribute('aria-expanded', 'false');
-      }
-    }
-  });
-  // Header "More" overflow menu: on a narrow window the nav cluster collapses into a dropdown
-  // (CSS @media). Toggle open; close on outside click, after choosing an item, or on Escape.
-  // Same pattern as the chapter-bar kebab above.
-  var closeMore = function () {
-    var menu = $('navCluster');
-    if (!menu || !menu.classList.contains('hd-open')) return;
-    menu.classList.remove('hd-open');
-    var btn = $('moreBtn');
-    if (btn) btn.setAttribute('aria-expanded', 'false');
-  };
-  on('moreBtn', function (e) {
-    var menu = $('navCluster');
-    var btn = $('moreBtn');
-    if (!menu) return;
-    var open = menu.classList.toggle('hd-open');
-    if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-    e.stopPropagation();
-  });
-  document.addEventListener('click', function (e) {
-    var menu = $('navCluster');
-    if (!menu || !menu.classList.contains('hd-open')) return;
-    // A click on a nav button inside runs its action AND dismisses the menu; an outside click
-    // just dismisses. (The toggle handler above stops its own click from reaching here.)
-    if (!menu.contains(e.target) || e.target.closest('.hd-cbtn')) closeMore();
-  });
+  // The document bar: Readers, Edit · Source · Read, Properties, ⋯ (History is wired below).
+  on('cbReaders', function () { readersMenu($('cbReaders')); });
+  on('cbPropsBtn', function () { toggleProps(); });
+  on('cbKebabBtn', function () { docBarMenu($('cbKebabBtn')); });
+  (function wireDocBar() {
+    var modes = document.querySelector('.cb-mode');
+    if (modes) modes.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-mode]');
+      if (b) setChapterMode(b.getAttribute('data-mode'));
+    });
+    // Restore a Properties panel left open last time (closed by default).
+    $('propsPanel').hidden = !props.open;
+    $('cbPropsBtn').setAttribute('aria-pressed', String(props.open));
+  })();
+  (function wireSideTabs() {
+    var tabs = document.querySelector('.side-tabs');
+    if (tabs) tabs.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-side]');
+      if (b) setSideTab(b.getAttribute('data-side'));
+    });
+  })();
+  // Esc closes the open menu first (focus back on what opened it), else the Settings sheet —
+  // unless a DocWiz dialog is open on top, which handles its own Esc.
   document.addEventListener('keydown', function (e) {
     if (e.key !== 'Escape') return;
-    closeMore();
-    if (openTreeMenu) { var anchor = openTreeMenu.anchor; closeTreeMenu(); anchor.focus(); }
-    var kebab = $('cbKebabMenu');
-    if (kebab && kebab.classList.contains('cb-open')) {
-      kebab.classList.remove('cb-open');
-      var kb = $('cbKebabBtn');
-      if (kb) { kb.setAttribute('aria-expanded', 'false'); kb.focus(); }
-    }
+    if (openMenu) { var anchor = openMenu.anchor; closeActionMenu(); anchor.focus(); return; }
+    if (!$('setSheet').hidden && !$('modal').open) { e.preventDefault(); closeSettings(); }
   });
   on('vAddSlide', addSlide);
   on('vPanelAdd', addSlide);
   on('checkBtn', runCheck);
   on('buildBtn', runBuild);
-  on('newChapterBtn', newChapter);
-  on('saveAsBtn', saveAs);
-  on('saveAsTemplateBtn', saveAsTemplate);
-  on('importDocxBtn', importDocx);
-  on('convertEmfBtn', convertEmf);
-  on('exportPdfBtn', openExportPdf);
   on('wImportBtn', newProjectFromWord);
   function requestQuit() {
     if (!confirmDiscard(requestQuit, arguments)) return;

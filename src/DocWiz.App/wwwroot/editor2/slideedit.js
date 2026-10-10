@@ -160,7 +160,7 @@ function mountToolbar(surfaceEl) {
   unmountToolbar();
   // linkTool: the slide canvas gets the "Link…" relink button (turn the selected block
   // into a live-linked embed — Task 9); the chapter toolbar never shows it.
-  toolbarEl = E.buildMainToolbar({ withViewSwitch: false, linkTool: true });
+  toolbarEl = E.buildMainToolbar({ linkTool: true });
   toolbarEl.classList.add('e2-slide-toolbar');
   // The relink + embed-insert resolve embeds with the deck's view audience (so the
   // resolved render matches what ships); expose it on the shared contextBar.

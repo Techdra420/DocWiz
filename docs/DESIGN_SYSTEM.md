@@ -67,7 +67,7 @@ The chrome bar stays dark in both themes — it is the product's signature. New
 inside the bar.
 
 `--dw-chrome-2` (`#1b2937` light / `#16222e` dark) is a **raised surface on the dark chrome** —
-the project tile and the grouped nav cluster sit on it (their definition comes from `--dw-chrome-border`,
+the project tile and the project menu button's hover sit on it (their definition comes from `--dw-chrome-border`,
 not luminance). `--dw-mark` (`#2f6cae`, both themes) is the **brand accent for dark chrome**:
 `--dw-accent` (#1f4e79) is too dark to read as a brand fill on the bar, so the brand mark and the Build
 button use `--dw-mark` (white text on it = 5.4:1). **Scope: both tokens are chrome-only — never use them
@@ -195,7 +195,8 @@ Controls (`Prev/Next/Fullscreen`) live *outside* the frame, secondary-button sty
 ### Editor — `app.css`
 
 **Buttons (global recipe)** — padding s2 s4, r1, `--dw-fs-sm` 600, tight.
-- *Primary* (one per view: Save, Build): `background: var(--dw-accent)`, text
+- *Primary* (one per screen — Build handover in the chrome bar; Save inside the Settings
+  sheet; chapters and outputs have none, they autosave): `background: var(--dw-accent)`, text
   `--dw-accent-contrast`. H: `--dw-accent-strong`. Dis: 45% opacity, no pointer.
 - *Secondary* (Check, New chapter, Export, Change…): transparent bg, `1px solid var(--dw-border-strong)`,
   text `--dw-text`. H: `background: var(--dw-surface-2)`, border-color text-muted.
@@ -203,16 +204,60 @@ Controls (`Prev/Next/Fullscreen`) live *outside* the frame, secondary-button sty
 - *Danger* (Quit, Delete view, ×): transparent, `1px solid var(--dw-border)`, text `--dw-bad`.
   H: `background: var(--dw-bad-bg)`, border-color `--dw-bad`. Never solid red at rest.
 
-**`#tree`** — same recipe as handover `#sidebar`. Active file: accent-bg + inset bar.
-Structure editing (Stage 6): section headers carry `+` (add chapter) and `⋯`, chapter rows
-carry `⋯` — `.tree-act` buttons, revealed on row hover but always in the layout and
-keyboard-reachable; their menus reuse the `.e2-menu` context-menu recipe. Double-click renames
-inline (`.tree-rename`, accent border + focus ring). A dragged chapter marks its drop target
-with a 2px accent line above a row, or an `--dw-accent-bg` wash on a section.
+**Chrome bar** (Stage 6) — brand · the project's name as a button (`.hd-proj-btn`, chrome
+ghost: H `--dw-chrome-2` + `--dw-chrome-border`) opening the *project menu* (switch project,
+folder, import, export, copies; the program's build date as its last label) · Check
+(chrome secondary) · **Build handover** (the one primary, `--dw-mark`) · Handover / Download
+after a build · quit / window controls. No other buttons live in the bar.
+
+**`.dw-seg`** (Stage 6) — THE segmented control: a `--dw-surface-2` well, 1px `--dw-border`,
+r1, 2px inset; buttons xs 600 `--dw-muted`, r0; selected (`aria-selected` for tabs,
+`aria-pressed` for a toggle group) = `--dw-surface` + `--dw-text` + `--dw-shadow`. Used by the
+sidebar tabs, Edit · Source · Read and History's scope. (The settings `.seg` and the welcome
+window-mode toggle are older; step 7 folds them in.)
+
+**Action menus** — every editor menu (tree ⋯, project menu, the document bar's ⋯, Readers) is
+app.js `actionMenu()` on the `.e2-menu` recipe: items, CAPS labels, separators, danger items,
+and checkable items (`.mcheckable`: a trailing accent tick when on; the menu stays open while
+ticking). Esc closes it and returns focus; arrow keys move between items.
+
+**`.sidebar`** (Stage 6) — 280px `--dw-surface-2` column: `.dw-seg.side-tabs` (Manual ·
+Outputs · Files, full width) over one scrolling `.side-pane` per tab, *Project settings* in
+`.side-foot` (border-top, ghost). All panes share the tree's row recipe — the handover
+`#sidebar` recipe: `.grp` CAPS group labels, `a` rows, active = accent-bg + inset bar,
+`.side-meta` (xs `--dw-faint`, right) for a row's audience, `.side-thumb` (32×24, r0, border)
+for pictures, dashed `.tree-new-section` buttons for actions, `.side-empty` (xs muted) for
+empty groups. Opening something switches to its tab.
+
+**`#tree`** — the Manual pane. Structure editing (Stage 6): section headers carry `+` (add
+chapter) and `⋯`, chapter rows carry `⋯` — `.tree-act` buttons, revealed on row hover but
+always in the layout and keyboard-reachable; their menus are action menus. Double-click
+renames inline (`.tree-rename`, accent border + focus ring). A dragged chapter marks its drop
+target with a 2px accent line above a row, or an `--dw-accent-bg` wash on a section.
+
+**`.chapterbar`** — the document bar (Stage 6): `Section / Title` crumb (section
+`--dw-faint`, title 600) · `.cb-readers` pill (neutral: surface, `--dw-border-strong`, r1,
+people icon + "User, Support +2" / "All readers" / "No readers" + chevron; opens the
+checkable Readers menu) · right: save state (amber `.cb-save-dot` while edits are pending,
+`#status` xs muted text) · `.dw-seg.cb-mode` Edit · Source · Read · icon buttons
+(`.cb-kebab-btn`, 34px, r1; pressed = `--dw-accent-bg` + accent) for History, Properties and
+⋯. No ID chip, no Save button, no audience toggles.
+
+**`.props-panel`** (Stage 6) — Properties: the side-panel recipe of History (300px surface,
+left border, `.hist-head` / `.hist-body`), holding a `.props-list` definition list: `dt` CAPS
+xs tracked muted, `dd` rows — the Section select (moves the chapter), Readers as neutral
+`.props-chip`s (r0, `--dw-surface-2`, border), "Used in" as `.props-used` accent links with an
+xs muted detail ("slides 5, 6, 9"), the link id and file in mono `.props-code`
+(`.props-path` muted), notes xs muted. History and Properties never show together.
+
+**`.set-sheet` / `#setPane`** (Stage 6) — Settings is a sheet, not a screen: a fixed layer
+below the chrome bar on `--dw-backdrop`, z 900 (under tooltips 1000 and toasts 2000), the
+panel centred at min(1080px, 100%) × min(760px, 100%), r2, `--dw-shadow-2`; rail + content as
+before, the top bar ends with Save (the sheet's one primary) and a ghost × close. Esc, × or a
+click on the backdrop closes it (unsaved changes ask first); the editor behind is inert.
 
 **`.hist-panel` / `.hist-compare`** (Stage 6) — History: a 300px `--dw-surface` side panel,
-left border; `.hist-seg` segmented Chapter/Project switch (`--dw-surface-2` well, selected =
-surface + `--dw-shadow`); day labels CAPS xs tracked `--dw-muted`; `.hist-entry` rows = mono
+left border; a `.dw-seg` Chapter/Project switch; day labels CAPS xs tracked `--dw-muted`; `.hist-entry` rows = mono
 tabular `--dw-faint` time column + label, H `--dw-surface-2`, selected = the tree's active
 recipe (`--dw-accent-bg` + inset 3px accent bar); actions are `.hist-link` text buttons
 (accent; `.danger` = `--dw-bad`). Comparing shows the older version AS the page (handover
@@ -220,8 +265,9 @@ recipe), under a sticky `.hist-banner`; blocks carry the change on themselves �
 `--dw-ok-bg` with a 3px `--dw-ok` bar in the left margin, removed `--dw-bad-bg` + bar +
 strike-through — never wrappers.
 
-**Status line** — the chapter bar's `#status` carries autosave: "Saving…" then
-"Saved HH:MM" (`.ok`); a failed save stays in `.err` until the next save succeeds.
+**Status line** — the document bar's `#status` carries autosave: "Saving…" then
+"Saved HH:MM" (calm muted, not green); a failed save stays in `.err` until the next save
+succeeds.
 
 **`.fm`** — frontmatter row: labels `--dw-fs-sm` 600 `--dw-muted`; inputs surface bg,
 `--dw-border-strong` border, r1, padding s2 s3, mono for `ID`. F: accent border + ring.

@@ -20,8 +20,8 @@ live surface IS the page) and DocWiz publishes as a self-contained single-file
 
 **V1.0:** both agreed V1.0 features are **built and merged to `main`**:
 
-- **PDF & HTML export** — `docwiz export-pdf <project> [-o <dir>] [--all]` plus an editor "Export…"
-  action (header "⋯ More" overflow → dialog with native folder picker, default
+- **PDF & HTML export** — `docwiz export-pdf <project> [-o <dir>] [--all]` plus an editor
+  "Export PDF or HTML…" action (the project menu → dialog with native folder picker, default
   `<project>/output/Export/`). Pick the **full manual, individual chapters (grouped by section),
   and/or each view**, and a **format**: **PDF** or a **single self-contained HTML file** (CSS/JS
   inlined, images base64 — HTML mode needs no Edge). It runs as a non-blocking background job with a
@@ -54,7 +54,7 @@ consolidation pass. Decisions and steps are in [docs/ROADMAP.md](docs/ROADMAP.md
 | 3 | Editor app MVP: live-surface chapters, images, links, templates, single exe | Complete (single exe verified on a clean machine) |
 | 4 | View manager in editor, single-file export, packaging | Complete |
 | 5 | Pilot on a real customer project (incl. Word import: editor Import… + New project from Word) | In progress (pilot loop) |
-| 6 | Editor redesign: trust fixes, editable structure, history + autosave, shell, audiences, outputs, consolidation | In progress (steps 1–3 done; step 4 next) |
+| 6 | Editor redesign: trust fixes, editable structure, history + autosave, shell, audiences, outputs, consolidation | In progress (steps 1–4 done; step 5 next) |
 | — | Live editor: one surface that IS the page (M0–M5 ✓ — flipped 2026-06-12 after stakeholder sign-off; ADRs in ARCHITECTURE.md) | Shipped |
 
 ## Start here
@@ -103,18 +103,22 @@ dotnet publish src/DocWiz.Cli -c Release -o dist
 The editor opens each chapter as **the real page** (the live surface — same
 stylesheet as the handover): click into text and type; click a table or image and
 its tools appear in a fixed context bar; saves are byte-surgical (untouched lines
-keep their exact bytes). Around it: the chapter tree (numbered like the handover,
-with reorder and guarded delete), a toolbar with guided insert dialogs for images /
-elements / chapter links / audience blocks / attachments (image paste lands in
-`assets/` automatically), per-discipline chapter templates, a visual view editor
-with duplication for template-driven trainings, a Reading view rendered by the
-exact build pipeline, and Check/Build buttons (the built handover is served at
-`/handover`). **Import…** turns a Word `.docx` into chapters: pick which sections to
-bring in, then optionally set each chapter's audiences/discipline — the converter
+keep their exact bytes); changes save by themselves and every save is kept in History. Around
+it: a sidebar with **Manual · Outputs · Files** tabs (the chapter tree — numbered like the
+handover, renamed, reordered and moved in place; the slide decks and documents; the pictures
+and attachments, a click puts one into the page), a document bar (Section / Title, who reads
+it, save state, Edit · Source · Read, History, Properties), a toolbar with guided insert
+dialogs for images / elements / chapter links / audience blocks / attachments (image paste
+lands in `assets/` automatically), "Start from" chapter templates, a visual output editor
+with duplication for template-driven trainings, a Read view rendered by the exact build
+pipeline, Project settings as a sheet, and Check / Build handover (the built handover is
+served at `/handover`). The project's name opens the project menu. **Import Word
+document…** turns a Word `.docx` into chapters: pick which sections to
+bring in, then optionally set who reads each chapter — the converter
 (bundled Pandoc + DocWiz post-processing) reports anything that needs a human in a
 deep-linked review worklist. Word vector images (EMF/WMF, which no browser can render)
 are converted to PNG automatically on import; for projects imported before this, a
-**Convert N EMF/WMF…** header action (or `docwiz convert-emf <project>`) does the same
+**Convert N Word images to PNG…** project-menu action (or `docwiz convert-emf <project>`) does the same
 on demand — originals are moved to a kept-but-unshipped `_emf-originals/` folder.
 Authoring rules live in [docs/CONTENT_MODEL.md](docs/CONTENT_MODEL.md);
 [samples/stockroom-demo/](samples/stockroom-demo/) is a worked example of every feature.

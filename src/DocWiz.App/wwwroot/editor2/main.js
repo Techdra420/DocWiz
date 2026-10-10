@@ -1076,16 +1076,14 @@ function showTableGridPicker(anchorEl, onPick) {
 
 let toolbarButtons = [];
 
-/* withViewSwitch=false (the slide canvas) omits the chapter-only Edit/Source/Read
-   view-switch — a deck has no single chapter to switch modes on. Default true keeps
-   the chapter toolbar identical. opts.linkTool (slide canvas only) adds the "Link…"
-   relink button — turn the selected block into a live-linked embed (Task 9). */
+/* opts.linkTool (slide canvas only) adds the "Link…" relink button — turn the selected
+   block into a live-linked embed (Task 9). Edit · Source · Read lives in the document bar
+   (app.js, Stage 6) and calls setMode() below. */
 function buildMainToolbar(opts) {
-  const withViewSwitch = !opts || opts.withViewSwitch !== false;
   const withLinkTool = !!(opts && opts.linkTool);
   toolbarButtons = [];
   // The shell: one 48px bar that contains two tracks.
-  // .e2-tb-main  — horizontally scrollable formatting groups + right-pinned view switch
+  // .e2-tb-main  — the formatting groups (they wrap on narrow windows)
   // .e2-tb-ctx   — contextual format bar (IMAGE / TABLE) — badge + node tools (hidden initially)
   const bar = document.createElement('div');
   bar.className = 'e2-maintoolbar';
@@ -1404,76 +1402,6 @@ function buildMainToolbar(opts) {
   anchorInfo.className = 'e2-ctx-hint';
   anchorInfo.id = 'e2AnchorInfo';
   scroll.appendChild(anchorInfo);
-
-  // ── View switch (right-pinned) ─────────────────────────────────────────────
-  // Three flat buttons: Edit (pencil, active by default) / Source (code) / Read (eye).
-  // Separated from the scroll track by a .e2-sep. IDs kept for backward compat.
-  // Chapter-only (withViewSwitch): the slide canvas has no single chapter to switch.
-  if (withViewSwitch) {
-    const vsep = document.createElement('span');
-    vsep.className = 'e2-sep';
-    mainTrack.appendChild(vsep);
-
-    const vs = document.createElement('div');
-    vs.className = 'e2-view-switch';
-
-    const vsBtn = (id, iconName, label, tip) => {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.id = id;
-      b.className = 'ib';
-      b.appendChild(icon(iconName));
-      b.appendChild(document.createTextNode(label));
-      b.setAttribute('data-tip', tip);
-      b.onmousedown = (e) => e.preventDefault();
-      vs.appendChild(b);
-      return b;
-    };
-
-    const editBtn = vsBtn('e2EditBtn', 'pencil', 'Edit',
-      'Edit this chapter in the live surface (what you see is what you ship).');
-    editBtn.classList.add('active');
-
-    const srcBtn = vsBtn('e2SourceBtn', 'code', 'Source',
-      'Shows the exact markdown this chapter will save as. For fixing import artifacts the visual surface cannot express. Switching back to Edit saves what you changed here.');
-
-    const readBtn = vsBtn('e2ReadingBtn', 'eye', 'Read',
-      'Opens this chapter exactly as the built handover will render it (saves your changes first).');
-
-    mainTrack.appendChild(vs);
-
-    // Wire view-switch handlers after bar is in the DOM tree (open() calls us).
-    const markMode = (mode) => {
-      editBtn.classList.toggle('active', mode === 'edit');
-      srcBtn.classList.toggle('active', mode === 'source');
-      readBtn.classList.remove('active');
-    };
-    // Leaving Source keeps what was typed there: changed text goes through the normal save
-    // (the server writes it and the surface rebuilds from it — see rebuild()); unchanged text
-    // just closes. A failed save keeps Source open; the status line says why.
-    const leaveSource = () => {
-      const area = current && current.sourceArea;
-      if (!area) { markMode('edit'); return; }
-      if (area.value === area.dataset.initial) { toggleSource(false); markMode('edit'); return; }
-      const save = window.DocWizBridge && window.DocWizBridge.saveChapter;
-      if (!save) return;
-      save().then(() => markMode('edit')).catch(() => {});
-    };
-    srcBtn.onclick = () => {
-      if (!current) return;
-      if (current.sourceArea) leaveSource();
-      else { toggleSource(true); markMode('source'); }
-    };
-    readBtn.onclick = () => {
-      const url = '/preview-root/chapter?file=' + encodeURIComponent(current.file);
-      const save = window.DocWizBridge && window.DocWizBridge.saveChapter;
-      (save ? save() : Promise.resolve()).then(() => {
-        if (current && !current.sourceArea) markMode('edit'); // the save closed Source
-        window.open(url, '_blank');
-      });
-    };
-    editBtn.onclick = leaveSource;
-  }
 
   bar.appendChild(mainTrack);
 
@@ -1819,6 +1747,31 @@ function toggleSource(show) {
   current.sourceArea = area;
 }
 
+/* Edit · Source · Read for the open chapter — the document bar's switch (app.js). Leaving
+   Source keeps what was typed there: changed text goes through the normal save (the server
+   writes it and the surface rebuilds from it — see rebuild()); unchanged text just closes; a
+   failed save rejects and Source stays open (the status line says why). Read saves, then
+   opens the chapter as the built handover renders it. Resolves to the mode now shown. */
+async function setMode(mode) {
+  if (!current) return 'edit';
+  const save = window.DocWizBridge && window.DocWizBridge.saveChapter;
+  if (mode === 'source') {
+    if (!current.sourceArea) toggleSource(true);
+    return 'source';
+  }
+  if (mode === 'read') {
+    if (save) await save();
+    // After the save: a changed H1 renames the file.
+    window.open('/preview-root/chapter?file=' + encodeURIComponent(current.file), '_blank');
+    return current.sourceArea ? 'source' : 'edit';
+  }
+  const area = current.sourceArea;
+  if (!area) return 'edit';
+  if (area.value === area.dataset.initial) { toggleSource(false); return 'edit'; }
+  if (save) await save();
+  return current && current.sourceArea ? 'source' : 'edit';
+}
+
 function close() {
   if (current && current.view) {
     if (activeView === current.view) activeView = null;
@@ -1910,6 +1863,7 @@ window.DocWizEditor2 = {
   open,
   close,
   save,
+  setMode,
   isBusy,
   // The chapter file the surface holds (null when closed) — app.js saves only when it is
   // still the chapter it shows (opening another chapter is asynchronous).

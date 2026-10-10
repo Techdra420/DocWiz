@@ -46,11 +46,29 @@ button.primary { background: var(--dw-accent); color: var(--dw-accent-contrast);
 button.primary:hover { background: var(--dw-accent-strong); border-color: var(--dw-accent-strong); }
 /* Danger recipe (DESIGN_SYSTEM §5): outlined, red text, never solid at rest. The header's
    Quit button has its own muted-until-hover style (.hd-quit-btn), so it is not listed here. */
-#vDeleteBtn, #chDeleteBtn, dialog#modal button.danger {
+#vDeleteBtn, dialog#modal button.danger {
   color: var(--dw-bad);
   border-color: var(--dw-border);
 }
-#vDeleteBtn:hover, #chDeleteBtn:hover, dialog#modal button.danger:hover { background: var(--dw-bad-bg); border-color: var(--dw-bad); }
+#vDeleteBtn:hover, dialog#modal button.danger:hover { background: var(--dw-bad-bg); border-color: var(--dw-bad); }
+
+/* ---- Segmented control (Stage 6): ONE recipe for picking one of a few — the sidebar tabs,
+        Edit · Source · Read, and History's scope. Selected = a raised surface chip in a well;
+        role="tab" uses aria-selected, a toggle group aria-pressed. ------------------------ */
+.dw-seg {
+  display: inline-flex; padding: 2px; gap: 2px;
+  background: var(--dw-surface-2); border: 1px solid var(--dw-border); border-radius: var(--dw-r1);
+}
+.dw-seg button {
+  border: 0; background: transparent; cursor: pointer;
+  padding: var(--dw-s1) var(--dw-s3); border-radius: var(--dw-r0);
+  font-size: var(--dw-fs-xs); font-weight: var(--dw-w-medium); color: var(--dw-muted);
+  white-space: nowrap;
+}
+.dw-seg button:hover { background: transparent; color: var(--dw-text); }
+.dw-seg button[aria-selected="true"], .dw-seg button[aria-pressed="true"] {
+  background: var(--dw-surface); color: var(--dw-text); box-shadow: var(--dw-shadow);
+}
 
 /* ---- Chrome (always dark â€” header carries data-theme="dark") --------------- */
 header {
@@ -82,8 +100,17 @@ header {
 /* Vertical divider */
 .hd-div { width: 1px; height: 26px; background: var(--dw-chrome-border); flex-shrink: 0; }
 
-/* Project block */
-.hd-proj { display: flex; align-items: center; gap: var(--dw-s2); min-width: 0; flex-shrink: 0; }
+/* Project block: the project's name is the project menu's button (chrome ghost recipe) */
+.hd-proj { display: flex; align-items: center; gap: var(--dw-s2); min-width: 0; flex-shrink: 1; }
+.hd-proj-btn {
+  display: flex; align-items: center; gap: var(--dw-s2); min-width: 0;
+  height: 42px; padding: 0 var(--dw-s2) 0 var(--dw-s1);
+  border: 1px solid transparent; border-radius: var(--dw-r1);
+  background: transparent; color: var(--dw-chrome-text); text-align: left;
+}
+.hd-proj-btn:hover, .hd-proj-btn[aria-expanded="true"] { background: var(--dw-chrome-2); border-color: var(--dw-chrome-border); }
+.hd-proj-btn:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
+.hd-proj-chev { flex-shrink: 0; color: var(--dw-chrome-muted); }
 .hd-proj-ico {
   width: 26px; height: 26px; border-radius: 6px; background: var(--dw-chrome-2);
   display: flex; align-items: center; justify-content: center;
@@ -99,14 +126,6 @@ header {
   font-family: var(--dw-font-mono); white-space: nowrap;
   display: flex; align-items: center; gap: var(--dw-s2);
 }
-/* Green live dot â€” reuses --dw-ok (green semantic token) as a visual live-state indicator */
-.hd-live-dot {
-  width: 6px; height: 6px; border-radius: 50%;
-  background: var(--dw-ok);
-  box-shadow: 0 0 0 3px var(--dw-ok-bg);
-  flex-shrink: 0;
-}
-.hd-proj-live { color: var(--dw-chrome-muted); }
 /* "Editing template" badge — caution state: every live save lands in the master. */
 .hd-tpl-badge {
   display: inline-flex; align-items: center; flex-shrink: 0;
@@ -119,63 +138,6 @@ header {
 
 /* Spacer */
 .hd-spacer { flex: 1; }
-
-/* Grouped ghost nav cluster */
-.hd-nav-cluster {
-  display: flex; align-items: center; gap: var(--dw-s1);
-  background: var(--dw-chrome-2); border: 1px solid var(--dw-chrome-border);
-  border-radius: 9px; padding: var(--dw-s1); flex-shrink: 0;
-}
-.hd-cbtn {
-  display: inline-flex; align-items: center; gap: var(--dw-s2);
-  height: 30px; padding: 0 var(--dw-s3);
-  border: 0; border-radius: 6px;
-  background: transparent; color: var(--dw-chrome-muted);
-  font-size: var(--dw-fs-xs); font-weight: var(--dw-w-medium);
-  font-family: var(--dw-font-ui); cursor: pointer; white-space: nowrap;
-  text-decoration: none;
-  transition: background 0.12s, color 0.12s;
-}
-.hd-cbtn:hover { background: var(--dw-chrome-border); color: var(--dw-chrome-text); }
-.hd-cbtn:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
-
-/* Nav-cluster wrapper + "More" overflow trigger. Wide header: the cluster is the inline chip
-   and "More" is hidden. Narrow header (the @media below): the cluster becomes a dropdown
-   anchored under "More". Same buttons either way — no duplicate set (ADR-008). */
-.hd-nav-wrap { display: flex; align-items: center; flex-shrink: 0; position: relative; }
-.hd-more-btn {
-  display: none; /* shown only on a narrow header (@media) */
-  align-items: center; gap: var(--dw-s2);
-  height: 30px; padding: 0 var(--dw-s3);
-  background: var(--dw-chrome-2); border: 1px solid var(--dw-chrome-border); border-radius: 9px;
-  color: var(--dw-chrome-muted);
-  font-size: var(--dw-fs-xs); font-weight: var(--dw-w-medium); font-family: var(--dw-font-ui);
-  cursor: pointer; white-space: nowrap;
-  transition: background 0.12s, color 0.12s;
-}
-.hd-more-btn:hover { background: var(--dw-chrome-border); color: var(--dw-chrome-text); }
-.hd-more-btn:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
-
-/* Narrow header: collapse the nav cluster into the "More" dropdown so the buttons stop
-   crowding the bar (VISION: "buttons on the top app bar on small screen take too much space").
-   The cluster reuses its own chip styling as the popover panel, just re-stacked vertically.
-   Breakpoint is just above the measured intrinsic width of the FULL header with the nav cluster
-   inline + post-build buttons + native window controls (~1776px); collapsing the secondary nav
-   to "More" below that drops the header to ~1170px (measured) so it fits every laptop/medium
-   screen — including 1920×1080 at 125% Windows scaling (1536px logical) — without the window
-   controls falling off the right edge. The primary Check/Build/Handover/Download buttons keep
-   their labels; only this secondary cluster collapses. */
-@media (max-width: 1800px) {
-  .hd-more-btn { display: inline-flex; }
-  .hd-nav-cluster {
-    position: absolute; top: calc(100% + 6px); right: 0; z-index: 60;
-    flex-direction: column; align-items: stretch; gap: var(--dw-s1);
-    min-width: 232px; box-shadow: var(--dw-shadow-2);
-    display: none;
-  }
-  .hd-nav-cluster.hd-open { display: flex; }
-  .hd-nav-cluster .hd-cbtn { width: 100%; height: 34px; justify-content: flex-start; }
-}
 
 /* Right cluster */
 .hd-right { display: flex; align-items: center; gap: var(--dw-s3); flex-shrink: 0; }
@@ -193,15 +155,6 @@ header {
 .hd-check-btn:hover { background: var(--dw-chrome-border); border-color: var(--dw-chrome-2); }
 .hd-check-btn:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
 .hd-check-btn svg { color: var(--dw-ok); }
-
-/* Build meta (two-line: "build" label + timestamp) */
-.hd-build-meta {
-  display: flex; flex-direction: column; align-items: flex-end; gap: 1px;
-  font-family: var(--dw-font-mono); font-size: var(--dw-fs-xs); color: var(--dw-chrome-muted);
-  line-height: 1.3; flex-shrink: 0;
-}
-.hd-build-label { color: var(--dw-chrome-muted); }
-.hd-build-stamp { color: var(--dw-chrome-text); font-weight: var(--dw-w-medium); }
 
 /* Build primary button (one primary on --dw-mark; white text) */
 .hd-build-btn {
@@ -231,27 +184,14 @@ header {
 .hd-ghost-btn:hover { background: var(--dw-chrome-border); color: var(--dw-chrome-text); }
 .hd-ghost-btn:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
 
-/* Tiny windows only: once the nav cluster has already collapsed to "More" (above), the header
-   with FULL ghost labels is ~1170px (measured); below ~1200px even that no longer fits, so the
-   post-build Handover / Download .zip buttons drop their labels to icon-only (their data-tip still
-   explains them). On normal screens the labels stay — only their spans are hidden here, no second
-   copy of the buttons (ADR-008). */
+/* Small windows: with the post-build Handover / Download .zip buttons and the native window
+   controls the header no longer fits below ~1200px, so those two drop their labels to icon-only
+   (their data-tip still explains them). Only their spans are hidden — no second copy of the
+   buttons (ADR-008). */
 @media (max-width: 1200px) {
   .hd-ghost-btn { width: 34px; padding: 0; justify-content: center; }
   .hd-ghost-btn .hd-btn-label { display: none; }
 }
-
-/* Theme toggle lives in Settings -> Application (text-only "Dark"/"Light" label set by the
-   shared site.js). Compact bordered button on the page surface (not chrome); fixed min-width
-   so it doesn't resize when the label flips between the two words. */
-#themeBtn {
-  min-width: 72px; padding: var(--dw-s2) var(--dw-s4);
-  border: 1px solid var(--dw-border-strong); border-radius: var(--dw-r1);
-  background: var(--dw-surface); color: var(--dw-text);
-  font: inherit; font-size: var(--dw-fs-sm); font-weight: var(--dw-w-medium); cursor: pointer;
-}
-#themeBtn:hover { background: var(--dw-surface-2); }
-#themeBtn:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
 
 /* Quit button â€” power icon, red on hover */
 .hd-quit-btn {
@@ -523,16 +463,33 @@ html.dw-native header { cursor: default; }
 .welcome-settings-toggle .wmode[aria-pressed="true"] { background: var(--dw-accent-bg); color: var(--dw-accent); font-weight: var(--dw-w-medium); }
 .welcome-settings-note { font-size: var(--dw-fs-xs); color: var(--dw-faint); }
 
-/* ---- Tree sidebar (same recipe as the handover sidebar) ------------------------ */
-#tree {
-  width: 280px;
-  flex: none;
+/* ---- Sidebar (same recipe as the handover sidebar) ------------------------------
+   Stage 6: tabs (Manual · Outputs · Files) over one scrolling pane each, Project settings at
+   the foot. All three panes share the row recipe below (.side-pane a / .grp / .current). */
+.sidebar {
+  width: 280px; flex: none; min-height: 0;
+  display: flex; flex-direction: column;
   background: var(--dw-surface-2);
   border-right: 1px solid var(--dw-border);
-  overflow-y: auto;
-  padding: var(--dw-s3);
 }
-#tree .grp {
+.side-tabs { display: flex; margin: var(--dw-s3) var(--dw-s3) 0; }
+.side-tabs button { flex: 1; padding: var(--dw-s2) var(--dw-s2); font-size: var(--dw-fs-sm); }
+.side-pane { flex: 1; min-height: 0; overflow-y: auto; padding: 0 var(--dw-s3) var(--dw-s3); }
+.side-foot { flex: none; padding: var(--dw-s2) var(--dw-s3); border-top: 1px solid var(--dw-border); }
+.side-foot-btn {
+  display: flex; align-items: center; gap: var(--dw-s2); width: 100%;
+  border: 0; background: transparent; color: var(--dw-muted); text-align: left;
+  padding: var(--dw-s2) var(--dw-s3);
+}
+.side-foot-btn:hover { background: var(--dw-surface); color: var(--dw-text); }
+.side-pane .side-meta { flex: none; margin-left: auto; font-size: var(--dw-fs-xs); color: var(--dw-faint); }
+.side-pane .side-thumb {
+  flex: none; width: 32px; height: 24px; object-fit: cover;
+  border: 1px solid var(--dw-border); border-radius: var(--dw-r0); background: var(--dw-surface);
+}
+.side-pane .side-empty { margin: var(--dw-s1) var(--dw-s3) var(--dw-s2); font-size: var(--dw-fs-xs); color: var(--dw-muted); line-height: var(--dw-lh-snug); }
+.side-pane .tree-new-section.current { color: var(--dw-accent); border-color: var(--dw-accent); background: var(--dw-accent-bg); }
+.side-pane .grp {
   font-size: var(--dw-fs-xs);
   text-transform: uppercase;
   letter-spacing: var(--dw-track-caps);
@@ -543,7 +500,7 @@ html.dw-native header { cursor: default; }
   align-items: center;
   gap: var(--dw-s2);
 }
-#tree .tree-label {
+.side-pane .tree-label {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -552,39 +509,39 @@ html.dw-native header { cursor: default; }
 }
 /* Structure editing (Stage 6 step 2): section headers and chapter rows carry hover-revealed
    actions (+, ⋯) that stay in the layout (no shift) and are always keyboard-reachable. */
-#tree .tree-act {
+.side-pane .tree-act {
   flex: none; display: inline-grid; place-items: center;
   width: 24px; height: 24px; padding: 0;
   border: 0; border-radius: var(--dw-r0);
   background: transparent; color: var(--dw-muted); cursor: pointer;
   opacity: 0;
 }
-#tree .tree-sec:hover .tree-act, #tree .tree-row:hover .tree-act,
-#tree .tree-act:focus-visible, #tree .tree-act[aria-expanded="true"] { opacity: 1; }
-#tree .tree-sec .tree-act:hover { background: var(--dw-surface); color: var(--dw-text); }
-#tree .tree-row .tree-act:hover { background: var(--dw-surface-2); color: var(--dw-text); }
+.side-pane .tree-sec:hover .tree-act, .side-pane .tree-row:hover .tree-act,
+.side-pane .tree-act:focus-visible, .side-pane .tree-act[aria-expanded="true"] { opacity: 1; }
+.side-pane .tree-sec .tree-act:hover { background: var(--dw-surface); color: var(--dw-text); }
+.side-pane .tree-row .tree-act:hover { background: var(--dw-surface-2); color: var(--dw-text); }
 /* Chapter row = link + ⋯ (a button can't live inside the <a>). */
-#tree .tree-row { display: flex; align-items: center; border-radius: var(--dw-r1); padding-right: var(--dw-s1); }
-#tree .tree-row > a { flex: 1; min-width: 0; }
-#tree .tree-row > a:hover { background: transparent; }
-#tree .tree-row:hover { background: var(--dw-surface); }
-#tree .tree-row.current { background: var(--dw-accent-bg); box-shadow: inset 3px 0 0 var(--dw-accent); }
-#tree .tree-row.current > a { color: var(--dw-accent); font-weight: var(--dw-w-medium); }
+.side-pane .tree-row { display: flex; align-items: center; border-radius: var(--dw-r1); padding-right: var(--dw-s1); }
+.side-pane .tree-row > a { flex: 1; min-width: 0; }
+.side-pane .tree-row > a:hover { background: transparent; }
+.side-pane .tree-row:hover { background: var(--dw-surface); }
+.side-pane .tree-row.current { background: var(--dw-accent-bg); box-shadow: inset 3px 0 0 var(--dw-accent); }
+.side-pane .tree-row.current > a { color: var(--dw-accent); font-weight: var(--dw-w-medium); }
 /* Drop targets while a chapter is dragged: a line above a row, a wash on a section. */
-#tree .tree-row.drop-target { box-shadow: inset 0 2px 0 var(--dw-accent); }
-#tree .tree-sec.drop-target, #tree .tree-empty.drop-target { background: var(--dw-accent-bg); border-radius: var(--dw-r1); }
-#tree .tree-empty, #tree .tree-new-section {
+.side-pane .tree-row.drop-target { box-shadow: inset 0 2px 0 var(--dw-accent); }
+.side-pane .tree-sec.drop-target, .side-pane .tree-empty.drop-target { background: var(--dw-accent-bg); border-radius: var(--dw-r1); }
+.side-pane .tree-empty, .side-pane .tree-new-section {
   display: block; width: 100%; text-align: left;
   padding: var(--dw-s2) var(--dw-s3);
   border: 1px dashed var(--dw-border-strong); border-radius: var(--dw-r1);
   background: transparent; color: var(--dw-muted);
   font-size: var(--dw-fs-sm); cursor: pointer;
 }
-#tree .tree-empty { margin-bottom: var(--dw-s1); }
-#tree .tree-new-section { margin-top: var(--dw-s4); }
-#tree .tree-empty:hover, #tree .tree-new-section:hover { color: var(--dw-text); border-color: var(--dw-muted); background: var(--dw-surface); }
+.side-pane .tree-empty { margin-bottom: var(--dw-s1); }
+.side-pane .tree-new-section { margin-top: var(--dw-s4); }
+.side-pane .tree-empty:hover, .side-pane .tree-new-section:hover { color: var(--dw-text); border-color: var(--dw-muted); background: var(--dw-surface); }
 /* Inline rename field (also inside the CAPS section header, so it resets the label type). */
-#tree .tree-rename {
+.side-pane .tree-rename {
   flex: 1; min-width: 0;
   font: inherit; font-size: var(--dw-fs-sm); font-weight: var(--dw-w-regular);
   text-transform: none; letter-spacing: 0;
@@ -594,14 +551,14 @@ html.dw-native header { cursor: default; }
   box-shadow: var(--dw-focus-ring); outline: none;
 }
 /* Subchapter outline (H2/H3 of the open chapter) */
-#tree a.tree-sub {
+.side-pane a.tree-sub {
   padding: 2px var(--dw-s3) 2px calc(var(--dw-s3) + 16px);
   font-size: var(--dw-fs-sm);
   color: var(--dw-muted);
 }
-#tree a.tree-sub3 { padding-left: calc(var(--dw-s3) + 32px); }
-#tree a.tree-sub:hover { color: var(--dw-text); }
-#tree a {
+.side-pane a.tree-sub3 { padding-left: calc(var(--dw-s3) + 32px); }
+.side-pane a.tree-sub:hover { color: var(--dw-text); }
+.side-pane a {
   display: flex;
   align-items: center;
   gap: var(--dw-s2);
@@ -615,14 +572,14 @@ html.dw-native header { cursor: default; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-#tree a:hover { background: var(--dw-surface); }
-#tree a.current {
+.side-pane a:hover { background: var(--dw-surface); }
+.side-pane a.current {
   background: var(--dw-accent-bg);
   color: var(--dw-accent);
   font-weight: var(--dw-w-medium);
   box-shadow: inset 3px 0 0 var(--dw-accent);
 }
-#tree a.tree-add { color: var(--dw-accent); margin-top: var(--dw-s1); }
+.side-pane .tree-new-section + .tree-new-section { margin-top: var(--dw-s1); }
 
 main { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 0; gap: 0; }
 #welcome { max-width: 720px; margin: var(--dw-s8) auto; font-size: var(--dw-fs-md); line-height: var(--dw-lh-body); }
@@ -647,32 +604,21 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 0;
   box-shadow: var(--dw-focus-ring);
 }
 
-/* ---- Chapter bar (.chapterbar) â€” redesigned phase 3 ---- */
+/* ---- Document bar (.chapterbar) — Stage 6: where you are, who reads it, save state, the
+        view, and the chapter's panels and actions. No Save button: changes save by themselves. */
 .chapterbar {
   flex-shrink: 0;
   background: var(--dw-surface);
   border-bottom: 1px solid var(--dw-border);
   display: flex; align-items: center; gap: var(--dw-s3);
-  padding: var(--dw-s3) var(--dw-s5);
-  flex-wrap: wrap; row-gap: var(--dw-s3);
+  padding: var(--dw-s2) var(--dw-s4) var(--dw-s2) var(--dw-s5);
+  min-height: 52px;
+  flex-wrap: wrap; row-gap: var(--dw-s2);
 }
-
-/* ID chip: mono #-accent slug */
-.cb-id-chip {
-  display: inline-flex; align-items: center; gap: 5px;
-  font-family: var(--dw-font-mono); font-size: var(--dw-fs-xs);
-  color: var(--dw-muted);
-  background: var(--dw-surface-2); border: 1px solid var(--dw-border);
-  border-radius: var(--dw-r0); padding: var(--dw-s2) var(--dw-s3);
-  max-width: 280px; flex-shrink: 0; white-space: nowrap;
-  overflow: hidden;
-}
-.cb-id-hash { color: var(--dw-accent); font-weight: var(--dw-w-bold); flex-shrink: 0; }
-.cb-id-slug { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* "Section / Title" — the title IS the page's H1 (Stage 6), so this is a label, not a field. */
 .cb-crumb {
-  flex: 1 1 200px; min-width: 0;
+  flex: 0 1 auto; min-width: 0;
   display: flex; align-items: baseline; gap: var(--dw-s2);
   font-size: var(--dw-fs-sm);
 }
@@ -683,70 +629,40 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-
-/* Segmented audience multi-toggle */
-.cb-aud-set {
-  display: inline-flex; align-items: center;
-  background: var(--dw-surface-2); border: 1px solid var(--dw-border);
-  border-radius: var(--dw-r0); padding: var(--dw-s1); gap: var(--dw-s1); flex-shrink: 0;
+/* Readers pill: who this chapter is for (opens a checkable menu). Neutral — no colour per
+   audience. */
+.cb-readers {
+  display: inline-flex; align-items: center; gap: var(--dw-s2); flex-shrink: 0;
+  height: 30px; padding: 0 var(--dw-s2) 0 var(--dw-s3);
+  border: 1px solid var(--dw-border-strong); border-radius: var(--dw-r1);
+  background: var(--dw-surface); color: var(--dw-text);
+  font-size: var(--dw-fs-xs); font-weight: var(--dw-w-medium); white-space: nowrap;
 }
-.cb-aud-btn {
-  display: inline-flex; align-items: center; gap: var(--dw-s2);
-  height: 28px; padding: 0 var(--dw-s3);
-  border: 0; border-radius: 5px;
-  background: transparent; color: var(--dw-muted);
-  font: inherit; font-size: var(--dw-fs-xs); font-weight: var(--dw-w-medium);
-  cursor: pointer; white-space: nowrap;
-  transition: background 0.12s, color 0.12s, box-shadow 0.12s;
-}
-.cb-aud-btn:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
-/* ON state: raised surface chip */
-.cb-aud-btn[data-on="1"] {
-  background: var(--dw-surface); color: var(--dw-text); box-shadow: var(--dw-shadow);
-}
-.cb-aud-btn:not([data-on="1"]):hover { color: var(--dw-muted); }
-
-/* Audience color dots */
-.cb-aud-dot {
-  width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
-  opacity: 0.3; transition: opacity 0.12s;
-}
-.cb-aud-btn[data-on="1"] .cb-aud-dot { opacity: 1; }
-.cb-dot-op { background: var(--dw-ok); }       /* user â†’ green */
-.cb-dot-ma { background: var(--dw-warn); }      /* support â†’ amber */
-.cb-dot-en { background: var(--dw-accent); }    /* admin â†’ blue */
+.cb-readers svg { color: var(--dw-muted); flex-shrink: 0; }
+.cb-readers:hover, .cb-readers[aria-expanded="true"] { background: var(--dw-surface-2); }
+.cb-readers.none .cb-readers-label { color: var(--dw-muted); }
+.cb-readers-label { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
 
 /* Action group (right side) */
 .cb-actions {
   display: flex; align-items: center; gap: var(--dw-s2);
-  margin-left: auto; flex-shrink: 0;
+  margin-left: auto; flex-shrink: 0; min-width: 0;
 }
-/* Vertical hairline divider */
-.cb-div { width: 1px; height: 30px; background: var(--dw-border); flex-shrink: 0; margin-right: var(--dw-s1); }
+.cb-mode { margin: 0 var(--dw-s2); }
 
-/* Status text in the chapter bar */
-.cb-status { color: var(--dw-muted); font-size: var(--dw-fs-xs); white-space: nowrap; }
-.cb-status.ok { color: var(--dw-ok); }
+/* Save state: the last save's time (or a message from the editor), with the amber dot
+   while edits are not yet written. */
+.cb-status {
+  color: var(--dw-muted); font-size: var(--dw-fs-xs); white-space: nowrap;
+  max-width: 320px; overflow: hidden; text-overflow: ellipsis;
+}
+.cb-status.ok { color: var(--dw-muted); }
 .cb-status.err { color: var(--dw-bad); }
 /* Override the generic #status rule for when it is inside .cb-actions */
 .cb-actions #status { margin-left: 0; font-size: var(--dw-fs-xs); }
 
-/* Save button (one primary in the chapter bar, on --dw-accent) */
-.cb-save-btn {
-  display: inline-flex; align-items: center; gap: var(--dw-s2);
-  height: 34px; padding: 0 var(--dw-s4);
-  border: 0; border-radius: 8px; cursor: pointer;
-  background: var(--dw-accent); color: var(--dw-accent-contrast);
-  font: inherit; font-size: var(--dw-fs-xs); font-weight: var(--dw-w-bold);
-  box-shadow: var(--dw-shadow);
-  transition: background 0.12s, transform 0.04s;
-}
-.cb-save-btn:hover { background: var(--dw-accent-strong); }
-.cb-save-btn:active { transform: translateY(1px); }
-.cb-save-btn:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
-
 /* Amber unsaved dot — uses the global --dw-save-dot / --dw-save-dot-halo tokens
-   (tokens.css), shared by the chapter bar dot AND the view/YAML Save-button corner dots. */
+   (tokens.css), shared by the document bar AND the YAML Save-button corner dot. */
 .cb-save-dot {
   width: 7px; height: 7px; border-radius: 50%;
   background: var(--dw-save-dot);
@@ -755,49 +671,27 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 0;
 }
 .chapterbar.dirty .cb-save-dot { display: block; }
 
-/* The view / YAML editors share the same unsaved affordance as the chapter bar: their
-   primary Save button grows the amber dot the moment content diverges from disk (app.js
-   toggles .dirty on #vSaveBtn / #yamlSaveBtn via the state.dirty setter — the same path
-   a slide-zone edit hits in Task 7c). Corner dot, so it never reflows the button label;
-   same sanctioned editing-chrome amber as .cb-save-dot, via the shared --dw-save-dot. */
-#vSaveBtn.dirty, #yamlSaveBtn.dirty { position: relative; }
-#vSaveBtn.dirty::after, #yamlSaveBtn.dirty::after {
+/* The YAML editor shares the same unsaved affordance: its Save button grows the amber dot the
+   moment content diverges from disk (app.js toggles .dirty on #yamlSaveBtn via the state.dirty
+   setter). Corner dot, so it never reflows the button label. */
+#yamlSaveBtn.dirty { position: relative; }
+#yamlSaveBtn.dirty::after {
   content: ""; position: absolute; top: -3px; right: -3px;
   width: 7px; height: 7px; border-radius: 50%;
   background: var(--dw-save-dot);
   box-shadow: 0 0 0 3px var(--dw-save-dot-halo);
 }
 
-/* Kebab popup */
-.cb-kebab-wrap { position: relative; flex-shrink: 0; }
+/* Icon buttons of the document bar: History, Properties, ⋯ (pressed = its panel is open) */
 .cb-kebab-btn {
-  width: 34px; height: 34px; border-radius: 8px; padding: 0;
+  width: 34px; height: 34px; border-radius: var(--dw-r1); padding: 0;
   border: 1px solid transparent; background: transparent;
   color: var(--dw-muted); display: inline-flex; align-items: center; justify-content: center;
   cursor: pointer; transition: background 0.12s, color 0.12s;
 }
-.cb-kebab-btn:hover { background: var(--dw-surface-2); color: var(--dw-text); }
+.cb-kebab-btn:hover, .cb-kebab-btn[aria-expanded="true"] { background: var(--dw-surface-2); color: var(--dw-text); }
+.cb-kebab-btn[aria-pressed="true"] { background: var(--dw-accent-bg); color: var(--dw-accent); }
 .cb-kebab-btn:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
-.cb-kebab-menu {
-  position: absolute; top: 40px; right: 0;
-  background: var(--dw-surface); border: 1px solid var(--dw-border);
-  border-radius: var(--dw-r1); box-shadow: var(--dw-shadow-2);
-  padding: var(--dw-s1); min-width: 182px; z-index: 30;
-  display: none;
-}
-.cb-kebab-menu.cb-open { display: block; }
-.cb-kebab-item {
-  display: flex; align-items: center; gap: var(--dw-s2);
-  width: 100%; padding: var(--dw-s2) var(--dw-s3);
-  border: 0; background: transparent; border-radius: var(--dw-r0);
-  font: inherit; font-size: var(--dw-fs-sm); font-weight: var(--dw-w-medium); color: var(--dw-text);
-  cursor: pointer; text-align: left;
-  transition: background 0.12s;
-}
-.cb-kebab-item:hover { background: var(--dw-surface-2); }
-.cb-kebab-item:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
-.cb-kebab-danger { color: var(--dw-bad); }
-.cb-kebab-danger:hover { background: var(--dw-bad-bg); }
 
 /* Keep the old .fm for yaml/view editors */
 .fm { display: flex; gap: var(--dw-s3); align-items: center; flex-wrap: wrap;
@@ -2015,34 +1909,6 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
   color: var(--dw-muted);
 }
 
-/* View switch (Edit / Source / Read) â€” right-pinned in main track */
-.e2-view-switch {
-  display: inline-flex;
-  align-items: center;
-  gap: 1px;
-  flex-shrink: 0;
-}
-.e2-view-switch button {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--dw-s2);
-  height: 34px;
-  border: none;
-  background: transparent;
-  color: var(--dw-muted);
-  font-size: var(--dw-fs-xs);
-  font-weight: var(--dw-w-medium);
-  padding: 0 var(--dw-s3);
-  border-radius: var(--dw-r0);
-  cursor: pointer;
-  font-family: inherit;
-  white-space: nowrap;
-  transition: background 0.12s ease, color 0.12s ease;
-}
-.e2-view-switch button.active { background: var(--dw-accent-bg); color: var(--dw-accent); }
-.e2-view-switch button:not(.active):hover { background: var(--dw-surface-2); color: var(--dw-text); }
-.e2-view-switch button:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
-
 /* Icon buttons in the scrollable track */
 .e2-maintoolbar .ib {
   height: 34px;
@@ -2440,8 +2306,28 @@ dialog#modal .mlbl { display: block; margin: var(--dw-s4) 0 var(--dw-s1); font-s
    Settings surface (#setPane) — interactive docwiz.yaml editor + app prefs.
    Ported from the Claude Design mock, mapped to --dw-* tokens; scoped under
    #setPane so the generic class names (.finput/.switch/.seg/.frow) can't clash. */
-#setPane { display: flex; flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
-#setPane[hidden] { display: none; }
+/* The sheet (Stage 6): settings float over the editor below the chrome bar, on the dialog
+   backdrop; the window's own controls in the bar stay usable. Below tooltips (1000) and
+   toasts (2000), so both still show over it. */
+.set-sheet {
+  position: fixed; left: 0; right: 0; bottom: 0; top: 54px; z-index: 900;
+  display: flex; align-items: center; justify-content: center;
+  padding: var(--dw-s5);
+  background: var(--dw-backdrop);
+}
+#setPane {
+  display: flex; flex: none; min-width: 0; min-height: 0; overflow: hidden;
+  width: min(1080px, 100%); height: min(760px, 100%);
+  background: var(--dw-bg); border: 1px solid var(--dw-border);
+  border-radius: var(--dw-r2); box-shadow: var(--dw-shadow-2);
+}
+#setPane:focus { outline: none; } /* focused on open so Tab starts inside the sheet */
+#setPane .set-close {
+  width: 34px; height: 34px; padding: 0; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1px solid transparent; background: transparent; color: var(--dw-muted);
+}
+#setPane .set-close:hover { background: var(--dw-surface-2); color: var(--dw-text); }
 
 #setPane .set-rail { width: 262px; flex-shrink: 0; background: var(--dw-surface); border-right: 1px solid var(--dw-border); display: flex; flex-direction: column; overflow: hidden; }
 #setPane .set-rail-scroll { flex: 1; overflow-y: auto; padding: var(--dw-s2); }
@@ -2450,9 +2336,6 @@ dialog#modal .mlbl { display: block; margin: var(--dw-s4) 0 var(--dw-s1); font-s
 #setPane .set-item { display: flex; align-items: center; gap: var(--dw-s2); font-size: var(--dw-fs-sm); color: var(--dw-muted); padding: var(--dw-s2); border-radius: var(--dw-r1); cursor: pointer; }
 #setPane .set-item:hover { background: var(--dw-surface-2); }
 #setPane .set-item.active { background: var(--dw-accent-bg); color: var(--dw-accent); font-weight: var(--dw-w-bold); box-shadow: inset 3px 0 0 var(--dw-accent); }
-#setPane .set-item.soon { cursor: default; opacity: .55; }
-#setPane .set-item.soon:hover { background: transparent; }
-#setPane .soon-badge { margin-left: auto; font-size: var(--dw-fs-xs); font-weight: var(--dw-w-bold); letter-spacing: var(--dw-track-caps); text-transform: uppercase; color: var(--dw-faint); background: var(--dw-surface-2); border: 1px solid var(--dw-border); border-radius: 20px; padding: 2px var(--dw-s2); }
 
 #setPane .set-pane-body { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
 #setPane .set-topbar { height: 54px; flex-shrink: 0; background: var(--dw-surface); border-bottom: 1px solid var(--dw-border); display: flex; align-items: center; gap: var(--dw-s3); padding: 0 var(--dw-s5); }
@@ -2539,7 +2422,7 @@ dialog#modal .mlbl { display: block; margin: var(--dw-s4) 0 var(--dw-s1); font-s
    The History panel beside the chapter, and the compare view: the older version rendered
    like the page, with blocks added since (green) and removed since (red, struck) marked by
    classes on the blocks themselves. Editing chrome only — the content look stays site.css. */
-.hist-panel {
+.hist-panel, .props-panel {
   width: 300px; flex: none; min-height: 0;
   display: flex; flex-direction: column;
   background: var(--dw-surface); border-left: 1px solid var(--dw-border);
@@ -2552,16 +2435,6 @@ dialog#modal .mlbl { display: block; margin: var(--dw-s4) 0 var(--dw-s1); font-s
   font-size: var(--dw-fs-xs); font-weight: var(--dw-w-medium);
   text-transform: uppercase; letter-spacing: var(--dw-track-caps); color: var(--dw-muted);
 }
-.hist-seg {
-  display: inline-flex; padding: 2px; gap: 2px;
-  background: var(--dw-surface-2); border: 1px solid var(--dw-border); border-radius: var(--dw-r1);
-}
-.hist-seg button {
-  border: 0; background: transparent; cursor: pointer;
-  padding: var(--dw-s1) var(--dw-s2); border-radius: var(--dw-r0);
-  font-size: var(--dw-fs-xs); font-weight: var(--dw-w-medium); color: var(--dw-muted);
-}
-.hist-seg button[aria-selected="true"] { background: var(--dw-surface); color: var(--dw-text); box-shadow: var(--dw-shadow); }
 .hist-body { flex: 1; min-height: 0; overflow-y: auto; padding: 0 var(--dw-s2) var(--dw-s4); }
 .hist-day { margin: var(--dw-s4) var(--dw-s2) var(--dw-s1); }
 .hist-entry {
@@ -2623,3 +2496,44 @@ dialog#modal .mlbl { display: block; margin: var(--dw-s4) 0 var(--dw-s1); font-s
   background: var(--dw-bad-bg); box-shadow: -12px 0 0 -9px var(--dw-bad);
   text-decoration: line-through; text-decoration-color: var(--dw-bad);
 }
+
+/* ---- Properties panel (Stage 6): the chapter's technical facts beside the page — the side
+        panel recipe of History (.hist-head / .hist-title / .hist-body), a definition list. ---- */
+.props-list { margin: 0; padding: var(--dw-s1) var(--dw-s2); }
+.props-list dt {
+  margin-top: var(--dw-s4);
+  font-size: var(--dw-fs-xs); font-weight: var(--dw-w-medium);
+  text-transform: uppercase; letter-spacing: var(--dw-track-caps); color: var(--dw-muted);
+}
+.props-list dt:first-child { margin-top: var(--dw-s1); }
+.props-list dd {
+  margin: var(--dw-s2) 0 0;
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--dw-s2);
+  font-size: var(--dw-fs-sm); min-width: 0;
+}
+.props-select {
+  width: 100%; font: inherit; font-size: var(--dw-fs-sm);
+  border: 1px solid var(--dw-border-strong); border-radius: var(--dw-r1);
+  padding: var(--dw-s2) var(--dw-s3); background: var(--dw-surface); color: var(--dw-text);
+}
+.props-select:focus { outline: none; border-color: var(--dw-accent); box-shadow: var(--dw-focus-ring); }
+.props-chips { display: flex; flex-wrap: wrap; gap: var(--dw-s1); }
+.props-chip {
+  padding: 2px var(--dw-s2); border: 1px solid var(--dw-border); border-radius: var(--dw-r0);
+  background: var(--dw-surface-2); color: var(--dw-text); font-size: var(--dw-fs-xs);
+}
+.props-used {
+  display: flex; align-items: baseline; justify-content: space-between; gap: var(--dw-s2);
+  width: 100%; padding: var(--dw-s1) var(--dw-s2); margin: 0 calc(-1 * var(--dw-s2));
+  border-radius: var(--dw-r0); color: var(--dw-accent); text-decoration: none; font-weight: var(--dw-w-medium);
+}
+.props-used:hover { background: var(--dw-surface-2); }
+.props-used small { font-size: var(--dw-fs-xs); font-weight: var(--dw-w-regular); color: var(--dw-muted); white-space: nowrap; }
+.props-code { font-family: var(--dw-font-mono); font-size: var(--dw-fs-xs); color: var(--dw-text); overflow-wrap: anywhere; }
+.props-path { color: var(--dw-muted); }
+.props-note { width: 100%; font-size: var(--dw-fs-xs); color: var(--dw-muted); line-height: var(--dw-lh-snug); }
+
+/* Checkable items of the shared action menu (Readers): the tick shows only when on. */
+.e2-menu .mi.mcheckable .mcheck { margin-left: auto; visibility: hidden; color: var(--dw-accent); }
+.e2-menu .mi.mcheckable.on { color: var(--dw-text); }
+.e2-menu .mi.mcheckable.on .mcheck { visibility: visible; }

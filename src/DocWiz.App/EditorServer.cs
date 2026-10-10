@@ -650,6 +650,34 @@ public static class EditorServer
             return Results.Json(new { folder = newName });
         });
 
+        // Where a chapter is used (the properties panel's "Used in"): outputs with the slide
+        // numbers that include it, and chapters that link to it — the delete guard's finder.
+        app.MapGet("/api/chapter-usage", (string file) =>
+        {
+            if (NoProject() is { } guard)
+                return guard;
+            var path = ResolveChapterPath(holder.Root!, file);
+            if (path is null)
+                return Results.BadRequest("Not a chapter file inside this project.");
+            var (project, _) = LoadParsed(holder.Root!);
+            var chapter = project.Chapters.FirstOrDefault(c =>
+                string.Equals(Path.GetFullPath(c.FilePath), Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase));
+            if (chapter is null)
+                return Results.BadRequest("Chapter not found in the loaded project.");
+            var usage = ContentOrganizer.FindUsage(project, chapter.Id);
+            return Results.Json(new
+            {
+                outputs = usage.Views.Select(v => new
+                {
+                    title = v.View.Title,
+                    file = RelPath(project.Root, v.View.FilePath),
+                    mode = v.View.Mode,
+                    slides = v.Slides,
+                }),
+                linkedFrom = usage.LinkedFrom.Select(c => new { title = c.Title, file = RelPath(project.Root, c.FilePath) }),
+            });
+        });
+
         // Deleting is refused while anything still references the chapter — the
         // validator would flag the dangling links anyway; failing early is kinder.
         app.MapDelete("/api/chapter", (string file) =>

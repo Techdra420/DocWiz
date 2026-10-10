@@ -192,26 +192,44 @@ public static class ContentOrganizer
     /// refuse deleting a chapter that would leave dangling dw: links or view includes.</summary>
     public static List<string> FindReferences(DocProject project, string chapterId)
     {
-        var references = new List<string>();
-        var linkPattern = new Regex($@"dw:{Regex.Escape(chapterId)}(?![\w-])", RegexOptions.IgnoreCase);
+        var usage = FindUsage(project, chapterId);
+        var references = usage.LinkedFrom.Select(c => $"chapter \"{c.Title}\" links to it").ToList();
+        references.AddRange(usage.Views.Select(v =>
+            $"view \"{v.View.Title}\" includes it in {v.Slides.Count} slide{(v.Slides.Count == 1 ? "" : "s")}"));
+        return references;
+    }
 
-        foreach (var chapter in project.Chapters.Where(c => c.Id != chapterId))
-        {
-            if (linkPattern.IsMatch(chapter.Markdown))
-                references.Add($"chapter \"{chapter.Title}\" links to it");
-        }
+    /// <summary>Where a chapter is used: the chapters that link to it and the views whose
+    /// slides include or embed it. One finder for the delete guard (<see cref="FindReferences"/>)
+    /// and the editor's "Used in".</summary>
+    public sealed record ChapterUsage(IReadOnlyList<Chapter> LinkedFrom, IReadOnlyList<ViewUsage> Views);
+
+    /// <summary>A view using a chapter, with the 1-based numbers of the slides that do.</summary>
+    public sealed record ViewUsage(ViewDefinition View, IReadOnlyList<int> Slides);
+
+    public static ChapterUsage FindUsage(DocProject project, string chapterId)
+    {
+        var linkPattern = new Regex($@"dw:{Regex.Escape(chapterId)}(?![\w-])", RegexOptions.IgnoreCase);
+        var linkedFrom = project.Chapters
+            .Where(c => c.Id != chapterId && linkPattern.IsMatch(c.Markdown))
+            .ToList();
 
         // A slide references the chapter via the legacy single-include field OR an inline
         // ::: embed in any region's markdown (Structured Slides v2). Count each slide once.
         var pipeline = DocWizMarkdown.CreatePipeline();
+        var views = new List<ViewUsage>();
         foreach (var view in project.Views)
         {
-            var count = view.Slides.Count(s => SlideReferences(s, chapterId, pipeline));
-            if (count > 0)
-                references.Add($"view \"{view.Title}\" includes it in {count} slide{(count == 1 ? "" : "s")}");
+            var slides = view.Slides
+                .Select((s, i) => (s, number: i + 1))
+                .Where(x => SlideReferences(x.s, chapterId, pipeline))
+                .Select(x => x.number)
+                .ToList();
+            if (slides.Count > 0)
+                views.Add(new ViewUsage(view, slides));
         }
 
-        return references;
+        return new ChapterUsage(linkedFrom, views);
     }
 
     /// <summary>Does the slide reference <paramref name="chapterId"/> — via the legacy
