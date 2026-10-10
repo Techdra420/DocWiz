@@ -69,8 +69,8 @@ A **linked section** shows a part of a chapter on the slide — a section under 
 3. Pick the **Chapter** and, if you want only part of it, the **Section** — groups are listed at the end.
 :::
 
-::: warning Use an empty line
-**Insert** › **Linked section…** in the toolbar replaces the block the cursor is in with the linked section. Use it on an empty line or on placeholder text, never on text you want to keep.
+::: tip From the toolbar
+**Insert** › **Linked section…** in the toolbar does the same. On an empty line the linked section takes the line's place; anywhere else it goes below the block the cursor is in, so your text stays.
 :::
 
 A linked section on a slide carries a *LINKED* label. Click it for its tools:

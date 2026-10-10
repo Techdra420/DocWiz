@@ -43,8 +43,11 @@ public sealed record AddExternalDto(string Key, string Folder, bool CopyIn);
 public sealed record ProjectSettingsDto(string? Project, string? Code, string? Customer, string? Version, string? Language, bool Numbering, List<AudienceDto>? Audiences);
 public sealed record AudienceDto(string Id, string Title, string? Description = null);
 public sealed record ChapterFrontmatterDto(string File, string? Discipline, List<string> Audiences);
+/// <summary>One slide on the wire, both ways (GET and PUT /api/view). Carries every
+/// <see cref="SlideDef"/> YAML key — a key missing here is dropped on the next save
+/// (pinned by ViewRoundTripTests).</summary>
 public sealed record ViewSlideDto(string? Layout, string? Include, string? Title, string? Subtitle, string? Markdown,
-    Dictionary<string, string>? Regions);
+    Dictionary<string, string>? Regions, string? Chapter = null);
 public sealed record ViewDto(string Id, string Title, string Audience, string Mode, List<ViewSlideDto> Slides);
 public sealed record NewViewDto(string Id, string Title, string Audience, string Mode);
 public sealed record DraftViewDto(string Chapter, string? Audience);
@@ -790,11 +793,7 @@ public static class EditorServer
                 view.Title,
                 view.Audience,
                 view.Mode,
-                slides = view.Slides.Select(s => new
-                {
-                    s.Layout, s.Title, s.Subtitle, s.Include, s.Markdown,
-                    regions = s.Regions,
-                }),
+                slides = view.Slides.Select(ToSlideDto),
             });
         });
 
@@ -1850,8 +1849,13 @@ public static class EditorServer
         return ok ? full : null;
     }
 
+    /// <summary>Model → wire slide for GET /api/view; the inverse of the slide mapping in
+    /// <see cref="ToView"/>.</summary>
+    internal static ViewSlideDto ToSlideDto(SlideDef s) =>
+        new(s.Layout, s.Include, s.Title, s.Subtitle, s.Markdown, s.Regions, s.Chapter);
+
     /// <summary>DTO → model, dropping blank slide fields so the YAML stays clean.</summary>
-    private static ViewDefinition ToView(ViewDto dto) => new()
+    internal static ViewDefinition ToView(ViewDto dto) => new()
     {
         Id = dto.Id,
         Title = dto.Title,
@@ -1866,6 +1870,7 @@ public static class EditorServer
                 Subtitle = Blank(s.Subtitle),
                 Markdown = Blank(s.Markdown),
                 Regions = NonBlankRegions(s.Regions),
+                Chapter = Blank(s.Chapter),
             })
             .ToList(),
     };

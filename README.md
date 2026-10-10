@@ -46,7 +46,9 @@ alongside the pilot: trust fixes first, then an editable structure (folder name 
 history + autosave, a calmer shell, first-class audiences, the outputs editor, and a
 consolidation pass — followed by a toolbar design pass (one-row formatting toolbar with Link,
 Insert and Align menus; named groups and a ⋯ menu in the context bars; scroll bars in the
-theme). Decisions and steps are in [docs/ROADMAP.md](docs/ROADMAP.md).
+theme), then two outputs-editor data-loss fixes (Insert › Linked section… no longer replaces
+the block the cursor is in; a whole-chapter `- chapter:` slide survives a save). Decisions and
+steps are in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 | Stage | Scope | Status |
 |-------|-------|--------|
@@ -56,7 +58,7 @@ theme). Decisions and steps are in [docs/ROADMAP.md](docs/ROADMAP.md).
 | 3 | Editor app MVP: live-surface chapters, images, links, templates, single exe | Complete (single exe verified on a clean machine) |
 | 4 | View manager in editor, single-file export, packaging | Complete |
 | 5 | Pilot on a real customer project (incl. Word import: editor Import… + New project from Word) | In progress (pilot loop) |
-| 6 | Editor redesign: trust fixes, editable structure, history + autosave, shell, audiences, outputs, consolidation, toolbar design pass | Steps 1–7 done (plus the toolbar design pass); awaiting the stakeholder's check of the success criteria |
+| 6 | Editor redesign: trust fixes, editable structure, history + autosave, shell, audiences, outputs, consolidation, toolbar design pass | Steps 1–7 done (plus the toolbar design pass and two outputs-editor data-loss fixes); awaiting the stakeholder's check of the success criteria |
 | — | Live editor: one surface that IS the page (M0–M5 ✓ — flipped 2026-06-12 after stakeholder sign-off; ADRs in ARCHITECTURE.md) | Shipped |
 
 ## Start here

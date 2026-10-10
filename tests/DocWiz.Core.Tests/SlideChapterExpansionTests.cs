@@ -62,6 +62,29 @@ public class SlideChapterExpansionTests
     }
 
     [Fact]
+    public void ChapterDirective_EditMode_StampsItsEntrySlotAndReadOnlyMarker()
+    {
+        // The editor maps each expanded slide back to its ONE slides[] entry (rail, canvas,
+        // zone collect) and must not mount zone editors on it. Read/handover stays unstamped.
+        var project = Project();
+        var pipeline = DocWizMarkdown.CreatePipeline();
+        DocWizMarkdown.ParseAll(project, pipeline);
+        var view = new ViewDefinition
+        {
+            Id = "v", Title = "V", Audience = "operator", Mode = "slides",
+            Slides = [new SlideDef { Layout = "title-content", Title = "First" }, new SlideDef { Chapter = "intro" }],
+        };
+
+        var edit = ViewRenderer.RenderSlides(project, view, pipeline, edit: true);
+        Assert.Equal(3, Count(edit, "data-slide-index=\"1\" data-chapter-slide")); // Alpha, Alpha-One, Beta
+        Assert.Equal(1, Count(edit, "data-slide-index=\"0\""));
+
+        var read = ViewRenderer.RenderSlides(project, view, pipeline);
+        Assert.DoesNotContain("data-chapter-slide", read);
+        Assert.DoesNotContain("data-slide-index", read);
+    }
+
+    [Fact]
     public void ChapterDirective_UnknownChapter_FailsValidation()
     {
         var project = Project(
@@ -93,6 +116,9 @@ public class SlideChapterExpansionTests
         var issues = ProjectValidator.Validate(project);
         Assert.Contains(issues, i => i.Severity == IssueSeverity.Error);
     }
+
+    private static int Count(string s, string needle) =>
+        (s.Length - s.Replace(needle, "").Length) / needle.Length;
 
     private static string Slice(string s, string from, string to)
     {
