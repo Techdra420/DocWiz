@@ -20,8 +20,8 @@ public static partial class SingleFileExporter
         string html = view.Mode == "slides"
             ? SiteTemplates.Read("slides.html")
                 .Replace("{{TABS}}", "")
-                .Replace("{{SLIDES}}", ViewRenderer.RenderSlides(project, view, pipeline))
-            : DocumentShell(ViewRenderer.RenderDocument(project, view, pipeline, linkSources: false));
+                .Replace("{{SLIDES}}", ViewRenderer.RenderSlides(project, view, pipeline, standalone: true))
+            : DocumentShell(ViewRenderer.RenderDocument(project, view, pipeline, standalone: true));
 
         html = html
             .Replace("{{TITLE}}", Escape(view.Title))
