@@ -7,7 +7,7 @@
 import { EditorState, TextSelection, NodeSelection, Selection, Plugin } from 'prosemirror-state';
 import { EditorView } from 'prosemirror-view';
 import { keymap } from 'prosemirror-keymap';
-import { history, undo, redo } from 'prosemirror-history';
+import { history, undo, redo, undoDepth, redoDepth } from 'prosemirror-history';
 import { baseKeymap, toggleMark, setBlockType, wrapIn, lift } from 'prosemirror-commands';
 import { findWrapping } from 'prosemirror-transform';
 import { inputRules, wrappingInputRule, textblockTypeInputRule, InputRule } from 'prosemirror-inputrules';
@@ -203,9 +203,9 @@ function plugins() {
     // in an empty trailing container paragraph; falls through otherwise.
     keymap({ Enter: exitContainerOnEnter }),
     keymap({
-      'Mod-z': undo,
-      'Mod-y': redo,
-      'Shift-Mod-z': redo,
+      'Mod-z': (_s, _d, view) => undoAny(false, view),
+      'Mod-y': (_s, _d, view) => undoAny(true, view),
+      'Shift-Mod-z': (_s, _d, view) => undoAny(true, view),
       'Mod-b': toggleMark(schema.marks.strong),
       'Mod-i': toggleMark(schema.marks.em),
       Enter: splitListItem(schema.nodes.list_item),
@@ -304,6 +304,13 @@ const contextBar = {
   },
 };
 
+// The chapter's number in front of its title (CSS reads --dwch), as the handover shows it.
+function numberArticle(article, dto) {
+  const on = !!dto.numbering && dto.chapterNumber > 0;
+  article.toggleAttribute('data-num', on);
+  if (on) article.style.setProperty('--dwch', "'" + dto.chapterNumber + "'");
+}
+
 async function open(file, opts) {
   const res = await fetch('/api/editor-doc?file=' + encodeURIComponent(file));
   if (!res.ok) throw new Error((await res.text()) || res.statusText);
@@ -336,10 +343,7 @@ async function open(file, opts) {
   mount.appendChild(top);
 
   const article = document.createElement('article');
-  if (dto.numbering && dto.chapterNumber > 0) {
-    article.setAttribute('data-num', '');
-    article.style.setProperty('--dwch', "'" + dto.chapterNumber + "'");
-  }
+  numberArticle(article, dto);
   mount.appendChild(article);
 
   current = { file, dto, originals: new Map(), opts: opts || {}, view: null, sourceArea: null };
@@ -1296,8 +1300,8 @@ function buildMainToolbar(opts) {
   });
 
   // Convention (Word Quick Access Toolbar, Google Docs, CKEditor): undo/redo at far LEFT.
-  add('undo', null, 'Undo (Ctrl+Z).', () => runEitherCmd(undo));
-  add('redo', null, 'Redo (Ctrl+Y).', () => runEitherCmd(redo));
+  add('undo', null, 'Undo (Ctrl+Z).', () => undoAny(false, null));
+  add('redo', null, 'Redo (Ctrl+Y).', () => undoAny(true, null));
   addSep();
   scroll.appendChild(blockDropdown.wrap);
   addSep();
@@ -1768,9 +1772,11 @@ function sameBlocks(onScreen, built) {
    case), only block attributes are refreshed in place — the editor state, and with it the
    undo history and the selection, stays, so autosave never takes Ctrl+Z away. Old srcIds
    that an undo brings back are safe: buildSavePayload copies original bytes only for a
-   node nodeClean() finds equal to its original. Anything else gets the full rebuild, with a
-   best-effort restore of scroll + selection position. */
-function rebuild(dto) {
+   node nodeClean() finds equal to its original. `swap` (follow()) also keeps the state when
+   only the block count matches: blocks that differ are swapped in, outside the undo history.
+   Anything else gets the full rebuild, with a best-effort restore of scroll + selection
+   position. */
+function rebuild(dto, swap) {
   const mount = document.getElementById('editor2');
   const scrollTop = mount.scrollTop;
   const selPos = current.view ? current.view.state.selection.from : 0;
@@ -1778,13 +1784,20 @@ function rebuild(dto) {
 
   current.dto = dto;
   const doc = buildDoc(schema, dto);
-  if (!wasSource && sameBlocks(current.view.state.doc, doc)) {
+  const shownDoc = current.view.state.doc;
+  if (!wasSource && (sameBlocks(shownDoc, doc) || (swap && shownDoc.childCount === doc.childCount))) {
     const tr = current.view.state.tr;
-    doc.forEach((node, offset, index) => {
-      const shown = tr.doc.child(index);
-      if (JSON.stringify(shown.attrs) !== JSON.stringify(node.attrs))
-        tr.setNodeMarkup(offset, null, node.attrs);
-    });
+    // Last block first, so a swapped block's new size never shifts one still to visit.
+    let pos = shownDoc.content.size;
+    for (let index = doc.childCount - 1; index >= 0; index--) {
+      const node = doc.child(index);
+      const shown = shownDoc.child(index);
+      pos -= shown.nodeSize;
+      if (shown.type !== node.type || !shown.content.eq(node.content))
+        tr.replaceWith(pos, pos + shown.nodeSize, node);
+      else if (JSON.stringify(shown.attrs) !== JSON.stringify(node.attrs))
+        tr.setNodeMarkup(pos, null, node.attrs);
+    }
     if (tr.docChanged) {
       tr.setMeta('addToHistory', false);
       tr.setMeta(SOFT_REBUILD, true);
@@ -1801,6 +1814,21 @@ function rebuild(dto) {
   const sel = TextSelection.near(current.view.state.doc.resolve(Math.min(selPos, max)));
   current.view.dispatch(current.view.state.tr.setSelection(sel));
   mount.scrollTop = scrollTop;
+}
+
+/* The open chapter was renamed or moved from the sidebar (app.js structureChange): its file
+   is now `file`, and a rename rewrote its title. Take both into the open editor rather than
+   opening the chapter afresh, which would lose Ctrl+Z for the edits made before. */
+async function follow(was, file) {
+  if (!current || current.file !== was) return;
+  const opened = current;
+  const res = await fetch('/api/editor-doc?file=' + encodeURIComponent(file));
+  if (!res.ok) throw new Error((await res.text()) || res.statusText);
+  const dto = await res.json();
+  if (current !== opened) return;
+  current.file = dto.file;
+  numberArticle(current.view.dom.parentElement, dto); // a move can change its number
+  rebuild(dto, true);
 }
 
 /* ---------- Source (advanced): the exact text Save would write ---------- */
@@ -1915,19 +1943,90 @@ document.addEventListener('keydown', (event) => {
 document.addEventListener('keydown', (event) => {
   if (event.altKey || !(event.ctrlKey || event.metaKey)) return;
   const key = (event.key || '').toLowerCase();
-  let cmd = null;
-  if (key === 'z') cmd = event.shiftKey ? redo : undo;
-  else if (key === 'y' && !event.shiftKey) cmd = redo;
-  if (!cmd || !getActiveView()) return;
+  let redoing = null;
+  if (key === 'z') redoing = event.shiftKey;
+  else if (key === 'y' && !event.shiftKey) redoing = true;
+  if (redoing === null) return;
   // A focused editable owns its own undo (see comment above) — only step in once focus
   // has drifted off every editable, which is the case the per-view keymap cannot reach.
   const t = event.target;
   if (t && t.closest && (
       /^(input|textarea|select)$/i.test(t.tagName || '') ||
       t.closest('[contenteditable=""], [contenteditable="true"]'))) return;
+  // Nothing behind an open dialog or sheet changes under it.
+  if (document.querySelector('dialog[open]') || (t && t.closest && t.closest('[role="dialog"]'))) return;
   event.preventDefault();
-  runEitherCmd(cmd);
+  undoAny(redoing, null);
 }, true);
+
+/* One Ctrl+Z order for the page and the sidebar (Stage 6). A sidebar change — rename, move,
+   add, delete — records a step here (recordStep, from app.js) that knows how to take itself
+   back and how to do itself again; Ctrl+Z / Ctrl+Y, the toolbar's Undo / Redo and the
+   change's toast then take whichever came last, the step or the page's own edits. "Came
+   last" compares the page's undo depth now with the depth noted on the step, so it holds
+   however ProseMirror groups the typing. Slide zones and table cells keep their own undo. */
+const steps = { done: [], undone: [] };
+let stepRun = Promise.resolve();
+
+function noteDepth(step) {
+  const v = current && current.view;
+  step.view = v;
+  step.depth = v ? undoDepth(v.state) : 0;
+  step.rdepth = v ? redoDepth(v.state) : 0;
+}
+
+// What the page did after the step was noted: new edits (its undo depth grew) or undos (its
+// redo depth grew). A chapter opened since holds only later work.
+function pageSince(step) {
+  const v = current && current.view;
+  const same = !!v && v === step.view;
+  return {
+    edited: !!v && undoDepth(v.state) > (same ? step.depth : 0),
+    undone: !!v && redoDepth(v.state) > (same ? step.rdepth : 0),
+  };
+}
+
+function recordStep(step) {
+  noteDepth(step);
+  steps.done.push(step);
+  steps.undone.length = 0;
+}
+
+function runStep(step, redoing) {
+  (redoing ? steps.undone : steps.done).pop();
+  noteDepth(step);
+  (redoing ? steps.done : steps.undone).push(step);
+  // One at a time, in order: a quick second Ctrl+Z waits for the first to land.
+  stepRun = stepRun.then(() => (redoing ? step.redo() : step.undo())).catch(() => {
+    // app.js has shown why it failed; the files no longer match the steps, so drop them.
+    steps.done.length = 0;
+    steps.undone.length = 0;
+  });
+}
+
+// The toast's Undo: this change, if nothing in the sidebar came after it.
+function undoStep(step) {
+  if (steps.done[steps.done.length - 1] === step) runStep(step, false);
+}
+
+/* view: the editor whose key it was (null for the toolbar or a key outside every editor).
+   Sidebar steps belong to the chapter page — never to a slide zone's own undo. */
+function undoAny(redoing, view) {
+  const chapter = current && current.view;
+  const zone = activeView && activeView !== chapter && !activeView.isDestroyed && activeView.dom.offsetParent;
+  const page = view ? view === chapter : !zone && !cellView();
+  const list = redoing ? steps.undone : steps.done;
+  const step = list[list.length - 1];
+  if (page && step) {
+    const since = pageSince(step);
+    if (redoing && since.edited) steps.undone.length = 0; // a new edit since the undo: no redo
+    else if (!(redoing ? since.undone : since.edited)) { runStep(step, redoing); return true; }
+  }
+  const cmd = redoing ? redo : undo;
+  if (view) return cmd(view.state, view.dispatch, view);
+  if (getActiveView()) runEitherCmd(cmd);
+  return true;
+}
 
 /* Refresh the shared toolbar against the active view. slideedit.js calls this when a
    zone gains focus or changes selection so the one toolbar tracks the focused zone. */
@@ -1956,6 +2055,9 @@ window.DocWizEditor2 = {
   // The chapter file the surface holds (null when closed) — app.js saves only when it is
   // still the chapter it shows (opening another chapter is asynchronous).
   openFile: () => (current ? current.file : null),
+  follow,
+  recordStep,
+  undoStep,
   insert,
   // Image width presets (constants.js) — app.js dialogs build their size options
   // from here so the numbers exist in exactly one place.

@@ -159,20 +159,18 @@
       var secLabel = el('span', 'tree-label', s.title);
       secLabel.title = s.title;
       secLabel.ondblclick = function () {
-        renameInline(secLabel, s.title, function (name) {
-          return structureChange('POST', '/api/section-rename', { folder: s.folder, name: name });
-        });
+        renameInline(secLabel, s.title, function (name) { return renameSectionAt(si, name); });
       };
       grp.appendChild(secLabel);
       grp.appendChild(treeAction('plus', 'Add a chapter to “' + s.title + '”', function () { newChapter(s.folder); }));
       grp.appendChild(treeAction('more', 'Section actions', function (btn) { sectionMenu(btn, s, si, p.sections, secLabel); }));
-      dropTarget(grp, s, function () { return s.chapters.length; });
+      dropTarget(grp, si, function () { return s.chapters.length; });
       tree.appendChild(grp);
       if (!s.chapters.length) {
         var empty = el('button', 'tree-empty', 'No chapters yet — add one');
         empty.type = 'button';
         empty.onclick = function () { newChapter(s.folder); };
-        dropTarget(empty, s, function () { return 0; });
+        dropTarget(empty, si, function () { return 0; });
         tree.appendChild(empty);
       }
       s.chapters.forEach(function (c, ci) {
@@ -197,22 +195,19 @@
         label.ondblclick = function (e) {
           e.preventDefault();
           row.draggable = false;
-          renameInline(label, c.title, function (title) {
-            return structureChange('POST', '/api/chapter-rename', { file: c.file, title: title },
-              { reopen: c.file === state.currentFile });
-          });
+          renameInline(label, c.title, function (title) { return renameChapterTo(c, title); });
         };
         row.appendChild(a);
         row.appendChild(treeAction('more', 'Chapter actions', function (btn) {
           chapterMenu(btn, c, s, ci, p.sections, function () { label.ondblclick(new Event('dblclick')); });
         }));
         row.addEventListener('dragstart', function (e) {
-          dragging = { file: c.file, folder: s.folder, index: ci };
+          dragging = { chapter: c, si: si, index: ci };
           e.dataTransfer.effectAllowed = 'move';
           try { e.dataTransfer.setData('text/plain', c.title || c.file); } catch (x) { /* some hosts refuse */ }
         });
         row.addEventListener('dragend', function () { dragging = null; clearDropMarks(); });
-        dropTarget(row, s, function () { return ci; });
+        dropTarget(row, si, function () { return ci; });
         tree.appendChild(row);
         // Subchapter outline (H2s and H3s), expanded for the open chapter only —
         // numbers match the handover's in-page heading numbers (N.1, N.1.1 …).
@@ -239,7 +234,7 @@
     addSection.setAttribute('data-tip', 'Add a section to the manual. Its name becomes the folder name, so any name works except \\ / : * ? " < > |.');
     addSection.onclick = function () {
       promptDialog('New section', 'Name', 'e.g. Údržba', 'Create section', function (name) {
-        structureChange('POST', '/api/section', { name: name }).catch(quiet);
+        addSectionNamed(name).catch(quiet);
       });
     };
     tree.appendChild(addSection);
@@ -376,7 +371,8 @@
 
   // Runs a structure change. Pending edits of the open chapter are saved first (a rename or
   // move renames its file); afterwards the tree reloads and the open chapter is found again by
-  // its id — re-opened when its file moved or opts.reopen says its content changed.
+  // its id — the editor follows it when its file moved or opts.reopen says its title changed
+  // (in place, so the page's Ctrl+Z history stays).
   function structureChange(method, url, body, opts) {
     var before = state.dirty && state.currentFile ? saveChapter() : Promise.resolve();
     return before
@@ -387,8 +383,9 @@
             var file = chapterFileFor(state.currentId);
             if (!file) { state.currentFile = null; state.currentId = null; show('welcome'); }
             else if (file !== state.currentFile || (opts && opts.reopen)) {
+              var was = state.currentFile;
               state.currentFile = file;
-              mountLiveEditor();
+              window.DocWizEditor2.follow(was, file).catch(function (e) { reportError(e.message); });
             }
             if (file) { renderTree(state.project); updateCrumb(); renderProps(); }
           }
@@ -429,6 +426,164 @@
     input.onclick = function (e) { e.preventDefault(); e.stopPropagation(); };
   }
 
+  /* Ctrl+Z for the sidebar (Stage 6). Each change made there records a step in the editor's
+     one undo order (DocWizEditor2.recordStep) — how to take it back and how to do it again —
+     so Ctrl+Z / Ctrl+Y and the toolbar take sidebar changes and page edits newest first. A
+     step finds its chapter again by id and its section by position, which still hold after
+     the renumbering a change does to its neighbours. A toast says what changed, with Undo. */
+  function undoable(title, what, undo, redo) {
+    var E = window.DocWizEditor2;
+    if (!E || !E.recordStep) return;
+    function run(fn, done) {
+      return function () {
+        return Promise.resolve().then(fn).then(
+          function () { showToast(done, title + '.', 'success'); },
+          function (e) { showToast('Not changed', e.message || String(e), 'error'); throw e; });
+      };
+    }
+    var step = { undo: run(undo, 'Undone'), redo: run(redo, 'Redone') };
+    E.recordStep(step);
+    var toast = showToast(title, what, 'success');
+    var b = el('button', 'hist-link', 'Undo');
+    b.type = 'button';
+    b.onclick = function () { toast.classList.remove('show'); E.undoStep(step); };
+    toast.appendChild(b);
+  }
+
+  function folderAt(si) {
+    var s = state.project.sections[si];
+    if (!s) throw new Error('That section is no longer there.');
+    return s.folder;
+  }
+  function fileOf(id) {
+    var file = chapterFileFor(id);
+    if (!file) throw new Error('That chapter is no longer there.');
+    return file;
+  }
+  function sectionIndex(folder) {
+    return state.project.sections.map(function (s) { return s.folder; }).indexOf(folder);
+  }
+
+  // The sidebar's changes, each addressed by what holds while others happen around it.
+  var change = {
+    renameSection: function (si, name) { return structureChange('POST', '/api/section-rename', { folder: folderAt(si), name: name }); },
+    moveSection: function (si, dir) { return structureChange('POST', '/api/section-move', { folder: folderAt(si), direction: dir }); },
+    addSection: function (name) { return structureChange('POST', '/api/section', { name: name }); },
+    deleteSection: function (si) { return structureChange('DELETE', '/api/section?folder=' + encodeURIComponent(folderAt(si))); },
+    renameChapter: function (id, title) {
+      var file = fileOf(id);
+      return structureChange('POST', '/api/chapter-rename', { file: file, title: title }, { reopen: file === state.currentFile });
+    },
+    moveChapter: function (id, dir) { return structureChange('POST', '/api/chapter-move', { file: fileOf(id), direction: dir }); },
+    moveChapterTo: function (id, si, index) {
+      return structureChange('POST', '/api/chapter-move-to', { file: fileOf(id), folder: folderAt(si), index: index });
+    },
+    deleteChapter: function (id) { return structureChange('DELETE', '/api/chapter?file=' + encodeURIComponent(fileOf(id))); },
+    // Back from Recently deleted: the newest copy of the file that was at `path`.
+    restoreChapter: function (path) {
+      return api.json('/api/history/project').then(function (h) {
+        var hit = h.deleted.filter(function (d) { return d.path === path; })
+          .sort(function (a, b) { return a.stamp < b.stamp ? 1 : -1; })[0];
+        if (!hit) throw new Error('It is no longer in Recently deleted.');
+        return structureChange('POST', '/api/history/deleted-restore', { stamp: hit.stamp, path: hit.path });
+      });
+    },
+  };
+
+  function renameSectionAt(si, name) {
+    var before = state.project.sections[si].title;
+    return change.renameSection(si, name).then(function () {
+      undoable('Section renamed', '“' + before + '” is now “' + name + '”.',
+        function () { return change.renameSection(si, before); },
+        function () { return change.renameSection(si, name); });
+    });
+  }
+
+  function moveSectionAt(si, dir) {
+    var title = state.project.sections[si].title;
+    return change.moveSection(si, dir).then(function () {
+      undoable('Section moved', '“' + title + '” moved ' + (dir < 0 ? 'up' : 'down') + '.',
+        function () { return change.moveSection(si + dir, -dir); },
+        function () { return change.moveSection(si, dir); });
+    });
+  }
+
+  function addSectionNamed(name) {
+    return change.addSection(name).then(function (res) {
+      var si = sectionIndex(res.folder);
+      undoable('Section added', '“' + name + '” added.',
+        function () { return change.deleteSection(si); },
+        function () { return change.addSection(name); });
+    });
+  }
+
+  function removeSectionAt(si) {
+    var title = state.project.sections[si].title;
+    return change.deleteSection(si).then(function () {
+      undoable('Section deleted', '“' + title + '” deleted.',
+        function () {
+          // A new section comes last: move it back up to where it was.
+          return change.addSection(title).then(function (res) {
+            var chain = Promise.resolve();
+            for (var at = sectionIndex(res.folder); at > si; at--) chain = chain.then(change.moveSection.bind(null, at, -1));
+            return chain;
+          });
+        },
+        function () { return change.deleteSection(si); });
+    });
+  }
+
+  function renameChapterTo(c, title) {
+    var before = c.title;
+    return change.renameChapter(c.id, title).then(function () {
+      undoable('Chapter renamed', '“' + before + '” is now “' + title + '”.',
+        function () { return change.renameChapter(c.id, before); },
+        function () { return change.renameChapter(c.id, title); });
+    });
+  }
+
+  function moveChapterBy(c, dir) {
+    return change.moveChapter(c.id, dir).then(function () {
+      undoable('Chapter moved', '“' + c.title + '” moved ' + (dir < 0 ? 'up' : 'down') + '.',
+        function () { return change.moveChapter(c.id, -dir); },
+        function () { return change.moveChapter(c.id, dir); });
+    });
+  }
+
+  // From place ci of section si to place `index` among the chapters of section ti.
+  function moveChapterInto(c, si, ci, ti, index) {
+    var into = state.project.sections[ti].title;
+    return change.moveChapterTo(c.id, ti, index).then(function () {
+      undoable('Chapter moved', '“' + c.title + '” moved' + (ti === si ? '.' : ' to “' + into + '”.'),
+        function () { return change.moveChapterTo(c.id, si, ci); },
+        function () { return change.moveChapterTo(c.id, ti, index); });
+    });
+  }
+
+  // A new chapter (newChapter's dialog), and the section made for it when withSection.
+  function chapterAdded(c, si, withSection) {
+    var section = state.project.sections[si].title, path = c.file;
+    undoable('Chapter added', '“' + c.title + '” added to “' + section + '”.',
+      function () {
+        path = fileOf(c.id);
+        return change.deleteChapter(c.id).then(function () { return withSection ? change.deleteSection(si) : null; });
+      },
+      function () {
+        return (withSection ? change.addSection(section) : Promise.resolve())
+          .then(function () { return change.restoreChapter(path); });
+      });
+  }
+
+  // A deleted chapter (deleteChapter's dialog) comes back from Recently deleted — and opens
+  // again if it was the open one.
+  function chapterDeleted(id, title, path, wasOpen) {
+    undoable('Chapter deleted', '“' + title + '” moved to Recently deleted.',
+      function () {
+        return change.restoreChapter(path).then(function () { if (wasOpen) openChapter(fileOf(id)); });
+      },
+      function () { path = fileOf(id); return change.deleteChapter(id); });
+  }
+
   // Drag a chapter onto another chapter (lands before it) or onto a section header (lands at
   // its end). Indexes are positions in the target section without the dragged chapter.
   var dragging = null;
@@ -437,7 +592,7 @@
       n.classList.remove('drop-target');
     });
   }
-  function dropTarget(elm, section, indexOf) {
+  function dropTarget(elm, ti, indexOf) {
     elm.addEventListener('dragover', function (e) {
       if (!dragging) return;
       e.preventDefault();
@@ -449,9 +604,9 @@
       var d = dragging; dragging = null;
       if (!d) return;
       var index = indexOf();
-      if (d.folder === section.folder && d.index < index) index--; // it leaves its old slot first
-      if (d.folder === section.folder && d.index === index) return;
-      structureChange('POST', '/api/chapter-move-to', { file: d.file, folder: section.folder, index: index }).catch(quiet);
+      if (d.si === ti && d.index < index) index--; // it leaves its old slot first
+      if (d.si === ti && d.index === index) return;
+      moveChapterInto(d.chapter, d.si, d.index, ti, index).catch(quiet);
     });
   }
 
@@ -547,9 +702,9 @@
       { text: 'Rename section', run: function () { labelEl.ondblclick(); } },
       { text: 'Add a chapter here', run: function () { newChapter(s.folder); } },
     ];
-    if (si > 0) items.push({ text: 'Move up', run: function () { structureChange('POST', '/api/section-move', { folder: s.folder, direction: -1 }).catch(quiet); } });
-    if (si < sections.length - 1) items.push({ text: 'Move down', run: function () { structureChange('POST', '/api/section-move', { folder: s.folder, direction: 1 }).catch(quiet); } });
-    items.push('-', { text: 'Delete section…', danger: true, run: function () { deleteSection(s); } });
+    if (si > 0) items.push({ text: 'Move up', run: function () { moveSectionAt(si, -1).catch(quiet); } });
+    if (si < sections.length - 1) items.push({ text: 'Move down', run: function () { moveSectionAt(si, 1).catch(quiet); } });
+    items.push('-', { text: 'Delete section…', danger: true, run: function () { deleteSection(s, si); } });
     actionMenu(anchor, items);
   }
 
@@ -557,14 +712,14 @@
   // rename on the chapter's tree row.
   function chapterMenu(anchor, c, s, ci, sections, rename) {
     var items = [{ text: 'Rename', run: rename }];
-    if (ci > 0) items.push({ text: 'Move up', run: function () { structureChange('POST', '/api/chapter-move', { file: c.file, direction: -1 }).catch(quiet); } });
-    if (ci < s.chapters.length - 1) items.push({ text: 'Move down', run: function () { structureChange('POST', '/api/chapter-move', { file: c.file, direction: 1 }).catch(quiet); } });
+    if (ci > 0) items.push({ text: 'Move up', run: function () { moveChapterBy(c, -1).catch(quiet); } });
+    if (ci < s.chapters.length - 1) items.push({ text: 'Move down', run: function () { moveChapterBy(c, 1).catch(quiet); } });
     var others = sections.filter(function (x) { return x.folder !== s.folder; });
     if (others.length) {
       items.push('-', { text: 'Move to section' });
       others.forEach(function (o) {
         items.push({ text: o.title, run: function () {
-          structureChange('POST', '/api/chapter-move-to', { file: c.file, folder: o.folder, index: o.chapters.length }).catch(quiet);
+          moveChapterInto(c, sections.indexOf(s), ci, sections.indexOf(o), o.chapters.length).catch(quiet);
         } });
       });
     }
@@ -584,15 +739,15 @@
     });
   }
 
-  function deleteSection(s) {
+  function deleteSection(s, si) {
     if (s.chapters.length) {
       noticeDialog('“' + s.title + '” still has chapters',
         'Move its ' + s.chapters.length + ' chapter' + (s.chapters.length === 1 ? '' : 's') +
         ' to another section or delete ' + (s.chapters.length === 1 ? 'it' : 'them') + ' first, then delete the section.');
       return;
     }
-    confirmDialog('Delete “' + s.title + '”?', 'The empty section and its folder are removed.', 'Delete section', function () {
-      structureChange('DELETE', '/api/section?folder=' + encodeURIComponent(s.folder)).catch(quiet);
+    confirmDialog('Delete “' + s.title + '”?', 'The empty section and its folder are removed. Ctrl+Z brings it back.', 'Delete section', function () {
+      removeSectionAt(si).catch(quiet);
     }, true);
   }
 
@@ -1529,8 +1684,9 @@
       sec.appendChild(o);
     });
     sec.onchange = function () {
-      var target = state.project.sections.filter(function (s) { return s.folder === sec.value; })[0];
-      structureChange('POST', '/api/chapter-move-to', { file: c.file, folder: target.folder, index: target.chapters.length })
+      var sections = state.project.sections;
+      var ti = sectionIndex(sec.value);
+      moveChapterInto(c, sections.indexOf(where.section), where.section.chapters.indexOf(c), ti, sections[ti].chapters.length)
         .catch(function () { renderProps(); });
     };
     row('Section', [sec]);
@@ -2610,7 +2766,8 @@
     if (!viewIsSlides()) return;
     clearTimeout(thumbTimer);
     thumbTimer = setTimeout(function () {
-      Array.prototype.forEach.call(document.querySelectorAll('#vPanelList .vpanel-item'), function (item) {
+      // [data-i]: the deck's slides — the title slide shown first is not one of them.
+      Array.prototype.forEach.call(document.querySelectorAll('#vPanelList .vpanel-item[data-i]'), function (item) {
         var old = item.querySelector('.vthumb');
         if (old) old.replaceWith(thumbFor(parseInt(item.dataset.i, 10)));
       });
@@ -3271,19 +3428,23 @@
     var where = findChapterByFile(file);
     var title = where ? where.chapter.title : file;
     openModal('Delete chapter',
-      '<p class="mhelp">This permanently deletes “<b>' + esc(title) + '</b>”. If other ' +
-      'chapters or views still link to it, the delete is refused so nothing ends up broken.</p>',
+      '<p class="mhelp">“<b>' + esc(title) + '</b>” moves to Recently deleted in History, and ' +
+      'Ctrl+Z brings it back. If other chapters or outputs still link to it, the delete is ' +
+      'refused so nothing ends up broken.</p>',
       function (root) {
+        var wasOpen = file === state.currentFile;
         api.send('DELETE', '/api/chapter?file=' + encodeURIComponent(file))
           .then(function () {
             $('modal').close();
-            if (file === state.currentFile) {
+            if (wasOpen) {
               state.currentFile = null;
               state.currentId = null;
               state.dirty = false;
               show('welcome');
             }
-            return loadProject();
+            return loadProject().then(function () {
+              if (where) chapterDeleted(where.chapter.id, title, file, wasOpen);
+            });
           })
           .catch(function (e) { modalWarn(root, e.message); });
         return false; // async: the dialog closes itself on success, warns on refusal
@@ -3508,7 +3669,11 @@
           audiences: [],
         }).then(function (res) {
           root.close();
-          return loadProject().then(function () { openChapter(res.file); });
+          return loadProject().then(function () {
+            var where = findChapterByFile(res.file);
+            if (where) chapterAdded(where.chapter, state.project.sections.indexOf(where.section), secSel === '__new');
+            openChapter(res.file);
+          });
         }).catch(function (e) { modalWarn(root, e.message); });
         return false; // async: closes on success, keeps the input and warns on failure
       },

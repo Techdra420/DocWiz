@@ -374,6 +374,8 @@ H: `--dw-surface-2`; selected: `--dw-accent-bg` + 600. `.file-thumb`: 40px, r0, 
 
 **`#errToast`** — bottom-right card: `--dw-surface` + `--dw-shadow-2` + r1 +
 `border-left: 3px solid var(--dw-bad)`; title 600 `--dw-bad`, body `--dw-fs-sm`. Auto-dismiss ≥6s.
+`.toast-success` swaps both to `--dw-ok`. A sidebar change's toast ends with one text-link
+action (`.hist-link` "Undo"); the toast takes clicks only while shown.
 
 **`#issuesPanel` / `.sev.Error` / `.sev.Warning`** — rows: `--dw-fs-sm`, mono location
 (`chapter:line`), hairlines. `.sev`: badge recipe (CAPS xs, r0, 1px border):

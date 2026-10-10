@@ -1319,7 +1319,8 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
 #errToast.toast-error b { color: var(--dw-bad); }
 #errToast.toast-success { border-left-color: var(--dw-ok); }
 #errToast.toast-success b { color: var(--dw-ok); }
-#errToast.show { opacity: 1; transform: translateY(0); }
+#errToast.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
+#errToast .hist-link { margin-left: var(--dw-s2); } /* a sidebar change's Undo */
 
 /* ---------- the live editor surface (ADR-007) ----------
    The surface IS the handover page: site.css applies inside .dw-live-surface via the
