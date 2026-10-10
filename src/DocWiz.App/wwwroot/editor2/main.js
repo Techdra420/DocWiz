@@ -356,7 +356,7 @@ async function open(file, opts) {
       view.updateState(view.state.apply(tr));
       // The chapter editor is the active view whenever it is being driven.
       setActiveView(view);
-      if (tr.docChanged && current.opts.onDirty) current.opts.onDirty();
+      if (tr.docChanged && current.opts.onDirty && !tr.getMeta(SOFT_REBUILD)) current.opts.onDirty();
       updateAnchorInfo();
       updateToolbarState();
     },
@@ -1699,6 +1699,8 @@ function flushActiveCell() {
 async function save(frontmatter) {
   if (!current) throw new Error('no chapter open in the live editor');
   flushActiveCell();
+  const saved = current;
+  const sentDoc = current.view.state.doc;
   const ops = current.sourceArea
     ? [{ text: current.sourceArea.value }]
     : buildSavePayload();
@@ -1715,13 +1717,46 @@ async function save(frontmatter) {
   });
   if (!res.ok) throw new Error((await res.text()) || res.statusText);
   const dto = await res.json();
+  // Another chapter was opened while this one saved: the screen is no longer this chapter's.
+  if (current !== saved) return dto;
   current.file = dto.file; // a changed H1 renames the chapter file (Stage 6)
-  rebuild(dto);
+  if (current.view.state.doc === sentDoc) {
+    rebuild(dto);
+  } else {
+    // Typed while the save was in flight (autosave makes this common): never rebuild over
+    // the newer text. Adopt the saved document's bookkeeping (hash + segments) for the next
+    // save and leave the screen alone; the caller keeps the chapter dirty.
+    current.dto = dto;
+    rememberOriginals(buildDoc(schema, dto));
+    dto.editedDuringSave = true;
+  }
   return dto;
 }
 
+/* Transaction meta of the post-save bookkeeping refresh: not an edit (no dirty flag) and
+   not undoable (no history entry). */
+const SOFT_REBUILD = 'dwSoftRebuild';
+
+/* Does the freshly built document hold the same blocks as the one on screen — same type
+   and content block by block — so only block attributes (srcId, a newly stamped heading
+   anchor, a figure number) can differ? */
+function sameBlocks(onScreen, built) {
+  if (onScreen.childCount !== built.childCount) return false;
+  for (let i = 0; i < built.childCount; i++) {
+    const a = onScreen.child(i);
+    const b = built.child(i);
+    if (a.type !== b.type || !a.content.eq(b.content)) return false;
+  }
+  return true;
+}
+
 /* After every save the surface rebuilds from pipeline truth (fresh anchors, figure
-   numbers, hash). Best-effort restore of scroll + selection position. */
+   numbers, hash). When the saved document holds the same blocks as the screen (the usual
+   case), only block attributes are refreshed in place — the editor state, and with it the
+   undo history and the selection, stays, so autosave never takes Ctrl+Z away. Old srcIds
+   that an undo brings back are safe: buildSavePayload copies original bytes only for a
+   node nodeClean() finds equal to its original. Anything else gets the full rebuild, with a
+   best-effort restore of scroll + selection position. */
 function rebuild(dto) {
   const mount = document.getElementById('editor2');
   const scrollTop = mount.scrollTop;
@@ -1730,6 +1765,21 @@ function rebuild(dto) {
 
   current.dto = dto;
   const doc = buildDoc(schema, dto);
+  if (!wasSource && sameBlocks(current.view.state.doc, doc)) {
+    const tr = current.view.state.tr;
+    doc.forEach((node, offset, index) => {
+      const shown = tr.doc.child(index);
+      if (JSON.stringify(shown.attrs) !== JSON.stringify(node.attrs))
+        tr.setNodeMarkup(offset, null, node.attrs);
+    });
+    if (tr.docChanged) {
+      tr.setMeta('addToHistory', false);
+      tr.setMeta(SOFT_REBUILD, true);
+      current.view.dispatch(tr);
+    }
+    rememberOriginals(current.view.state.doc);
+    return;
+  }
   rememberOriginals(doc);
   current.view.updateState(EditorState.create({ schema, doc, plugins: plugins() }));
   if (wasSource) toggleSource(false);
@@ -1848,10 +1898,22 @@ function notifyToolbar() {
   updateAnchorInfo();
 }
 
+/* Autosave waits while saving would interrupt the author: typing in Source (a save closes
+   it), a table cell being edited (a save commits and closes the cell editor), or an IME
+   composition in progress. */
+function isBusy() {
+  if (!current) return false;
+  return !!current.sourceArea || !!window.__dwActiveCell || !!(current.view && current.view.composing);
+}
+
 window.DocWizEditor2 = {
   open,
   close,
   save,
+  isBusy,
+  // The chapter file the surface holds (null when closed) — app.js saves only when it is
+  // still the chapter it shows (opening another chapter is asynchronous).
+  openFile: () => (current ? current.file : null),
   insert,
   // Image width presets (constants.js) — app.js dialogs build their size options
   // from here so the numbers exist in exactly one place.

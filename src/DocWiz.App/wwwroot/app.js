@@ -10,6 +10,7 @@
   var TOAST_HIDE_MS = 8000;          // error toast auto-dismiss
   var TIP_HOVER_DELAY = 1500;
   var TIP_FOCUS_DELAY = 150;
+  var AUTOSAVE_IDLE_MS = 2000;       // autosave this long after the last edit (Stage 6)
   var PREVIEW_DEBOUNCE = 400;        // canvas refresh after structural changes
   var PREVIEW_DEBOUNCE_TITLE = 800;  // title field re-renders the whole canvas
 
@@ -50,6 +51,7 @@
   });
 
   var state = { project: null, currentFile: null, currentYaml: null, currentView: null, viewSlides: null };
+  var editGen = 0; // counts edits; see the dirty setter and the save paths
 
   // Unsaved changes are visible, not just tracked: every Save button grows a dot the
   // moment the content diverges from disk. A property setter catches all assignment
@@ -68,6 +70,10 @@
           var b = $(id);
           if (b) b.classList.toggle('dirty', dirty);
         });
+        if (dirty) {
+          editGen++; // a save only clears "dirty" if nothing was edited after it started
+          scheduleAutosave(); // every edit source flips this, so autosave sees them all
+        }
       },
     });
   })();
@@ -120,7 +126,12 @@
       $('convertEmfLabel').textContent = 'Convert ' + p.emfCount + ' EMF/WMF…';
   }
 
+  // True while a tree name is being edited inline — a re-render (e.g. after an autosave)
+  // would throw the half-typed name away; renameInline re-renders when it finishes.
+  var treeRenaming = false;
+
   function renderTree(p) {
+    if (treeRenaming) return;
     var tree = $('tree');
     tree.innerHTML = '';
     // Word-style flat chapter numbers (1, 2, 3 … across the project); section
@@ -319,10 +330,12 @@
     labelEl.replaceWith(input);
     input.focus();
     input.select();
+    treeRenaming = true;
     var done = false;
     function finish(save) {
       if (done) return;
       done = true;
+      treeRenaming = false;
       var v = input.value.trim();
       if (save && v && v !== current) commit(v).catch(quiet);
       else renderTree(state.project);
@@ -1264,15 +1277,71 @@
     return found;
   }
 
+  /* ---------- autosave (Stage 6 step 3 — switched on together with history) ----------
+     Edits are written a moment after you stop typing, and before leaving a screen or the
+     window; every save is also a History entry, so nothing written is ever lost. Autosave
+     waits while a save would interrupt (Source mode, a table cell being edited, an IME
+     composition). Saves of one editor never overlap (a second one queues behind the first),
+     so autosave, Ctrl+S, and Build can't race each other into a "changed on disk" refusal. */
+  var autosaveTimer = null;
+  function scheduleAutosave() {
+    clearTimeout(autosaveTimer);
+    autosaveTimer = setTimeout(autosaveNow, AUTOSAVE_IDLE_MS);
+  }
+  function autosaveNow() {
+    autosaveTimer = null;
+    if (!state.dirty && !slideZonesDirty()) return;
+    var ed = window.DocWizEditor2;
+    if (window.__dwActiveCell || (state.currentFile && ed && ed.isBusy && ed.isBusy())) {
+      scheduleAutosave();
+      return;
+    }
+    flushEdits().catch(quiet); // a failure stays visible in the status line
+  }
+  // Saves the open chapter's or view's pending edits now.
+  function flushEdits() {
+    clearTimeout(autosaveTimer);
+    autosaveTimer = null;
+    if (!state.dirty && !slideZonesDirty()) return Promise.resolve();
+    if (state.currentFile) return saveChapter();
+    if (state.currentView) return saveView({ auto: true });
+    return Promise.resolve();
+  }
+
+  // Before leaving a screen: save until nothing is pending (keystrokes that landed while a save
+  // was in flight are not in it, so one more round picks them up).
+  function flushUntilSaved(rounds) {
+    return flushEdits().then(function () {
+      return (state.dirty || slideZonesDirty()) && rounds > 1 ? flushUntilSaved(rounds - 1) : null;
+    });
+  }
+
+  var chapterSaving = Promise.resolve();
   function saveChapter() {
+    var run = function () { return saveChapterNow(); };
+    var p = chapterSaving.then(run, run);
+    chapterSaving = p.catch(function () {});
+    return p;
+  }
+
+  function saveChapterNow() {
     if (!state.currentFile) return Promise.resolve();
+    // Another chapter is being opened: the surface still holds the previous one, whose edits
+    // were saved before the switch (confirmDiscard) — nothing here to save.
+    if (window.DocWizEditor2.openFile() !== state.currentFile) return Promise.resolve();
     // Byte-surgical save through the live surface (only edited blocks re-emit). A changed H1
     // renames the chapter file — the returned document carries the new path.
+    setStatus('Saving…');
+    var gen = editGen;
+    var savedFile = state.currentFile;
     return window.DocWizEditor2.save(chapterFormValues())
       .then(function (doc) {
-        if (doc && doc.file) state.currentFile = doc.file;
-        state.dirty = false;
-        setStatus('Saved ✓', 'ok');
+        // Follow a rename (changed H1) — only if this chapter is still the open one.
+        if (doc && doc.file && state.currentFile === savedFile) state.currentFile = doc.file;
+        // Edits made while the save was in flight are not in it — stay dirty for the next one.
+        if (editGen === gen && !(doc && doc.editedDuringSave)) state.dirty = false;
+        else scheduleAutosave();
+        setStatus('Saved ' + clockTime(new Date()), 'ok');
         return loadProject().then(function () {
           updateCrumb();
           if (!hist.comparing) refreshHistory(); // the save is the newest entry now
@@ -1323,6 +1392,15 @@
   function confirmDiscard(retry, args) {
     if (discardConfirmed) { discardConfirmed = false; return true; }
     if (!state.dirty && !slideZonesDirty() && !settingsDirty()) return true;
+    // Chapter and view edits autosave: leaving saves them first (nothing to discard). A
+    // failed save keeps you here — the status line says why.
+    if (!settingsDirty() && (state.currentFile || state.currentView)) {
+      flushUntilSaved(3).then(function () {
+        discardConfirmed = true;
+        try { retry.apply(null, args || []); } finally { discardConfirmed = false; }
+      }).catch(quiet);
+      return false;
+    }
     confirmDialog('Discard unsaved changes?',
       settingsDirty() && !state.dirty
         ? 'Your Project settings changes haven’t been saved yet.'
@@ -2622,20 +2700,41 @@
     renderViewEditor();
   }
 
-  function saveView() {
+  // Saves of the open view queue behind each other (autosave, Ctrl+S, Build) — see autosave.
+  var viewSaving = Promise.resolve();
+  function saveView(opts) {
+    var run = function () { return saveViewNow(opts); };
+    var p = viewSaving.then(run, run);
+    viewSaving = p.catch(function () {});
+    return p;
+  }
+
+  // opts.auto: an autosave — skips the Check run (a manual save, Build and Export keep it).
+  function saveViewNow(opts) {
     if (!state.currentView) return Promise.resolve();
     // currentViewPayload() first pulls any edited slide zones back into state.viewSlides
     // (Task 7c) — the one place zone edits enter the save path.
     var payload = currentViewPayload();
+    var gen = editGen;
+    var savedView = state.currentView;
+    $('vStatus').textContent = 'Saving…';
+    $('vStatus').className = '';
     return api.send('PUT', '/api/view?file=' + encodeURIComponent(state.currentView), payload)
       .then(function () {
-        state.dirty = false;
-        // Reset the per-zone + module dirty flags so DocWizSlideEdit.isDirty() reads
-        // false after a save (Task 7c review I1). The zones stay mounted (save does not
-        // re-render), so without this they would report dirty forever post-save.
-        if (window.DocWizSlideEdit && window.DocWizSlideEdit.markClean) window.DocWizSlideEdit.markClean();
-        $('vStatus').textContent = 'Saved ✓';
+        if (state.currentView !== savedView) return loadProject(); // another screen is open now
+        if (editGen === gen) {
+          state.dirty = false;
+          // Reset the per-zone + module dirty flags so DocWizSlideEdit.isDirty() reads
+          // false after a save (Task 7c review I1). The zones stay mounted (save does not
+          // re-render), so without this they would report dirty forever post-save. Skipped
+          // when something was edited during the save: those zones still need saving.
+          if (window.DocWizSlideEdit && window.DocWizSlideEdit.markClean) window.DocWizSlideEdit.markClean();
+        } else {
+          scheduleAutosave();
+        }
+        $('vStatus').textContent = 'Saved ' + clockTime(new Date());
         $('vStatus').className = 'ok';
+        if (opts && opts.auto) return loadProject();
         // Re-check after a save, but only interrupt with the panel when something is broken
         // (the Check button shows the full list, warnings included, any time).
         return loadProject()
@@ -3713,6 +3812,9 @@
   }
 
   function show(sectionId) {
+    // Pending edits were saved before any screen change (confirmDiscard); a timer left over
+    // must not fire against the next screen.
+    clearTimeout(autosaveTimer);
     // Leaving the chapter editor ends a history comparison (the live surface comes back).
     if (sectionId !== 'chapterEditor' && hist.comparing) endCompare();
     // Leaving the view editor: tear down any mounted slide-zone editors (Task 7b) so
@@ -4035,6 +4137,11 @@
   });
   window.addEventListener('beforeunload', function (e) {
     if (state.dirty || slideZonesDirty() || settingsDirty()) e.preventDefault();
+  });
+  // Autosave also when the window loses focus or is hidden (switching apps, minimizing).
+  window.addEventListener('blur', function () { if (state.dirty || slideZonesDirty()) flushEdits().catch(quiet); });
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden && (state.dirty || slideZonesDirty())) flushEdits().catch(quiet);
   });
 
   init();

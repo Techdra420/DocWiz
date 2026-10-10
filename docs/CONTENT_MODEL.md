@@ -25,7 +25,8 @@ my-product-docs/
 │   ├── support-quickref.yaml
 │   └── admin-guide.yaml
 ├── assets/                  # images, diagrams, screenshots (referenced from Markdown)
-└── attachments/             # PDFs and other binary documents (data sheets, release notes)
+├── attachments/             # PDFs and other binary documents (data sheets, release notes)
+└── .docwiz/                 # the editor's change history (git-ignored, see below)
 ```
 
 - **Numeric prefixes** (`010-`, `020-`) define order. Gaps of 10 leave room for
@@ -41,9 +42,19 @@ my-product-docs/
 - **A chapter file follows its title**: `NNN-<title>.md`, with characters Windows forbids
   turned into spaces (the title itself keeps them). Renaming a chapter — or changing its H1 —
   renames the file. Links never depend on file or folder names; they use the chapter `id`.
-- **Planned (Stage 6, step 3): `.docwiz/history/`** holds the editor's change history —
-  complete copies of earlier file versions, kept until deleted. Nothing reads it except
-  the History panel, so deleting any part of it is safe. Git-ignored; never shipped.
+- **`.docwiz/history/`** holds the editor's change history (Stage 6) — complete copies of
+  earlier file versions, kept until cleaned up. Nothing reads it except the History panel and
+  Settings › History, so deleting any part of it is safe. It ignores itself
+  (`.docwiz/.gitignore` holds `*`), is left behind by Save as and templates, and is never
+  shipped. Inside:
+  - `files/<timeline>/<yyyyMMddTHHmmssfffZ>__<kind>.<ext>` — one complete copy per entry. A
+    timeline follows identity, not the path: `chapters/<id>`, `views/<name>`, or `project`
+    (the manifest), so renames and moves keep one timeline. Kinds: `original` (the file as it
+    was before its first editor save), `save`, `rename`, `restore-<stamp>`. Saves within ten
+    minutes of each other share one entry; an unchanged save adds none.
+  - `deleted/<stamp>/<project-relative path>` — files the editor deleted (Recently deleted).
+  - `versions/<stamp>__<name>/` — named project versions: copies of `docwiz.yaml`, `content/`
+    and `views/`. Restoring one first saves the current state as "Before restoring …".
 
 ## Manifest — `docwiz.yaml`
 

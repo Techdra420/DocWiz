@@ -3,14 +3,15 @@
 **Current Stage:** Stage 5 — pilot on a real customer project. Stages 1, 2, and 4 complete;
 Stage 3 (editor MVP) functionally complete (live editor shipped; single exe verified on a
 clean machine). Stage 6 (editor redesign) approved 2026-10-10 and in progress alongside the
-pilot — steps 1 (trust fixes) and 2 (structure you can edit) done; step 3 (history, then
-autosave) next.
+pilot — steps 1 (trust fixes), 2 (structure you can edit) and 3 (history, then autosave)
+done; step 4 (shell and document bar) next.
 **V1.0:** both agreed V1.0 features — **PDF export** and **content-only zoom** — are built and
 merged to `main`. Remaining for the v1.0 tag: close the pilot loop + release hygiene (tag, prune).
 ADR-004 (amended), ADR-005, ADR-006, ADR-007, and ADR-008 are all written in
 [ARCHITECTURE.md](ARCHITECTURE.md).
-**Last Updated:** 2026-10-10 — Stage 6 step 2 (structure you can edit) and step 1 (trust fixes)
-shipped; Stage 6 (editor redesign) approved with its decisions and steps; Claude desktop app setup.
+**Last Updated:** 2026-10-10 — Stage 6 step 3 (history, then autosave), step 2 (structure you can
+edit) and step 1 (trust fixes) shipped; Stage 6 (editor redesign) approved with its decisions and
+steps; Claude desktop app setup.
 
 Stage transitions require human approval. Success criteria are the checkpoints.
 
@@ -185,8 +186,9 @@ is structure, consolidation, and fixing what breaks trust.
 - [x] 2. Structure you can edit: section and chapter rename/move/delete/drag in the tree acting on
       the real folders and files; New chapter in the tree; chapter title = its H1; "Start from"
       replaces discipline
-- [ ] 3. History, then autosave: snapshots, per-chapter timeline with highlighted changes, restore
-      (itself undoable), named project versions, Recently deleted, size + clean-up
+- [x] 3. History, then autosave: snapshots, per-chapter timeline with highlighted changes, restore
+      (itself undoable), named project versions, Recently deleted, size + clean-up; then autosave
+      of chapters and outputs
 - [ ] 4. Shell and document bar: sidebar tabs, document bar (section / title, Readers, status,
       Edit · Source · Read, properties, ⋯), properties panel, settings sheet, one primary per
       screen, light default
@@ -220,6 +222,8 @@ Open items (everything shipped is in Recent Changes):
 
 | Date | Stage | Description |
 |------|-------|-------------|
+| 2026-10-10 | Stage 6 | Step 3 autosave: chapter and output edits save two seconds after typing stops, and before switching chapters, outputs or screens and when the window loses focus — no "unsaved changes" dialog outside Settings; waits while Source mode, a table cell or an IME composition is active; saves of one editor queue instead of overlapping; edits typed while a save is in flight stay pending and are never rebuilt over; a save keeps the editor's undo history (only block attributes refresh); a save finishing after a chapter switch leaves the new chapter alone; the status line shows "Saving…" / "Saved HH:MM"; autosaves of outputs skip the Check pass |
+| 2026-10-10 | Stage 6 | Step 3 history: every editor write of a chapter, output or the manifest is kept in `.docwiz/history` inside the project (git-ignored, kept until cleaned up, each snapshot a complete copy of one file); the History panel shows a chapter's timeline by day, compares any version with now (added blocks green, removed red), restores it (itself undoable); named project versions (mark, restore the whole project, delete); Recently deleted restores deleted chapters and outputs; Settings › History shows the size and cleans up older entries (named versions are kept); a successful Build offers to mark a version |
 | 2026-10-10 | Stage 6 | Step 2 structure you can edit: the folder name is the section name (accents, spaces, capitals; legacy slug folders keep their titles) and chapter files follow their title; the tree renames sections and chapters inline (double-click or ⋯), adds sections and chapters (+), moves chapters by drag-and-drop or "Move to section", reorders and deletes (empty sections only) — all on the real folders and files; empty sections show in the tree; the chapter title is its H1 (save derives it, rename rewrites it); "Start from" replaces discipline in New chapter (no ID field — ids derive from the title, accented letters folded); the chapter bar shows Section / Title instead of a title field; fidelity harness runs headless Edge on its own profile |
 | 2026-10-10 | Stage 6 | Step 1 trust fixes: Source edits are kept when switching back to Edit; new chapters default to the project's audiences and skeletons only carry an admin note for admin-tagged chapters; deleting an audience strips its chapter tags, reports blocks, and is refused while a view uses it; every browser `confirm()`/`prompt()`/`alert()` in the editor replaced by DocWiz dialogs with action-named (danger) buttons, and failed create dialogs keep their input; unsaved settings are guarded and "Back to editor" returns to the open chapter; raw-YAML save reports success; toolbar wraps instead of scrolling on laptops; settings rail fills the window; tooltips no longer cover menus and Esc closes the chapter menu; Build label and settings switch meet contrast (`--dw-mark-text`/`--dw-mark-strong`); image size "Icon" label; Insert element without a dead OK; document views lose slide controls; slide-editor messages visible; package replacement announced; view saves open Check only on errors; menu-label and Quit-button CSS collisions fixed |
 | 2026-10-10 | Stage 6 | Editor redesign approved after a user-side UX audit: decisions recorded (folder name = section name, chapter files follow titles, first-class block-level audiences, history + autosave, sidebar tabs, discipline retired from the UI, light default) and seven steps defined |

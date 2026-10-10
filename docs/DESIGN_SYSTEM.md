@@ -210,6 +210,19 @@ keyboard-reachable; their menus reuse the `.e2-menu` context-menu recipe. Double
 inline (`.tree-rename`, accent border + focus ring). A dragged chapter marks its drop target
 with a 2px accent line above a row, or an `--dw-accent-bg` wash on a section.
 
+**`.hist-panel` / `.hist-compare`** (Stage 6) — History: a 300px `--dw-surface` side panel,
+left border; `.hist-seg` segmented Chapter/Project switch (`--dw-surface-2` well, selected =
+surface + `--dw-shadow`); day labels CAPS xs tracked `--dw-muted`; `.hist-entry` rows = mono
+tabular `--dw-faint` time column + label, H `--dw-surface-2`, selected = the tree's active
+recipe (`--dw-accent-bg` + inset 3px accent bar); actions are `.hist-link` text buttons
+(accent; `.danger` = `--dw-bad`). Comparing shows the older version AS the page (handover
+recipe), under a sticky `.hist-banner`; blocks carry the change on themselves — added
+`--dw-ok-bg` with a 3px `--dw-ok` bar in the left margin, removed `--dw-bad-bg` + bar +
+strike-through — never wrappers.
+
+**Status line** — the chapter bar's `#status` carries autosave: "Saving…" then
+"Saved HH:MM" (`.ok`); a failed save stays in `.err` until the next save succeeds.
+
 **`.fm`** — frontmatter row: labels `--dw-fs-sm` 600 `--dw-muted`; inputs surface bg,
 `--dw-border-strong` border, r1, padding s2 s3, mono for `ID`. F: accent border + ring.
 Audience checkboxes: accent `accent-color`.
