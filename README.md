@@ -24,7 +24,8 @@ live surface IS the page) and DocWiz publishes as a self-contained single-file
   "Export PDF or HTML…" action (the project menu → dialog with native folder picker, default
   `<project>/output/Export/`). Pick the **full manual, individual chapters (grouped by section),
   and/or each view**, and a **format**: **PDF** or a **single self-contained HTML file** (CSS/JS
-  inlined, images base64 — HTML mode needs no Edge). It runs as a non-blocking background job with a
+  inlined, images base64 — HTML mode needs no Edge; slide decks included — they exported unstyled
+  until the 2026-10-10 fix). It runs as a non-blocking background job with a
   completion toast. Chapters export as one combined file in book order; the manual is A4 portrait
   with a cover, "Page X of Y" footers, PDF bookmarks, and a page break per chapter; slides views are
   16:9 (one page per slide); document views portrait; attached PDFs (which single-file HTML

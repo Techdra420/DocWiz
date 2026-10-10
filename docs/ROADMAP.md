@@ -13,7 +13,7 @@ ADR-004 (amended), ADR-005, ADR-006, ADR-007, and ADR-008 are all written in
 **Last Updated:** 2026-10-10 — Stage 6 (editor redesign) steps 1–7 shipped: trust fixes,
 structure you can edit, history then autosave, shell and document bar, audiences, outputs
 editor, consolidation; approved with its decisions and steps the same day; Claude desktop app
-setup.
+setup; single-file HTML export of slides views fixed (was unstyled).
 
 Stage transitions require human approval. Success criteria are the checkpoints.
 
@@ -226,6 +226,7 @@ Open items (everything shipped is in Recent Changes):
 
 | Date | Stage | Description |
 |------|-------|-------------|
+| 2026-10-10 | Stage 5 | Fix: single-file HTML export of a slides view (CLI `export-view`, the editor's "Export as one HTML file", the Export dialog's HTML format) opened unstyled — `slides.html` links its assets as `{{BASE}}_dw/…` and `SingleFileExporter` never resolved `{{BASE}}`, so no CSS/JS was inlined. The exporter now resolves it through the handover builder's one `ApplyBase` (ADR-008) and drops the dev-only probe script; regression test exports the demo's user-training deck and asserts no `{{` or `_dw/` reference remains and all four assets are inlined. Verified: exported decks match the handover's slides pages in headless Edge (probe slides-fit PASS, 0 clipped) |
 | 2026-10-10 | Stage 6 | History › All chapters: every chapter's saved changes in one list, newest first by day (`GET /api/history/all`, sharing the per-chapter timeline code; the "before history started" entries left out), 50 at a time; a row opens its chapter and compares that version with now, and the list stays for going through changes one after another |
 | 2026-10-10 | Stage 6 | Ctrl+Z for the sidebar: renaming, moving, adding and deleting sections and chapters (menus, drag, Properties, New chapter) records an undo step; Ctrl+Z / Ctrl+Y and the toolbar's Undo / Redo take sidebar changes and page edits newest first (compared by the page's undo depth), a toast names each change with an Undo link, a deleted chapter comes back from Recently deleted (and reopens if it was open). Renaming or moving the open chapter now updates it in place instead of reopening it, so its typing history survives; nothing undoes behind an open dialog. Also fixed: typing on a slide threw an error when refreshing the title slide's miniature |
 | 2026-10-10 | Stage 6 | Preview as hides the chapter toolbar instead of fading it (the faded sticky bar let the page show through it); the title keeps its distance from the banner |
