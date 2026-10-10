@@ -108,6 +108,13 @@ meta 20px. Nothing on a slide below 20px — it must read from the back of a wor
 - Elevation: `--dw-shadow` (resting cards), `--dw-shadow-2` (dialogs, toasts, open menus).
   Two levels only. Borders carry structure; shadows only confirm it.
 - Focus: `--dw-focus-ring` on every focusable element, paired with `outline: none`.
+- Control heights (Stage 6): every button, field, pill and segmented control is one of three —
+  `--dw-ctl-sm` 28px (in-row tools: the tree's and the rail's ⋯ and +, small icon buttons),
+  `--dw-ctl-md` 32px (bars, menus, fields: the document bar, the toolbar, menu items, inputs,
+  segmented controls), `--dw-ctl-lg` 36px (the chrome bar, dialog and sheet actions).
+- Stacking (editor, Stage 6): z-index comes only from the `--dw-z-*` scale at the top of
+  app.css — raised 1 · handle 2 · sticky 3 · overlay 4 · focus 5 · sheet 900 · menu 1000
+  (menus and tooltips, above the sheet) · toast 2000 · popover 2200 (toolbar pop-ups).
 
 ---
 
@@ -196,15 +203,50 @@ Controls (`Prev/Next/Fullscreen`) live *outside* the frame, secondary-button sty
 
 ### Editor — `app.css`
 
-**Buttons (global recipe)** — padding s2 s4, r1, `--dw-fs-sm` 600, tight.
-- *Primary* (one per screen — Build handover in the chrome bar; Save inside the Settings
-  sheet; chapters and outputs have none, they autosave): `background: var(--dw-accent)`, text
-  `--dw-accent-contrast`. H: `--dw-accent-strong`. Dis: 45% opacity, no pointer.
-- *Secondary* (Check, New chapter, Export, Change…): transparent bg, `1px solid var(--dw-border-strong)`,
-  text `--dw-text`. H: `background: var(--dw-surface-2)`, border-color text-muted.
-- *Ghost* (toolbelt, ↑↓ reorder): borderless, `--dw-muted`. H: `--dw-surface-2` + `--dw-text`.
-- *Danger* (Quit, Delete view, ×): transparent, `1px solid var(--dw-border)`, text `--dw-bad`.
-  H: `background: var(--dw-bad-bg)`, border-color `--dw-bad`. Never solid red at rest.
+**The recipes (Stage 6 step 7).** Each concept below is defined ONCE, in the "Recipes" block
+at the top of app.css; a component rule adds only its placement and, where named, a variant.
+A new component joins the recipe's selector list instead of restating it (rule 21).
+
+**Buttons** — r1, `--dw-fs-sm` 600, tight.
+- *Secondary* (the default `button`): transparent, `1px solid var(--dw-border-strong)`, text
+  `--dw-text`. H: `--dw-surface-2`. Dis: 45% opacity, no pointer.
+- *Primary* (`button.primary`, `.dwa-btn-primary`, the sheet's Save when dirty — one per
+  screen: Build handover in the chrome bar, Save in the Settings sheet; chapters and outputs
+  have none, they autosave): `--dw-accent` fill, `--dw-accent-contrast` text, `--dw-shadow`.
+  H: `--dw-accent-strong`.
+- *Danger* (`dialog#modal button.danger`, `.dwa-btn-danger`): transparent, `1px solid
+  var(--dw-border)`, text `--dw-bad`. H: `--dw-bad-bg` + `--dw-bad` border. Never solid red at
+  rest.
+- *Sized* (`.dwa-btn` lg, `.dwa-btn-sm` / the bar pills md): inline-flex, icon + label, gap s2.
+- *Icon* (the document bar's History / Properties / ⋯, the tree's and rail's ⋯, the sheet's ×,
+  the audience grip, the recent-row tools, the check panel's ×, Quit): a square of a control
+  height, borderless and `--dw-muted` until hovered (`--dw-surface-2` + `--dw-text`).
+- *Chrome* (Check, Preview as, Handover, Download on the dark bar): the secondary recipe in
+  chrome tokens (`--dw-chrome-border`, `--dw-chrome-text`); Build handover is the chrome
+  primary on `--dw-mark`.
+- *Toolbar* (`.ib` in the main toolbar, the context bar and menu rows): md, borderless,
+  `--dw-muted`, r1.
+- *Add* (+ New section, "No chapters yet", + Add slide / section, Add audience, Mark a
+  version): a dashed `--dw-border-strong` outline, `--dw-muted`, at least md tall.
+- *Text link* (`.hist-link`: Restore, Copy link, Stop preview, Change): accent text, underline
+  on hover; `.danger` = `--dw-bad`.
+
+**Fields** — every single-line input and select (Settings, dialogs, the Section select, a
+menu's filter box, the context bar's caption and pixel fields, the welcome search): md tall,
+`--dw-surface`, `1px solid var(--dw-border-strong)`, r1, sm text; F: accent border + ring.
+Textareas share the look at their own height. The output title (`.cb-title-input`) is the one
+inline field: it reads as text until hovered.
+
+**Labels and badges** — the CAPS label (rule 12; group headings, panel heads, eyebrows, menu
+labels, the context bar's element name): xs 600 tracked `--dw-muted`. The badge (template
+state, check severity, a block's type pill, a linked block's pill, the context bar's badge,
+package type / status): an xs 600 tracked CAPS chip, r0, 1px `--dw-border` on
+`--dw-surface-2`; variants (warn, accent, solid accent, ok / bad, severity) set only colour.
+
+**Icons** — one set at one stroke: icons.js (16-unit grid, stroke 1.5) and the markup's own
+24-unit icons draw with a non-scaling 1.5px stroke, so every outline icon has the same weight
+at any size. Glyphs are not icons (the toolbar's Ω inserts a character; H2 / H3 are type
+labels).
 
 **Chrome bar** (Stage 6) — brand · the project's name as a button (`.hd-proj-btn`, chrome
 ghost: H `--dw-chrome-2` + `--dw-chrome-border`) opening the *project menu* (switch project,
@@ -214,9 +256,10 @@ after a build · quit / window controls. No other buttons live in the bar.
 
 **`.dw-seg`** (Stage 6) — THE segmented control: a `--dw-surface-2` well, 1px `--dw-border`,
 r1, 2px inset; buttons xs 600 `--dw-muted`, r0; selected (`aria-selected` for tabs,
-`aria-pressed` for a toggle group) = `--dw-surface` + `--dw-text` + `--dw-shadow`. Used by the
-sidebar tabs, Edit · Source · Read and History's scope. (The settings `.seg` and the welcome
-window-mode toggle are older; step 7 folds them in.)
+`aria-pressed` for a toggle group) = `--dw-surface` + `--dw-text` + `--dw-shadow`; the whole
+control is md tall. Used by the sidebar tabs, Edit · Source · Read, Slides · Document,
+History's scope, and window mode and appearance (Settings and the welcome screen) — there is
+no other segmented control.
 
 **Action menus** — every editor menu (tree ⋯, project menu, the document bar's ⋯, Readers,
 Preview as) is app.js `actionMenu()` on the `.e2-menu` recipe: items, CAPS labels,
@@ -308,19 +351,8 @@ strike-through — never wrappers.
 "Saved HH:MM" (calm muted, not green); a failed save stays in `.err` until the next save
 succeeds.
 
-**`.fm`** — frontmatter row: labels `--dw-fs-sm` 600 `--dw-muted`; inputs surface bg,
-`--dw-border-strong` border, r1, padding s2 s3, mono for `ID`. F: accent border + ring.
-Audience checkboxes: accent `accent-color`.
-
-**`.split` / `#editor` / `#splitter` / `#preview`** — `#splitter`: 6px, transparent;
-H/drag: `--dw-accent-glow`. `#preview`: `--dw-surface`, left border `--dw-border`; preview
-content uses the *handover* article recipe verbatim — the promise is "this is what ships."
-
-**`.slide-card` / `.slide-kind` / `.ord`** — card: surface, border, r2, `--dw-shadow`,
-padding s4; H: `border-color: var(--dw-border-strong)`. `.slide-kind`: badge — CAPS xs 600
-tracked, padding 2px s2, r0, border 1px; SECTION = accent text/border on `--dw-accent-bg`;
-TEXT SLIDE = `--dw-warn` on `--dw-warn-bg`. `.ord`: mono `--dw-fs-lg` `--dw-muted` slide
-number, left-aligned column with the ghost reorder buttons.
+**`.fm`** — the YAML editor's header row (path, Save, status): a surface strip with a
+hairline under it.
 
 **`.welcome-*`** — hero: `--dw-fs-3xl` bold + one-line `--dw-muted` lead; subtle wash allowed:
 `linear-gradient(180deg, var(--dw-accent-bg), transparent 320px)` on the page top — the only

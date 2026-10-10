@@ -4,6 +4,19 @@
 * { box-sizing: border-box; }
 /* The hidden attribute must always win, even over #id display rules */
 [hidden] { display: none !important; }
+
+/* Stacking (Stage 6): every layer the editor uses, lowest first — nothing else sets z-index. */
+:root {
+  --dw-z-raised: 1;     /* chrome on a block: pills, grips, the rail's + */
+  --dw-z-handle: 2;     /* handles over a block and the context bar */
+  --dw-z-sticky: 3;     /* sticky bars in a scroller: the toolbar, the history banner, readouts */
+  --dw-z-overlay: 4;    /* the slide toolbar; the dimmed page behind a table in focus mode */
+  --dw-z-focus: 5;      /* the table in focus mode */
+  --dw-z-sheet: 900;    /* the Settings sheet */
+  --dw-z-menu: 1000;    /* menus and tooltips — above the sheet */
+  --dw-z-toast: 2000;   /* toasts */
+  --dw-z-popover: 2200; /* toolbar pop-ups: block type, table size, slash menu */
+}
 html, body { height: 100%; }
 body {
   margin: 0;
@@ -21,8 +34,11 @@ body.welcome { background: linear-gradient(180deg, var(--dw-accent-bg), transpar
 code, .mono { font-family: var(--dw-font-mono); font-size: 0.92em; }
 ::selection { background: var(--dw-accent-glow); }
 
-/* ---- Buttons: secondary by default; one primary per view; ghost in groups;
-        danger = outline, never solid red at rest ---------------------------- */
+/* ==== Recipes (Stage 6 step 7) — ONE definition each; components below add only their
+        placement and, where named here, a variant. Sizes: --dw-ctl-sm / -md / -lg. ======== */
+
+/* Buttons — secondary by default; one primary per screen; danger = outline, never solid red
+   at rest. */
 button, .ghost {
   font: inherit;
   font-size: var(--dw-fs-sm);
@@ -42,26 +58,103 @@ button:focus-visible, .ghost:focus-visible, a:focus-visible, input:focus-visible
   box-shadow: var(--dw-focus-ring);
 }
 button:disabled { opacity: 0.45; cursor: default; }
-button.primary { background: var(--dw-accent); color: var(--dw-accent-contrast); border-color: var(--dw-accent); }
-button.primary:hover { background: var(--dw-accent-strong); border-color: var(--dw-accent-strong); }
-/* Danger recipe (DESIGN_SYSTEM §5): outlined, red text, never solid at rest. The header's
-   Quit button has its own muted-until-hover style (.hd-quit-btn), so it is not listed here. */
-#vDeleteBtn, dialog#modal button.danger {
-  color: var(--dw-bad);
-  border-color: var(--dw-border);
+/* A sized button: icon + label in one row (dialogs, sheet, bars, chrome). */
+.dwa-btn, .cb-present, .cb-readers, .hd-check-btn, .hd-ghost-btn, .hd-build-btn {
+  display: inline-flex; align-items: center; gap: var(--dw-s2); white-space: nowrap;
 }
-#vDeleteBtn:hover, dialog#modal button.danger:hover { background: var(--dw-bad-bg); border-color: var(--dw-bad); }
+.dwa-btn, .hd-check-btn, .hd-ghost-btn, .hd-build-btn { height: var(--dw-ctl-lg); }
+.dwa-btn-sm, .cb-present, .cb-readers { height: var(--dw-ctl-md); }
+/* Primary */
+button.primary, .dwa-btn-primary, #setPane.dirty .btn-save {
+  background: var(--dw-accent); color: var(--dw-accent-contrast); border-color: var(--dw-accent); box-shadow: var(--dw-shadow);
+}
+button.primary:hover, .dwa-btn-primary:hover, #setPane.dirty .btn-save:hover { background: var(--dw-accent-strong); border-color: var(--dw-accent-strong); }
+/* Danger */
+dialog#modal button.danger, .dwa-btn-danger { color: var(--dw-bad); border-color: var(--dw-border); }
+dialog#modal button.danger:hover, .dwa-btn-danger:hover { background: var(--dw-bad-bg); border-color: var(--dw-bad); }
+/* Icon button — square, borderless until hovered. */
+.cb-kebab-btn, .side-pane .tree-act, .vpanel-more, #setPane .set-close, #setPane .aud-grip, .prow-btn, .issues-head button, .hd-quit-btn {
+  display: inline-grid; place-items: center; flex: none; padding: 0;
+  border: 1px solid transparent; border-radius: var(--dw-r1);
+  background: transparent; color: var(--dw-muted);
+}
+.cb-kebab-btn:hover, .side-pane .tree-act:hover, .vpanel-more:hover, #setPane .set-close:hover,
+#setPane .aud-grip:hover, .prow-btn:hover, .issues-head button:hover { background: var(--dw-surface-2); color: var(--dw-text); }
+.side-pane .tree-act, .vpanel-more, #setPane .aud-grip, .prow-btn, .issues-head button { width: var(--dw-ctl-sm); height: var(--dw-ctl-sm); }
+.cb-kebab-btn { width: var(--dw-ctl-md); height: var(--dw-ctl-md); }
+#setPane .set-close, .hd-quit-btn { width: var(--dw-ctl-lg); height: var(--dw-ctl-lg); }
+/* Add — a dashed outline: "+ New section", "+ Add slide", "Add audience", "Mark a version". */
+.side-pane .tree-new-section, .side-pane .tree-empty, .vpanel-add, #setPane .addrow, .hist-mark {
+  display: flex; align-items: center; min-height: var(--dw-ctl-md); padding: 0 var(--dw-s3);
+  border: 1px dashed var(--dw-border-strong); border-radius: var(--dw-r1);
+  background: transparent; color: var(--dw-muted);
+  font-size: var(--dw-fs-sm); font-weight: var(--dw-w-medium); text-align: left;
+}
+.side-pane .tree-new-section:hover, .side-pane .tree-empty:hover, .vpanel-add:hover, #setPane .addrow:hover, .hist-mark:hover {
+  color: var(--dw-text); border-color: var(--dw-muted); background: var(--dw-surface);
+}
+/* Text link — an action inside a panel or banner ("Restore", "Copy link", "Stop preview"). */
+.hist-link {
+  border: 0; background: transparent; padding: 0;
+  color: var(--dw-accent); font-size: var(--dw-fs-sm); font-weight: var(--dw-w-medium);
+}
+.hist-link:hover { background: transparent; text-decoration: underline; }
+.hist-link.danger { color: var(--dw-bad); }
+
+/* Fields — every single-line input and select (textareas share the look, not the height). */
+#setPane .finput, dialog#modal input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+dialog#modal select, .props-select, .e2-menu .mfilter, .e2-figcap, .e2-pxinput, .welcome-search {
+  font: inherit; font-size: var(--dw-fs-sm); font-weight: var(--dw-w-regular); color: var(--dw-text);
+  background: var(--dw-surface); border: 1px solid var(--dw-border-strong); border-radius: var(--dw-r1);
+  padding: 0 var(--dw-s3); height: var(--dw-ctl-md); outline: none;
+}
+#setPane textarea.finput { height: auto; padding: var(--dw-s2) var(--dw-s3); }
+#setPane .finput:focus, dialog#modal input:focus, dialog#modal select:focus, .props-select:focus, .e2-menu .mfilter:focus,
+.e2-figcap:focus, .e2-pxinput:focus, .welcome-search:focus-within {
+  outline: none; border-color: var(--dw-accent); box-shadow: var(--dw-focus-ring);
+}
+
+/* Menus — one container for every pop-up list: the action menus, the block-type list and the
+   slash menu (items: .e2-menu .mi below; .dw-sel-opt and .dw-slash-item follow it). */
+.e2-menu, .e2-menu .submenu, .dw-sel-popup, .dw-slash-menu, .dw-tbl-picker {
+  background: var(--dw-surface); border: 1px solid var(--dw-border); border-radius: var(--dw-r1);
+  box-shadow: var(--dw-shadow-2); padding: var(--dw-s1);
+}
+
+/* CAPS label — group headings, panel heads, eyebrows (rule 12: xs, 600, tracked). */
+.hd-brand-sub, .welcome-eyebrow, .daygroup, .side-pane .grp, .vpanel-head, .imp-head, .e2-ctx-label,
+.e2-menu .mlabel, .mgroup-lbl, #setPane .set-grp, .hist-title, .hist-day, .props-list dt {
+  font-size: var(--dw-fs-xs); font-weight: var(--dw-w-medium); line-height: var(--dw-lh-snug);
+  text-transform: uppercase; letter-spacing: var(--dw-track-caps); color: var(--dw-muted);
+}
+
+/* Icons — ONE stroke. Outline icons come from icons.js (a 16-unit grid) and the markup's own
+   (a 24-unit grid); a non-scaling stroke draws every one with the same 1.5px line at any size,
+   the weight of icons.js at 16px. Filled marks (the ⋯ dots) are unaffected. */
+svg :is(path, circle, rect, line, polyline, polygon, ellipse) { vector-effect: non-scaling-stroke; }
+svg[stroke="currentColor"] { stroke-width: 1.5; }
+
+/* Badge — a CAPS chip: neutral by default; variants set only colour. */
+.hd-tpl-badge, #issuesList .sev, .e2-blockpill, .dw-embed-pill, .e2-ctx-badge, .dwa-pkg-type, .dwa-status, .tcard-badge {
+  display: inline-flex; align-items: center; gap: var(--dw-s1); white-space: nowrap;
+  font-size: var(--dw-fs-xs); font-weight: var(--dw-w-medium); line-height: 1.5;
+  text-transform: uppercase; letter-spacing: var(--dw-track-caps);
+  padding: 0 var(--dw-s2); border: 1px solid var(--dw-border); border-radius: var(--dw-r0);
+  background: var(--dw-surface-2); color: var(--dw-muted);
+}
 
 /* ---- Segmented control (Stage 6): ONE recipe for picking one of a few — the sidebar tabs,
-        Edit · Source · Read, and History's scope. Selected = a raised surface chip in a well;
+        Edit · Source · Read, Slides · Document, History's scope, window mode and appearance
+        (Settings and the welcome screen). Selected = a raised surface chip in a well;
         role="tab" uses aria-selected, a toggle group aria-pressed. ------------------------ */
 .dw-seg {
   display: inline-flex; padding: 2px; gap: 2px;
   background: var(--dw-surface-2); border: 1px solid var(--dw-border); border-radius: var(--dw-r1);
 }
-.dw-seg button {
+.dw-seg button { /* the well (2px inset + 1px border) makes the whole control --dw-ctl-md */
+  height: calc(var(--dw-ctl-md) - 6px);
   border: 0; background: transparent; cursor: pointer;
-  padding: var(--dw-s1) var(--dw-s3); border-radius: var(--dw-r0);
+  padding: 0 var(--dw-s3); border-radius: var(--dw-r0);
   font-size: var(--dw-fs-xs); font-weight: var(--dw-w-medium); color: var(--dw-muted);
   white-space: nowrap;
 }
@@ -92,10 +185,7 @@ header {
   font-size: var(--dw-fs-sm); font-weight: var(--dw-w-bold); color: var(--dw-chrome-text);
   letter-spacing: -0.2px; line-height: 1;
 }
-.hd-brand-sub {
-  font-size: var(--dw-fs-xs); font-weight: var(--dw-w-medium); color: var(--dw-chrome-muted);
-  text-transform: uppercase; letter-spacing: var(--dw-track-caps); line-height: 1;
-}
+.hd-brand-sub { color: var(--dw-chrome-muted); line-height: 1; } /* the CAPS label, on chrome */
 
 /* Vertical divider */
 .hd-div { width: 1px; height: 26px; background: var(--dw-chrome-border); flex-shrink: 0; }
@@ -104,7 +194,7 @@ header {
 .hd-proj { display: flex; align-items: center; gap: var(--dw-s2); min-width: 0; flex-shrink: 1; }
 .hd-proj-btn {
   display: flex; align-items: center; gap: var(--dw-s2); min-width: 0;
-  height: 42px; padding: 0 var(--dw-s2) 0 var(--dw-s1);
+  height: var(--dw-ctl-lg); padding: 0 var(--dw-s2) 0 var(--dw-s1);
   border: 1px solid transparent; border-radius: var(--dw-r1);
   background: transparent; color: var(--dw-chrome-text); text-align: left;
 }
@@ -112,7 +202,7 @@ header {
 .hd-proj-btn:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
 .hd-proj-chev { flex-shrink: 0; color: var(--dw-chrome-muted); }
 .hd-proj-ico {
-  width: 26px; height: 26px; border-radius: 6px; background: var(--dw-chrome-2);
+  width: 26px; height: 26px; border-radius: var(--dw-r1); background: var(--dw-chrome-2);
   display: flex; align-items: center; justify-content: center;
   color: var(--dw-chrome-muted); flex-shrink: 0;
 }
@@ -127,13 +217,9 @@ header {
   display: flex; align-items: center; gap: var(--dw-s2);
 }
 /* "Editing template" badge — caution state: every live save lands in the master. */
-.hd-tpl-badge {
-  display: inline-flex; align-items: center; flex-shrink: 0;
-  font-size: var(--dw-fs-xs); font-weight: var(--dw-w-medium);
-  text-transform: uppercase; letter-spacing: var(--dw-track-caps);
-  color: var(--dw-warn); background: var(--dw-warn-bg);
-  border: 1px solid var(--dw-warn); border-radius: var(--dw-r0);
-  padding: var(--dw-s1) var(--dw-s2); margin-left: var(--dw-s2); white-space: nowrap;
+.hd-tpl-badge { /* the badge, warn variant */
+  color: var(--dw-warn); background: var(--dw-warn-bg); border-color: var(--dw-warn);
+  flex-shrink: 0; margin-left: var(--dw-s2);
 }
 
 /* Spacer */
@@ -142,46 +228,25 @@ header {
 /* Right cluster */
 .hd-right { display: flex; align-items: center; gap: var(--dw-s3); flex-shrink: 0; }
 
-/* Check button */
-.hd-check-btn {
-  display: inline-flex; align-items: center; gap: var(--dw-s2);
-  height: 34px; padding: 0 var(--dw-s3);
-  border: 1px solid var(--dw-chrome-border); border-radius: 8px;
+/* Chrome buttons — the secondary recipe on the dark bar (Check, Preview as, Handover,
+   Download), and Build handover, the one primary, on --dw-mark. */
+.hd-check-btn, .hd-ghost-btn {
+  padding: 0 var(--dw-s3);
+  border: 1px solid var(--dw-chrome-border);
   background: transparent; color: var(--dw-chrome-text);
-  font-size: var(--dw-fs-xs); font-weight: var(--dw-w-medium);
-  font-family: var(--dw-font-ui); cursor: pointer; white-space: nowrap;
-  transition: background 0.12s, border-color 0.12s;
+  font-size: var(--dw-fs-xs);
 }
-.hd-check-btn:hover { background: var(--dw-chrome-border); border-color: var(--dw-chrome-2); }
-.hd-check-btn:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
+.hd-ghost-btn { color: var(--dw-chrome-muted); }
+.hd-check-btn:hover, .hd-ghost-btn:hover { background: var(--dw-chrome-border); color: var(--dw-chrome-text); }
 .hd-check-btn svg { color: var(--dw-ok); }
-
-/* Build primary button (one primary on --dw-mark; white text) */
 .hd-build-btn {
-  display: inline-flex; align-items: center; gap: var(--dw-s2);
-  height: 34px; padding: 0 var(--dw-s4) 0 var(--dw-s3);
-  border: 0; border-radius: 8px; cursor: pointer;
+  padding: 0 var(--dw-s4) 0 var(--dw-s3);
+  border-color: var(--dw-mark);
   background: var(--dw-mark); color: var(--dw-mark-text);
-  font-size: var(--dw-fs-sm); font-weight: var(--dw-w-bold);
-  font-family: var(--dw-font-ui); letter-spacing: 0.1px; white-space: nowrap;
+  font-weight: var(--dw-w-bold);
   box-shadow: var(--dw-shadow);
-  transition: background 0.12s, transform 0.04s;
 }
-.hd-build-btn:hover { background: var(--dw-mark-strong); }
-.hd-build-btn:active { transform: translateY(1px); }
-.hd-build-btn:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
-
-/* Ghost link buttons (handover/download) inside right cluster */
-.hd-ghost-btn {
-  display: inline-flex; align-items: center; gap: var(--dw-s2);
-  height: 34px; padding: 0 var(--dw-s3);
-  border: 1px solid var(--dw-chrome-border); border-radius: 8px;
-  background: transparent; color: var(--dw-chrome-muted);
-  font-size: var(--dw-fs-xs); font-weight: var(--dw-w-medium);
-  text-decoration: none; white-space: nowrap;
-  transition: background 0.12s, color 0.12s;
-}
-.hd-ghost-btn:hover { background: var(--dw-chrome-border); color: var(--dw-chrome-text); }
+.hd-build-btn:hover { background: var(--dw-mark-strong); border-color: var(--dw-mark-strong); }
 .hd-ghost-btn:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
 
 /* Small windows: with the post-build Handover / Download .zip buttons and the native window
@@ -189,20 +254,13 @@ header {
    (their data-tip still explains them). Only their spans are hidden — no second copy of the
    buttons (ADR-008). */
 @media (max-width: 1200px) {
-  .hd-ghost-btn { width: 34px; padding: 0; justify-content: center; }
+  .hd-ghost-btn { width: var(--dw-ctl-lg); padding: 0; justify-content: center; }
   .hd-ghost-btn .hd-btn-label { display: none; }
 }
 
-/* Quit button â€” power icon, red on hover */
-.hd-quit-btn {
-  width: 34px; height: 34px; border-radius: 8px; padding: 0;
-  display: flex; align-items: center; justify-content: center;
-  background: transparent; border: 1px solid transparent;
-  color: var(--dw-chrome-muted); cursor: pointer;
-  transition: color 0.12s, background 0.12s, border-color 0.12s;
-}
+/* Quit — the icon button on chrome, red on hover */
+.hd-quit-btn { color: var(--dw-chrome-muted); }
 .hd-quit-btn:hover { color: var(--dw-bad); background: var(--dw-bad-bg); border-color: var(--dw-bad); }
-.hd-quit-btn:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
 
 /* Native window controls (custom title bar) — only inside the DocWiz app window (html.dw-native).
    Caption buttons sit flush to the window's right edge: the group cancels the header's right
@@ -238,7 +296,7 @@ html.dw-native header { cursor: default; }
 /* Hero */
 .welcome-hero { display: flex; align-items: center; gap: var(--dw-s5); margin-bottom: var(--dw-s7); }
 .welcome-hero-mark {
-  width: 52px; height: 52px; border-radius: 13px;
+  width: 52px; height: 52px; border-radius: var(--dw-r2);
   background: var(--dw-accent); display: flex; align-items: center; justify-content: center;
   flex-shrink: 0; box-shadow: var(--dw-shadow-2);
   overflow: hidden;
@@ -258,11 +316,7 @@ html.dw-native header { cursor: default; }
 @media (max-width: 900px) { .welcome-cols { grid-template-columns: 1fr; gap: var(--dw-s7); } }
 
 /* Eyebrow labels */
-.welcome-eyebrow {
-  font-size: var(--dw-fs-xs); font-weight: var(--dw-w-bold);
-  text-transform: uppercase; letter-spacing: var(--dw-track-caps);
-  color: var(--dw-faint); margin-bottom: var(--dw-s3);
-}
+.welcome-eyebrow { margin-bottom: var(--dw-s3); } /* the CAPS label */
 .welcome-eyebrow-gap { margin-top: var(--dw-s6); }
 
 /* Action card stack */
@@ -328,12 +382,7 @@ html.dw-native header { cursor: default; }
   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
 .tcard-name { font-size: var(--dw-fs-md); font-weight: var(--dw-w-medium); color: var(--dw-text); }
-.tcard-badge {
-  font-family: var(--dw-font-mono); font-size: var(--dw-fs-xs); font-weight: var(--dw-w-bold);
-  letter-spacing: var(--dw-track-caps); color: var(--dw-muted);
-  background: var(--dw-surface-2); border: 1px solid var(--dw-border);
-  border-radius: var(--dw-r0); padding: var(--dw-s1) var(--dw-s2); margin-left: var(--dw-s2);
-}
+.tcard-badge { margin-left: var(--dw-s2); } /* the badge */
 .tcard-desc { font-size: var(--dw-fs-sm); color: var(--dw-muted); line-height: 1.55; }
 
 /* Template card: whole card = Use; the Edit affordance (top-right) maintains the master.
@@ -366,14 +415,10 @@ html.dw-native header { cursor: default; }
   gap: var(--dw-s4); margin-bottom: var(--dw-s4);
 }
 .welcome-recent-head .welcome-eyebrow { margin-bottom: 0; }
-.welcome-search {
-  display: flex; align-items: center; gap: var(--dw-s2);
-  background: var(--dw-surface); border: 1px solid var(--dw-border-strong);
-  border-radius: var(--dw-r1); padding: var(--dw-s2) var(--dw-s3); min-width: 230px;
-  transition: border-color 0.12s, box-shadow 0.12s;
+.welcome-search { /* the field recipe, around a search icon */
+  display: flex; align-items: center; gap: var(--dw-s2); min-width: 230px;
   color: var(--dw-faint);
 }
-.welcome-search:focus-within { border-color: var(--dw-accent); box-shadow: var(--dw-focus-ring); }
 .welcome-search input {
   border: 0; outline: 0; background: transparent;
   font: inherit; font-size: var(--dw-fs-sm); color: var(--dw-text); width: 100%;
@@ -382,11 +427,7 @@ html.dw-native header { cursor: default; }
 .welcome-search input:focus-visible { box-shadow: none; } /* ring on the wrapper */
 
 /* Day groups */
-.daygroup {
-  font-size: var(--dw-fs-xs); font-weight: var(--dw-w-bold);
-  text-transform: uppercase; letter-spacing: var(--dw-track-caps);
-  color: var(--dw-faint); padding: var(--dw-s4) var(--dw-s4) var(--dw-s2);
-}
+.daygroup { padding: var(--dw-s4) var(--dw-s4) var(--dw-s2); } /* the CAPS label */
 .daygroup:first-child { padding-top: 2px; }
 
 /* Project row */
@@ -440,27 +481,15 @@ html.dw-native header { cursor: default; }
   opacity: 0; transition: opacity 0.12s; margin-left: var(--dw-s1);
 }
 .prow:hover .prow-actions, .prow:focus-within .prow-actions { opacity: 1; }
-.prow-btn {
-  width: 26px; height: 26px; border-radius: var(--dw-r0);
-  border: none; background: transparent; cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  color: var(--dw-muted); padding: 0; font-size: inherit; font-family: inherit;
-  transition: background 0.12s, color 0.12s;
-}
-.prow-btn:hover { background: var(--dw-surface-2); color: var(--dw-text); }
+/* .prow-btn — the icon button; pinned shows in accent, delete hovers red */
 .prow-btn.pin-active { color: var(--dw-accent); opacity: 1 !important; }
 .prow-btn.del:hover { background: var(--dw-bad-bg); color: var(--dw-bad); }
-.prow-btn:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
 
 /* Keep error + hint styled */
 .welcome-error { color: var(--dw-bad); margin-top: var(--dw-s4); font-size: var(--dw-fs-sm); }
 
 /* Window-mode toggle (welcome footer) */
 .welcome-settings { display: flex; align-items: center; gap: var(--dw-s3); margin-top: var(--dw-s7); color: var(--dw-muted); font-size: var(--dw-fs-sm); }
-.welcome-settings-toggle { display: inline-flex; border: 1px solid var(--dw-border-strong); border-radius: var(--dw-r1); overflow: hidden; }
-.welcome-settings-toggle .wmode { border: 0; border-radius: 0; background: var(--dw-surface); color: var(--dw-muted); padding: var(--dw-s2) var(--dw-s3); }
-.welcome-settings-toggle .wmode + .wmode { border-left: 1px solid var(--dw-border); }
-.welcome-settings-toggle .wmode[aria-pressed="true"] { background: var(--dw-accent-bg); color: var(--dw-accent); font-weight: var(--dw-w-medium); }
 .welcome-settings-note { font-size: var(--dw-fs-xs); color: var(--dw-faint); }
 
 /* ---- Sidebar (same recipe as the handover sidebar) ------------------------------
@@ -473,7 +502,7 @@ html.dw-native header { cursor: default; }
   border-right: 1px solid var(--dw-border);
 }
 .side-tabs { display: flex; margin: var(--dw-s3) var(--dw-s3) 0; }
-.side-tabs button { flex: 1; padding: var(--dw-s2) var(--dw-s2); font-size: var(--dw-fs-sm); }
+.side-tabs button { flex: 1; padding: 0 var(--dw-s2); font-size: var(--dw-fs-sm); }
 .side-pane { flex: 1; min-height: 0; overflow-y: auto; padding: 0 var(--dw-s3) var(--dw-s3); }
 .side-foot { flex: none; padding: var(--dw-s2) var(--dw-s3); border-top: 1px solid var(--dw-border); }
 .side-foot-btn {
@@ -489,12 +518,7 @@ html.dw-native header { cursor: default; }
 }
 .side-pane .side-empty { margin: var(--dw-s1) var(--dw-s3) var(--dw-s2); font-size: var(--dw-fs-xs); color: var(--dw-muted); line-height: var(--dw-lh-snug); }
 .side-pane .tree-new-section.current { color: var(--dw-accent); border-color: var(--dw-accent); background: var(--dw-accent-bg); }
-.side-pane .grp {
-  font-size: var(--dw-fs-xs);
-  text-transform: uppercase;
-  letter-spacing: var(--dw-track-caps);
-  font-weight: var(--dw-w-medium);
-  color: var(--dw-muted);
+.side-pane .grp { /* the CAPS label */
   margin: var(--dw-s5) 0 var(--dw-s1);
   display: flex;
   align-items: center;
@@ -509,17 +533,10 @@ html.dw-native header { cursor: default; }
 }
 /* Structure editing (Stage 6 step 2): section headers and chapter rows carry hover-revealed
    actions (+, ⋯) that stay in the layout (no shift) and are always keyboard-reachable. */
-.side-pane .tree-act {
-  flex: none; display: inline-grid; place-items: center;
-  width: 24px; height: 24px; padding: 0;
-  border: 0; border-radius: var(--dw-r0);
-  background: transparent; color: var(--dw-muted); cursor: pointer;
-  opacity: 0;
-}
+.side-pane .tree-act { opacity: 0; } /* the icon button, shown on the row's hover */
 .side-pane .tree-sec:hover .tree-act, .side-pane .tree-row:hover .tree-act,
 .side-pane .tree-act:focus-visible, .side-pane .tree-act[aria-expanded="true"] { opacity: 1; }
-.side-pane .tree-sec .tree-act:hover { background: var(--dw-surface); color: var(--dw-text); }
-.side-pane .tree-row .tree-act:hover { background: var(--dw-surface-2); color: var(--dw-text); }
+.side-pane .tree-sec .tree-act:hover { background: var(--dw-surface); }
 /* Chapter row = link + ⋯ (a button can't live inside the <a>). */
 .side-pane .tree-row { display: flex; align-items: center; border-radius: var(--dw-r1); padding-right: var(--dw-s1); }
 .side-pane .tree-row > a { flex: 1; min-width: 0; }
@@ -530,16 +547,9 @@ html.dw-native header { cursor: default; }
 /* Drop targets while a chapter is dragged: a line above a row, a wash on a section. */
 .side-pane .tree-row.drop-target { box-shadow: inset 0 2px 0 var(--dw-accent); }
 .side-pane .tree-sec.drop-target, .side-pane .tree-empty.drop-target { background: var(--dw-accent-bg); border-radius: var(--dw-r1); }
-.side-pane .tree-empty, .side-pane .tree-new-section {
-  display: block; width: 100%; text-align: left;
-  padding: var(--dw-s2) var(--dw-s3);
-  border: 1px dashed var(--dw-border-strong); border-radius: var(--dw-r1);
-  background: transparent; color: var(--dw-muted);
-  font-size: var(--dw-fs-sm); cursor: pointer;
-}
+.side-pane .tree-empty, .side-pane .tree-new-section { width: 100%; } /* the add recipe */
 .side-pane .tree-empty { margin-bottom: var(--dw-s1); }
 .side-pane .tree-new-section { margin-top: var(--dw-s4); }
-.side-pane .tree-empty:hover, .side-pane .tree-new-section:hover { color: var(--dw-text); border-color: var(--dw-muted); background: var(--dw-surface); }
 /* Inline rename field (also inside the CAPS section header, so it resets the label type). */
 .side-pane .tree-rename {
   flex: 1; min-width: 0;
@@ -589,20 +599,6 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 0;
 #chapterEditor { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
 /* Input / select shared recipe (dialogs) */
-dialog#modal input, dialog#modal select {
-  font: inherit;
-  font-weight: var(--dw-w-regular);
-  border: 1px solid var(--dw-border-strong);
-  border-radius: var(--dw-r1);
-  padding: var(--dw-s2) var(--dw-s3);
-  background: var(--dw-surface);
-  color: var(--dw-text);
-}
-dialog#modal input:focus, dialog#modal select:focus {
-  outline: none;
-  border-color: var(--dw-accent);
-  box-shadow: var(--dw-focus-ring);
-}
 
 /* ---- Document bar (.chapterbar) — Stage 6: where you are, who reads it, save state, the
         view, and the chapter's panels and actions. No Save button: changes save by themselves. */
@@ -623,7 +619,7 @@ dialog#modal input:focus, dialog#modal select:focus {
   font-size: var(--dw-fs-sm);
 }
 .cb-crumb-sec { color: var(--dw-faint); white-space: nowrap; }
-.cb-crumb-sep { color: var(--dw-border-strong); }
+.cb-crumb-sep { color: var(--dw-faint); }
 .cb-crumb-title {
   color: var(--dw-text); font-weight: var(--dw-w-medium);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -631,12 +627,9 @@ dialog#modal input:focus, dialog#modal select:focus {
 
 /* Readers pill: who this chapter is for (opens a checkable menu). Neutral — no colour per
    audience. */
-.cb-readers {
-  display: inline-flex; align-items: center; gap: var(--dw-s2); flex-shrink: 0;
-  height: 30px; padding: 0 var(--dw-s2) 0 var(--dw-s3);
-  border: 1px solid var(--dw-border-strong); border-radius: var(--dw-r1);
-  background: var(--dw-surface); color: var(--dw-text);
-  font-size: var(--dw-fs-xs); font-weight: var(--dw-w-medium); white-space: nowrap;
+.cb-readers { /* a sized secondary button on the bar's surface */
+  flex-shrink: 0; padding: 0 var(--dw-s2) 0 var(--dw-s3);
+  background: var(--dw-surface); font-size: var(--dw-fs-xs);
 }
 .cb-readers svg { color: var(--dw-muted); flex-shrink: 0; }
 .cb-readers:hover, .cb-readers[aria-expanded="true"] { background: var(--dw-surface-2); }
@@ -683,36 +676,14 @@ dialog#modal input:focus, dialog#modal select:focus {
 }
 
 /* Icon buttons of the document bar: History, Properties, ⋯ (pressed = its panel is open) */
-.cb-kebab-btn {
-  width: 34px; height: 34px; border-radius: var(--dw-r1); padding: 0;
-  border: 1px solid transparent; background: transparent;
-  color: var(--dw-muted); display: inline-flex; align-items: center; justify-content: center;
-  cursor: pointer; transition: background 0.12s, color 0.12s;
-}
-.cb-kebab-btn:hover, .cb-kebab-btn[aria-expanded="true"] { background: var(--dw-surface-2); color: var(--dw-text); }
+/* .cb-kebab-btn — the icon button; open menu = hovered, open panel = accent */
+.cb-kebab-btn[aria-expanded="true"] { background: var(--dw-surface-2); color: var(--dw-text); }
 .cb-kebab-btn[aria-pressed="true"] { background: var(--dw-accent-bg); color: var(--dw-accent); }
-.cb-kebab-btn:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
 
 /* Keep the old .fm for yaml/view editors */
 .fm { display: flex; gap: var(--dw-s3); align-items: center; flex-wrap: wrap;
       padding: var(--dw-s2) var(--dw-s3); border-bottom: 1px solid var(--dw-border);
       background: var(--dw-surface); }
-.fm label { display: flex; align-items: center; gap: var(--dw-s2); color: var(--dw-muted); font-size: var(--dw-fs-sm); font-weight: var(--dw-w-medium); }
-.fm input, dialog#modal input, dialog#modal select {
-  font: inherit;
-  font-weight: var(--dw-w-regular);
-  border: 1px solid var(--dw-border-strong);
-  border-radius: var(--dw-r1);
-  padding: var(--dw-s2) var(--dw-s3);
-  background: var(--dw-surface);
-  color: var(--dw-text);
-}
-.fm input:focus, dialog#modal input:focus, dialog#modal select:focus {
-  outline: none;
-  border-color: var(--dw-accent);
-  box-shadow: var(--dw-focus-ring);
-}
-.fm input:disabled { background: var(--dw-surface-2); color: var(--dw-muted); font-family: var(--dw-font-mono); }
 
 /* The YAML editor's status (the chapter's and the output's are .cb-status in their bars). */
 #yamlStatus { color: var(--dw-muted); font-size: var(--dw-fs-sm); margin-left: auto; }
@@ -754,12 +725,12 @@ dialog#modal input:focus, dialog#modal select:focus {
   field-sizing: content; min-width: 8ch; max-width: 42ch;
   font: inherit; font-size: var(--dw-fs-sm); font-weight: var(--dw-w-medium); color: var(--dw-text);
   background: transparent; border: 1px solid transparent; border-radius: var(--dw-r0);
-  padding: 2px var(--dw-s1); margin: -3px 0;
+  height: var(--dw-ctl-md); padding: 0 var(--dw-s1);
 }
 .cb-title-input:hover { border-color: var(--dw-border); }
 .cb-title-input:focus { outline: none; border-color: var(--dw-accent); background: var(--dw-surface); box-shadow: var(--dw-focus-ring); }
 .cb-readers-label b { font-weight: var(--dw-w-bold); }
-.cb-present { display: inline-flex; align-items: center; gap: var(--dw-s2); height: 30px; padding: 0 var(--dw-s3); font-size: var(--dw-fs-xs); }
+.cb-present { padding: 0 var(--dw-s3); font-size: var(--dw-fs-xs); } /* a sized secondary button */
 .cb-present svg { color: var(--dw-muted); }
 
 /* ---- The rail (Stage 6) — a deck's slide miniatures, a document's sections ----
@@ -778,14 +749,9 @@ dialog#modal input:focus, dialog#modal select:focus {
   background: var(--dw-surface);
   overflow: hidden;
 }
-.vpanel-head {
+.vpanel-head { /* the CAPS label */
   flex: none;
   padding: var(--dw-s2) var(--dw-s3);
-  font-size: var(--dw-fs-xs);
-  font-weight: var(--dw-w-medium);
-  text-transform: uppercase;
-  letter-spacing: var(--dw-track-caps);
-  color: var(--dw-muted);
   border-bottom: 1px solid var(--dw-border);
 }
 .vpanel-list { flex: 1; min-height: 0; overflow: auto; padding: var(--dw-s1) var(--dw-s2); display: flex; flex-direction: column; }
@@ -822,16 +788,12 @@ dialog#modal input:focus, dialog#modal select:focus {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.vpanel-more {
+.vpanel-more { /* the icon button over a miniature: on a surface, with a hairline */
   position: absolute; top: var(--dw-s1); right: var(--dw-s1);
-  width: 24px; height: 24px; padding: 0;
-  display: inline-grid; place-items: center;
-  border: 1px solid var(--dw-border); border-radius: var(--dw-r0);
-  background: var(--dw-surface); color: var(--dw-muted);
+  border-color: var(--dw-border); background: var(--dw-surface);
   opacity: 0;
 }
 .vpanel-item:hover .vpanel-more, .vpanel-more:focus-visible, .vpanel-more[aria-expanded="true"] { opacity: 1; }
-.vpanel-more:hover { color: var(--dw-text); background: var(--dw-surface-2); }
 /* A miniature: the 1920×1080 slide at 176 px wide (zoom 176/1920). */
 .vthumb {
   width: 176px; height: 99px; overflow: hidden;
@@ -849,9 +811,9 @@ dialog#modal input:focus, dialog#modal select:focus {
 /* Between two items: the insert + (shown on hover / focus) and the drop line of a drag. */
 .vrail-gap { position: relative; height: var(--dw-s2); flex: none; }
 .vrail-gap.drop::before { content: ""; position: absolute; left: var(--dw-s1); right: var(--dw-s1); top: 50%; height: 2px; margin-top: -1px; background: var(--dw-accent); }
-.vrail-insert {
-  position: absolute; left: calc(50% - 11px); top: calc(50% - 11px); z-index: 1;
-  width: 22px; height: 22px; padding: 0;
+.vrail-insert { /* a small icon button, accent outlined */
+  position: absolute; left: calc(50% - var(--dw-ctl-sm) / 2); top: calc(50% - var(--dw-ctl-sm) / 2); z-index: var(--dw-z-raised);
+  width: var(--dw-ctl-sm); height: var(--dw-ctl-sm); padding: 0;
   display: inline-grid; place-items: center;
   border: 1px solid var(--dw-accent); border-radius: var(--dw-r1);
   background: var(--dw-surface); color: var(--dw-accent);
@@ -860,19 +822,8 @@ dialog#modal input:focus, dialog#modal select:focus {
 .vrail-gap:hover .vrail-insert, .vrail-insert:focus-visible { opacity: 1; }
 .vrail-insert:hover { background: var(--dw-accent-bg); }
 /* "+ Add slide" / "+ Add section" under the list — secondary, never a primary button. */
-.vpanel-add {
-  flex: none;
-  margin: var(--dw-s2);
-  padding: var(--dw-s2);
-  border: 1px dashed var(--dw-border-strong);
-  border-radius: var(--dw-r1);
-  background: var(--dw-surface);
-  color: var(--dw-muted);
-  font-size: var(--dw-fs-sm);
-  cursor: pointer;
-}
-.vpanel-add:hover { color: var(--dw-accent); border-color: var(--dw-accent); background: var(--dw-accent-bg); }
-.vpanel-add:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }/* The document-mode preview still rides in an iframe (display-only filtered page). */
+.vpanel-add { flex: none; margin: var(--dw-s2); justify-content: center; } /* the add recipe */
+/* The document-mode preview still rides in an iframe (display-only filtered page). */
 .vedit-surface {
   width: 100%;
   height: 100%;
@@ -1020,7 +971,7 @@ dialog#modal input:focus, dialog#modal select:focus {
    chapter editor's .e2-maintoolbar shell (built with withViewSwitch:false), so it is
    editor chrome in the page's own theme — not on the dark slide surface. Sticky like
    the chapter editor's .e2-top so it stays put while the deck scrolls. */
-.e2-slide-top { position: sticky; top: 0; z-index: 4; }
+.e2-slide-top { position: sticky; top: 0; z-index: var(--dw-z-overlay); }
 
 /* ---- Structured slide layouts: the Add-slide gallery (modal) ---- */
 /* Shared wireframe thumbnail used in the gallery cards. */
@@ -1090,20 +1041,9 @@ dialog#modal input:focus, dialog#modal select:focus {
   padding: var(--dw-s2) var(--dw-s4);
 }
 .issues-head { display: flex; justify-content: space-between; align-items: center; }
-.issues-head button { border: none; padding: var(--dw-s1) var(--dw-s2); color: var(--dw-muted); }
 #issuesList { list-style: none; margin: var(--dw-s2) 0 0; padding: 0; font-size: var(--dw-fs-sm); }
 #issuesList li { padding: var(--dw-s1) 0; }
-#issuesList .sev {
-  display: inline-block;
-  font-size: var(--dw-fs-xs);
-  text-transform: uppercase;
-  letter-spacing: var(--dw-track-caps);
-  font-weight: var(--dw-w-medium);
-  padding: 1px var(--dw-s2);
-  border-radius: var(--dw-r0);
-  border: 1px solid currentColor;
-  margin-right: var(--dw-s2);
-}
+#issuesList .sev { border-color: currentColor; margin-right: var(--dw-s2); } /* the badge; Error / Warning set the colour */
 #issuesList .sev.Error { color: var(--dw-bad); background: var(--dw-bad-bg); }
 #issuesList .sev.Warning { color: var(--dw-warn); background: var(--dw-warn-bg); }
 #issuesList .src { color: var(--dw-muted); margin-right: var(--dw-s2); font-family: var(--dw-font-mono); font-size: var(--dw-fs-xs); }
@@ -1139,11 +1079,7 @@ dialog#modal .buttons { display: flex; justify-content: flex-end; gap: var(--dw-
 
 /* ---- Word import dialog (cherry-pick) + walkthrough ---------------------------------------------- */
 .imp-sections { max-height: 280px; overflow-y: auto; margin-bottom: var(--dw-s3); }
-.imp-head {
-  text-transform: uppercase; letter-spacing: var(--dw-track-caps);
-  font-size: var(--dw-fs-xs); font-weight: var(--dw-w-medium); color: var(--dw-muted);
-  margin: var(--dw-s2) 0 var(--dw-s2);
-}
+.imp-head { margin: var(--dw-s2) 0 var(--dw-s2); } /* the CAPS label */
 .imp-row {
   display: flex; gap: var(--dw-s3); align-items: flex-start;
   padding: var(--dw-s2); border-radius: var(--dw-r1); cursor: pointer;
@@ -1342,7 +1278,7 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
 /* ---- Tooltips (explain boxes) â€” chrome-dark in both themes -------------------------------------- */
 #tooltip {
   position: fixed;
-  z-index: 1000;
+  z-index: var(--dw-z-menu);
   max-width: 320px;
   background: var(--dw-chrome);
   color: var(--dw-chrome-text);
@@ -1360,7 +1296,7 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
 /* ---- Error toast â€” visible, never silent --------------------------------------------------------- */
 #errToast {
   position: fixed;
-  z-index: 2000;
+  z-index: var(--dw-z-toast);
   right: var(--dw-s5);
   bottom: var(--dw-s5);
   transform: translateY(12px);
@@ -1435,7 +1371,7 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
 
 /* ---------- M3 + feedback round 1: click-to-activate tables/images; their tools
    live in ONE fixed context bar under the banner, never beside the element ---- */
-.e2-top { position: sticky; top: 0; z-index: 3; }
+.e2-top { position: sticky; top: 0; z-index: var(--dw-z-sticky); }
 .e2-contextbar {
   /* OVERLAY-when-shown (stakeholder choice, divergence-audit follow-up): the sub-row no longer
      reserves constant flow height — that left a permanent ~53px empty strip below the toolbar
@@ -1449,7 +1385,7 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
   top: 100%;
   left: 0;
   right: 0;
-  z-index: 2;
+  z-index: var(--dw-z-handle);
   display: flex;
   align-items: center;
   gap: var(--dw-s3);
@@ -1464,13 +1400,7 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
 /* Nothing selected → no overlay at all: no permanent strip, no gap (the old reserved-height
    empty sub-row is gone now that showing tools overlays instead of reserving flow space). */
 .e2-contextbar.e2-ctx-empty { display: none; }
-.e2-ctx-label {
-  font-size: var(--dw-fs-xs);
-  text-transform: uppercase;
-  letter-spacing: var(--dw-track-caps);
-  font-weight: var(--dw-w-medium);
-  color: var(--dw-accent);
-}
+.e2-ctx-label { color: var(--dw-accent); } /* the CAPS label, naming the selected element */
 .e2-ctx-hint { font-size: var(--dw-fs-xs); color: var(--dw-muted); margin-left: var(--dw-s3); }
 /* (`.e2-tools` / `.e2-tools button` — the legacy bordered-box context idiom — was deleted in
    the table/picture toolbar redesign: every context-bar control is now the borderless `.ib`
@@ -1484,33 +1414,11 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
 .e2-sep { width: 1px; height: 14px; background: var(--dw-border); margin: 0 var(--dw-s1); }
 /* Caption / alt field — the ONE slack-absorbing item in the context row; shrinks to its
    90px min first so the bar stays a single nowrap row. */
-.e2-figcap {
-  flex: 1 1 120px;
-  min-width: 90px;
-  max-width: 340px;
-  height: 30px;
-  border: 1px solid var(--dw-border-strong);
-  border-radius: var(--dw-r0);
-  padding: 0 var(--dw-s3);
-  font-size: var(--dw-fs-sm);
-  background: var(--dw-surface);
-  color: var(--dw-text);
+.e2-figcap { flex: 1 1 120px; min-width: 90px; max-width: 340px; } /* the field */
+.e2-pxinput { /* the field, for a number of pixels */
+  width: 56px; padding: 0 var(--dw-s2); flex-shrink: 0;
+  font-size: var(--dw-fs-xs); font-family: var(--dw-font-mono); text-align: right;
 }
-.e2-figcap:focus { border-color: var(--dw-accent); box-shadow: var(--dw-focus-ring); outline: none; }
-.e2-pxinput {
-  width: 56px;
-  height: 30px;
-  border: 1px solid var(--dw-border-strong);
-  border-radius: var(--dw-r0);
-  padding: 0 var(--dw-s2);
-  font-size: var(--dw-fs-xs);
-  font-family: var(--dw-font-mono);
-  background: var(--dw-surface-2);
-  color: var(--dw-text);
-  text-align: right;
-  flex-shrink: 0;
-}
-.e2-pxinput:focus { border-color: var(--dw-accent); box-shadow: var(--dw-focus-ring); outline: none; }
 .dw-live-surface .dw-image-figure { position: relative; }
 .e2-fighandle {
   display: none;
@@ -1520,7 +1428,7 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
   border-radius: 2px;
   cursor: nwse-resize;
   position: absolute;
-  z-index: 2;
+  z-index: var(--dw-z-handle);
 }
 .dw-image-figure.e2-active .e2-fighandle { display: inline-block; }
 .e2-figreadout {
@@ -1535,7 +1443,7 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
   border-radius: var(--dw-r0);
 }
 .dw-live-surface thead th { position: relative; }
-.e2-colgrip { display: none; position: absolute; right: -4px; top: 0; width: 8px; height: 100%; cursor: col-resize; z-index: 2; }
+.e2-colgrip { display: none; position: absolute; right: -4px; top: 0; width: 8px; height: 100%; cursor: col-resize; z-index: var(--dw-z-handle); }
 .dw-table-figure.e2-active .e2-colgrip { display: block; }
 /* Box-width handle (L202): the active table is the positioning context for a right-edge
    drag handle that sizes the WHOLE table (% of the page/zone width; height follows
@@ -1552,7 +1460,7 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
   border-radius: var(--dw-r0);
   background: var(--dw-accent);
   cursor: ew-resize;
-  z-index: 2;
+  z-index: var(--dw-z-handle);
 }
 .dw-table-figure.e2-active .e2-boxhandle { display: block; }
 .e2-boxreadout {
@@ -1565,7 +1473,7 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
   color: var(--dw-chrome-text);
   padding: 2px var(--dw-s2);
   border-radius: var(--dw-r0);
-  z-index: 3;
+  z-index: var(--dw-z-sticky);
 }
 .e2-cell-editing { outline: 2px solid var(--dw-accent); outline-offset: -2px; background: var(--dw-accent-bg); position: relative; }
 /* The cell editor is the positioning context for the in-cell picture resize handle
@@ -1582,7 +1490,7 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
   position: fixed;
   inset: 0;
   background: var(--dw-backdrop);
-  z-index: 4;
+  z-index: var(--dw-z-overlay);
 }
 /* Specificity must beat "#editor2 .dw-table-figure { position:relative }" (ID+class),
    so we include #editor2 here (ID+class+class). */
@@ -1601,7 +1509,7 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
   border-radius: var(--dw-r1);
   box-shadow: var(--dw-shadow-2);
   padding: var(--dw-s4);
-  z-index: 5;
+  z-index: var(--dw-z-focus);
 }
 /* "Esc to exit" hint floated in the top-right corner of the focused table */
 #editor2 .dw-table-figure.e2-focus::after,
@@ -1620,7 +1528,7 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
   margin: 0 0 var(--dw-s2) var(--dw-s2);
   line-height: 1.5;
   pointer-events: none;
-  z-index: 1;
+  z-index: var(--dw-z-raised);
 }
 
 /* M4: container selection chrome. Plain wrappers (steps/cards/buttons/center/right)
@@ -1631,20 +1539,12 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
 .dw-live-surface .dw-steps > div, .dw-live-surface .dw-cards > div,
 .dw-live-surface .dw-buttons > div, .dw-live-surface .dw-align-center > div,
 .dw-live-surface .dw-align-right > div { display: contents; }
-.e2-blockpill {
+.e2-blockpill { /* the badge, on the block's top edge */
   position: absolute;
   top: calc(-1 * var(--dw-s3));
   right: 0;
-  font-size: var(--dw-fs-xs);
-  text-transform: uppercase;
-  letter-spacing: var(--dw-track-caps);
-  color: var(--dw-muted);
   background: var(--dw-surface);
-  border: 1px solid var(--dw-border);
-  border-radius: var(--dw-r0);
-  padding: 0 var(--dw-s2);
-  line-height: 1.5;
-  z-index: 1;
+  z-index: var(--dw-z-raised);
 }
 
 /* Live-linked block chrome (Slides v2, Task 9). Rule 20: this is EDITING chrome only —
@@ -1688,23 +1588,13 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
   position: absolute;
   top: var(--dw-s1);
   right: var(--dw-s1);
-  display: inline-flex;
-  align-items: center;
-  gap: var(--dw-s1);
-  font-size: var(--dw-fs-xs);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: var(--dw-track-caps);
-  /* A SOLID accent chip — the old accent-on-dark-surface pill was nearly invisible on the
-     dark slide. Solid fill + on-accent text reads clearly against the slide. */
+  /* The badge, solid accent variant — the old accent-on-dark-surface pill was nearly
+     invisible on the dark slide. Solid fill + on-accent text reads clearly against it. */
   color: var(--dw-accent-contrast);
   background: var(--dw-accent);
-  border: 1px solid var(--dw-accent);
-  border-radius: var(--dw-r0);
-  padding: 0 var(--dw-s2);
-  line-height: 1.5;
+  border-color: var(--dw-accent);
   cursor: pointer;
-  z-index: 1;
+  z-index: var(--dw-z-raised);
   /* Hidden at rest so it never sits over the embedded content — the embed reads exactly
      like the deck. It appears (top-right) only on hover or when the block is selected, so
      the author can see it is linked and click to act. Opacity (not display) keeps it
@@ -1838,20 +1728,8 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
 .e2-tb-tools { display: flex; align-items: center; flex-wrap: nowrap; gap: var(--dw-s2); flex: 1 1 auto; min-width: 0; }
 
 /* Context badge (IMAGE / TABLE) */
-.e2-ctx-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--dw-s2);
-  font-family: var(--dw-font-mono);
-  font-size: var(--dw-fs-xs);
-  font-weight: var(--dw-w-bold);
-  letter-spacing: var(--dw-track-caps);
-  text-transform: uppercase;
-  color: var(--dw-accent);
-  background: var(--dw-accent-bg);
-  border: 1px solid var(--dw-border-strong);
-  border-radius: var(--dw-r0);
-  padding: var(--dw-s1) var(--dw-s3);
+.e2-ctx-badge { /* the badge, accent variant */
+  color: var(--dw-accent); background: var(--dw-accent-bg); border-color: var(--dw-accent);
   flex-shrink: 0;
 }
 
@@ -1895,21 +1773,21 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
 }
 
 /* Icon buttons in the scrollable track */
-.e2-maintoolbar .ib {
-  height: 34px;
-  min-width: 30px;
+/* Toolbar button — ONE recipe for the main toolbar, the context bar and a menu row's tools. */
+.e2-maintoolbar .ib, .e2-contextbar .ib, .e2-menu .ib {
+  height: var(--dw-ctl-md);
+  min-width: var(--dw-ctl-md);
   padding: 0 var(--dw-s2);
   border: none;
-  border-radius: var(--dw-r0);
+  border-radius: var(--dw-r1);
   background: transparent;
   color: var(--dw-muted);
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  cursor: pointer;
-  font-size: var(--dw-fs-sm);
-  font-weight: var(--dw-w-medium);
   gap: var(--dw-s1);
+  font: var(--dw-w-medium) var(--dw-fs-sm)/var(--dw-lh-tight) var(--dw-font-ui);
+  cursor: pointer;
   flex-shrink: 0;
   transition: background 0.12s ease, color 0.12s ease;
 }
@@ -1920,23 +1798,6 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
 /* The ONE borderless icon-button family for the whole context bar (figure / table / cell
    image / linked block / container / symbol / link tools all use it). Matches the main
    toolbar's .ib; editing chrome (rule 20). Markup single-sourced in editor2/contexttools.js. */
-.e2-contextbar .ib, .e2-menu .ib {
-  height: 32px;
-  min-width: 32px;
-  padding: 0 var(--dw-s2);
-  border: none;
-  border-radius: var(--dw-r1);
-  background: transparent;
-  color: var(--dw-muted);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  font: var(--dw-w-medium) var(--dw-fs-sm)/var(--dw-lh-tight) var(--dw-font-ui);
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: background 0.12s ease, color 0.12s ease;
-}
 .e2-contextbar .ib:hover, .e2-menu .ib:hover { background: var(--dw-surface-2); color: var(--dw-text); }
 .e2-contextbar .ib.active, .e2-menu .ib.active { background: var(--dw-accent-bg); color: var(--dw-accent); }
 .e2-contextbar .ib:focus-visible, .e2-menu .ib:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
@@ -1949,28 +1810,15 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
 /* ── Right-click context menu (Phase 2). Reusable .e2-menu recipe; same accent/surface state
    language and icon set as the context bar. Markup single-sourced in editor2/contexttools.js;
    opened/positioned/closed by openContextMenu(). Tokens only. ── */
-.e2-menu, .e2-menu .submenu {
-  background: var(--dw-surface);
-  border: 1px solid var(--dw-border);
-  border-radius: var(--dw-r1);
-  box-shadow: var(--dw-shadow-2);
-  padding: var(--dw-s1);
-}
-.e2-menu { position: fixed; z-index: 1000; min-width: 220px; max-width: 268px; }
+.e2-menu { position: fixed; z-index: var(--dw-z-menu); min-width: 220px; max-width: 268px; }
 /* The tree's ⋯ menus reuse this recipe with real <button> items (keyboard-operable). */
 .e2-menu button.mi { width: 100%; border: 0; background: transparent; text-align: left; }
-.e2-menu .mlabel {
-  font: var(--dw-w-bold) var(--dw-fs-xs)/1 var(--dw-font-ui);
-  letter-spacing: var(--dw-track-caps);
-  text-transform: uppercase;
-  color: var(--dw-faint);
-  padding: var(--dw-s2) var(--dw-s3) var(--dw-s1);
-}
+.e2-menu .mlabel { padding: var(--dw-s2) var(--dw-s3) var(--dw-s1); } /* the CAPS label */
 .e2-menu .mi {
   display: flex;
   align-items: center;
   gap: var(--dw-s3);
-  height: 32px;
+  height: var(--dw-ctl-md);
   padding: 0 var(--dw-s2) 0 var(--dw-s3);
   border-radius: var(--dw-r0);
   color: var(--dw-text);
@@ -1992,12 +1840,12 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
 .e2-menu .msep { height: 1px; background: var(--dw-border); margin: var(--dw-s1) var(--dw-s2); }
 .e2-menu .mkey { font: var(--dw-fs-xs)/1 var(--dw-font-mono); color: var(--dw-faint); margin-left: auto; }
 /* Inline mutually-exclusive set (Size / Align / Place) — the bar's .ib controls in a menu row. */
-.e2-menu .mrow { display: flex; align-items: center; gap: var(--dw-s2); height: 34px; padding: 0 var(--dw-s1) 0 var(--dw-s3); }
+.e2-menu .mrow { display: flex; align-items: center; gap: var(--dw-s2); height: var(--dw-ctl-md); padding: 0 var(--dw-s1) 0 var(--dw-s3); }
 .e2-menu .mrow .mlbl { flex: 1; color: var(--dw-text); font: var(--dw-w-medium) var(--dw-fs-sm)/1 var(--dw-font-ui); }
-.e2-menu .mrow .ib { height: 28px; min-width: 28px; }
+.e2-menu .mrow .ib { height: var(--dw-ctl-sm); min-width: var(--dw-ctl-sm); }
 /* Submenu flyout (Row ▸ / Column ▸): chevron right; flips to the left near the viewport edge. */
 .e2-menu .mi.has-sub .mchev { margin-left: auto; }
-.e2-menu .submenu { position: absolute; left: 100%; top: calc(-1 * var(--dw-s1)); display: none; min-width: 200px; z-index: 1; }
+.e2-menu .submenu { position: absolute; left: 100%; top: calc(-1 * var(--dw-s1)); display: none; min-width: 200px; z-index: var(--dw-z-raised); }
 .e2-menu .mi.has-sub.open > .submenu { display: block; }
 .e2-menu .mi.has-sub.flip > .submenu { left: auto; right: 100%; }
 
@@ -2026,10 +1874,10 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
   display: inline-flex;
   align-items: center;
   gap: var(--dw-s2);
-  height: 30px;
+  height: var(--dw-ctl-md);
   padding: 0 var(--dw-s2) 0 var(--dw-s3);
   border: 1px solid var(--dw-border-strong);
-  border-radius: var(--dw-r0);
+  border-radius: var(--dw-r1);
   background: var(--dw-surface);
   color: var(--dw-text);
   font: inherit;
@@ -2055,17 +1903,7 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
 .dw-sel-trigger[aria-expanded="true"] .dw-sel-chev { transform: rotate(180deg); }
 
 /* Popup list */
-.dw-sel-popup {
-  position: fixed;
-  z-index: 2200;
-  min-width: 160px;
-  background: var(--dw-surface);
-  border: 1px solid var(--dw-border-strong);
-  border-radius: var(--dw-r1);
-  box-shadow: var(--dw-shadow-2);
-  padding: var(--dw-s1);
-  overflow: hidden;
-}
+.dw-sel-popup { position: fixed; z-index: var(--dw-z-popover); min-width: 160px; overflow: hidden; } /* the menu */
 
 /* Individual option */
 .dw-sel-opt {
@@ -2102,13 +1940,9 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
 .dw-sel-opt[data-style="h4"] { font-size: var(--dw-fs-sm); font-weight: 600; }
 
 /* ---- Table grid picker popup -------------------------------------------- */
-.dw-tbl-picker {
+.dw-tbl-picker { /* the menu container, holding a grid */
   position: fixed;
-  z-index: 2100;
-  background: var(--dw-surface);
-  border: 1px solid var(--dw-border);
-  border-radius: var(--dw-r1);
-  box-shadow: var(--dw-shadow-2);
+  z-index: var(--dw-z-popover);
   padding: var(--dw-s2);
   display: flex;
   flex-direction: column;
@@ -2149,16 +1983,11 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
    below nothing else here). Tokens only; built by editor2/slashmenu.js. */
 .dw-slash-menu {
   position: fixed;
-  z-index: 2200;
+  z-index: var(--dw-z-popover);
   min-width: 248px;
   max-width: 320px;
   max-height: 320px;
   overflow-y: auto;
-  background: var(--dw-surface);
-  border: 1px solid var(--dw-border-strong);
-  border-radius: var(--dw-r1);
-  box-shadow: var(--dw-shadow-2);
-  padding: var(--dw-s1);
 }
 .dw-slash-opt {
   display: flex;
@@ -2224,20 +2053,12 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
 .dwa-desc { font-size: var(--dw-fs-sm); color: var(--dw-muted); line-height: var(--dw-lh-body); margin-top: var(--dw-s1); max-width: 62ch; }
 
 /* Buttons (scoped) — primary is the one accent button; danger is an outline (rule 8). */
-.dwa-btn { display: inline-flex; align-items: center; gap: var(--dw-s2); height: 36px; padding: 0 var(--dw-s4);
-  border-radius: var(--dw-r1); font-size: var(--dw-fs-sm); font-weight: var(--dw-w-bold); cursor: pointer;
-  white-space: nowrap; border: 1px solid transparent; background: transparent; color: var(--dw-text); }
+/* .dwa-btn — the sized button (secondary by default; primary / danger are the recipes). */
+.dwa-btn { padding: 0 var(--dw-s4); }
 .dwa-btn svg { width: 16px; height: 16px; }
-.dwa-btn-primary { background: var(--dw-accent); color: var(--dw-accent-contrast); border-color: var(--dw-accent); box-shadow: var(--dw-shadow); }
-.dwa-btn-primary:hover { background: var(--dw-accent-strong); border-color: var(--dw-accent-strong); }
-.dwa-btn-secondary { border-color: var(--dw-border-strong); color: var(--dw-text); }
 .dwa-btn-secondary svg { color: var(--dw-muted); }
-.dwa-btn-secondary:hover { background: var(--dw-surface-2); border-color: var(--dw-muted); }
-.dwa-btn-danger { border-color: var(--dw-border); color: var(--dw-bad); }
-.dwa-btn-danger:hover { background: var(--dw-bad-bg); border-color: var(--dw-bad); }
-.dwa-btn:disabled { opacity: .45; cursor: default; pointer-events: none; }
-.dwa-btn-sm { height: 30px; padding: 0 var(--dw-s3); font-size: var(--dw-fs-xs); }
-.dwa-btn:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
+.dwa-btn:disabled { pointer-events: none; }
+.dwa-btn-sm { padding: 0 var(--dw-s3); font-size: var(--dw-fs-xs); }
 
 /* Package cards */
 .dwa-pkg-list { display: flex; flex-direction: column; gap: var(--dw-s3); }
@@ -2251,18 +2072,14 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
 .dwa-pkg-main { flex: 1; min-width: 0; }
 .dwa-pkg-toprow { display: flex; align-items: center; gap: var(--dw-s3); margin-bottom: var(--dw-s2); flex-wrap: wrap; }
 .dwa-pkg-tab { font-size: var(--dw-fs-md); font-weight: var(--dw-w-bold); color: var(--dw-text); }
-.dwa-pkg-type { font-size: var(--dw-fs-xs); font-weight: var(--dw-w-bold); letter-spacing: var(--dw-track-caps);
-  text-transform: uppercase; color: var(--dw-muted); background: var(--dw-surface-2); border: 1px solid var(--dw-border);
-  border-radius: var(--dw-r0); padding: 2px var(--dw-s2); }
+/* .dwa-pkg-type — the badge */
 .dwa-pkg-meta { display: flex; align-items: center; gap: var(--dw-s2) var(--dw-s4); flex-wrap: wrap;
   font-size: var(--dw-fs-sm); color: var(--dw-muted); }
 .dwa-mi { display: inline-flex; align-items: center; gap: var(--dw-s2); }
 .dwa-mi svg { width: 14px; height: 14px; color: var(--dw-faint); }
 .dwa-path, .dwa-size, .dwa-mono { font-family: var(--dw-font-mono); font-size: var(--dw-fs-xs); }
 .dwa-path { color: var(--dw-text); }
-.dwa-status { display: inline-flex; align-items: center; gap: var(--dw-s1); font-size: var(--dw-fs-xs);
-  font-weight: var(--dw-w-bold); letter-spacing: var(--dw-track-caps); text-transform: uppercase;
-  border-radius: var(--dw-r0); padding: 3px var(--dw-s2); border: 1px solid; }
+/* .dwa-status — the badge, ok / bad variants */
 .dwa-status svg { width: 13px; height: 13px; }
 .dwa-status.ok { color: var(--dw-ok); background: var(--dw-ok-bg); border-color: color-mix(in srgb, var(--dw-ok) 35%, transparent); }
 .dwa-status.bad { color: var(--dw-bad); background: var(--dw-bad-bg); border-color: color-mix(in srgb, var(--dw-bad) 35%, transparent); }
@@ -2284,7 +2101,7 @@ dialog#modal .mlbl { display: block; margin: var(--dw-s4) 0 var(--dw-s1); font-s
 .mradio { display: flex; align-items: flex-start; gap: var(--dw-s2); margin-top: var(--dw-s2); font-size: var(--dw-fs-sm); color: var(--dw-text); }
 .mradio input { margin-top: 3px; }
 /* Export modal: section heading over a group of chapter/view checkboxes, and the indented chapter rows. */
-.mgroup-lbl { margin: var(--dw-s3) 0 var(--dw-s1); font-size: var(--dw-fs-xs); font-weight: var(--dw-w-bold); color: var(--dw-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.mgroup-lbl { margin: var(--dw-s3) 0 var(--dw-s1); } /* the CAPS label */
 .mradio-sub { margin-left: var(--dw-s4); }
 
 /* ============================================================================
@@ -2295,7 +2112,7 @@ dialog#modal .mlbl { display: block; margin: var(--dw-s4) 0 var(--dw-s1); font-s
    backdrop; the window's own controls in the bar stay usable. Below tooltips (1000) and
    toasts (2000), so both still show over it. */
 .set-sheet {
-  position: fixed; left: 0; right: 0; bottom: 0; top: 54px; z-index: 900;
+  position: fixed; left: 0; right: 0; bottom: 0; top: 54px; z-index: var(--dw-z-sheet);
   display: flex; align-items: center; justify-content: center;
   padding: var(--dw-s5);
   background: var(--dw-backdrop);
@@ -2307,16 +2124,10 @@ dialog#modal .mlbl { display: block; margin: var(--dw-s4) 0 var(--dw-s1); font-s
   border-radius: var(--dw-r2); box-shadow: var(--dw-shadow-2);
 }
 #setPane:focus { outline: none; } /* focused on open so Tab starts inside the sheet */
-#setPane .set-close {
-  width: 34px; height: 34px; padding: 0; flex: none;
-  display: inline-flex; align-items: center; justify-content: center;
-  border: 1px solid transparent; background: transparent; color: var(--dw-muted);
-}
-#setPane .set-close:hover { background: var(--dw-surface-2); color: var(--dw-text); }
 
 #setPane .set-rail { width: 262px; flex-shrink: 0; background: var(--dw-surface); border-right: 1px solid var(--dw-border); display: flex; flex-direction: column; overflow: hidden; }
 #setPane .set-rail-scroll { flex: 1; overflow-y: auto; padding: var(--dw-s2); }
-#setPane .set-grp { font-size: var(--dw-fs-xs); font-weight: var(--dw-w-bold); letter-spacing: var(--dw-track-caps); text-transform: uppercase; color: var(--dw-faint); padding: var(--dw-s4) var(--dw-s2) var(--dw-s1); }
+#setPane .set-grp { padding: var(--dw-s4) var(--dw-s2) var(--dw-s1); } /* the CAPS label */
 #setPane .set-grp:first-child { padding-top: var(--dw-s1); }
 #setPane .set-item { display: flex; align-items: center; gap: var(--dw-s2); font-size: var(--dw-fs-sm); color: var(--dw-muted); padding: var(--dw-s2); border-radius: var(--dw-r1); cursor: pointer; }
 #setPane .set-item:hover { background: var(--dw-surface-2); }
@@ -2351,9 +2162,8 @@ dialog#modal .mlbl { display: block; margin: var(--dw-s4) 0 var(--dw-s1); font-s
 #setPane .fc { flex: 1; min-width: 0; }
 #setPane .req { color: var(--dw-bad); font-weight: var(--dw-w-bold); margin-left: 2px; }
 
-#setPane .finput { width: 100%; font-size: var(--dw-fs-sm); color: var(--dw-text); background: var(--dw-surface); border: 1px solid var(--dw-border-strong); border-radius: var(--dw-r1); padding: var(--dw-s2) var(--dw-s3); outline: none; }
+#setPane .finput { width: 100%; } /* the field */
 #setPane .finput.mono { font-family: var(--dw-font-mono); }
-#setPane .finput:focus { border-color: var(--dw-accent); box-shadow: var(--dw-focus-ring); }
 #setPane .finput.invalid { border-color: var(--dw-bad); box-shadow: 0 0 0 3px var(--dw-bad-bg); }
 #setPane .field-msg { display: flex; align-items: center; gap: var(--dw-s1); font-size: var(--dw-fs-xs); margin-top: var(--dw-s2); }
 #setPane .field-msg.warn { color: var(--dw-warn); }
@@ -2377,11 +2187,7 @@ dialog#modal .mlbl { display: block; margin: var(--dw-s4) 0 var(--dw-s1); font-s
 #setPane .num-example .t { color: var(--dw-muted); }
 #setPane .num-example.nonum .n { display: none; }
 
-/* Segmented control (window mode) */
-#setPane .seg { display: inline-flex; background: var(--dw-surface-2); border: 1px solid var(--dw-border); border-radius: var(--dw-r1); padding: 3px; gap: 3px; }
-#setPane .seg button { height: 30px; padding: 0 var(--dw-s4); border: 0; background: transparent; color: var(--dw-muted); font-size: var(--dw-fs-sm); font-weight: var(--dw-w-bold); border-radius: var(--dw-r0); cursor: pointer; }
-#setPane .seg button.active { background: var(--dw-surface); color: var(--dw-accent); box-shadow: var(--dw-shadow); }
-#setPane .seg button:not(.active):hover { color: var(--dw-text); }
+/* "Saved instantly" under a preference */
 #setPane .applies { display: inline-flex; align-items: center; gap: var(--dw-s2); font-size: var(--dw-fs-xs); color: var(--dw-ok); margin-top: var(--dw-s3); }
 
 /* Audiences row-list */
@@ -2389,14 +2195,12 @@ dialog#modal .mlbl { display: block; margin: var(--dw-s4) 0 var(--dw-s1); font-s
 /* Audience rows (Stage 6): grip · name over "who is this?" over usage · Delete. No ids. */
 #setPane .audrow { display: flex; align-items: flex-start; gap: var(--dw-s3); background: var(--dw-surface); border: 1px solid var(--dw-border); border-radius: var(--dw-r1); padding: var(--dw-s3); }
 #setPane .audrow.dragging { opacity: .45; }
-#setPane .aud-grip { flex: none; width: 24px; height: 34px; padding: 0; border: 0; background: transparent; color: var(--dw-muted); cursor: grab; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--dw-r0); }
-#setPane .aud-grip:hover { background: var(--dw-surface-2); color: var(--dw-text); }
+#setPane .aud-grip { cursor: grab; margin-top: 2px; } /* the icon button */
 #setPane .aud-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--dw-s2); }
 #setPane .audtitle { font-weight: var(--dw-w-medium); }
 #setPane .aud-use { font-size: var(--dw-fs-xs); color: var(--dw-muted); }
 #setPane .auddel { flex: none; margin-top: 2px; }
-#setPane .addrow { display: inline-flex; align-items: center; gap: var(--dw-s2); height: 36px; padding: 0 var(--dw-s4); margin-top: var(--dw-s2); border: 1px dashed var(--dw-border-strong); background: transparent; color: var(--dw-muted); border-radius: var(--dw-r1); font-size: var(--dw-fs-sm); font-weight: var(--dw-w-bold); cursor: pointer; }
-#setPane .addrow:hover { border-color: var(--dw-accent); color: var(--dw-accent); background: var(--dw-accent-bg); }
+#setPane .addrow { display: inline-flex; gap: var(--dw-s2); min-height: var(--dw-ctl-lg); padding: 0 var(--dw-s4); margin-top: var(--dw-s2); } /* the add recipe */
 
 #setPane .warnbox { display: flex; gap: var(--dw-s3); background: var(--dw-warn-bg); border: 1px solid color-mix(in srgb, var(--dw-warn) 30%, transparent); border-radius: var(--dw-r1); padding: var(--dw-s3) var(--dw-s4); }
 #setPane .warnbox .wb-text { font-size: var(--dw-fs-sm); color: var(--dw-text); line-height: var(--dw-lh-body); }
@@ -2414,10 +2218,6 @@ dialog#modal .mlbl { display: block; margin: var(--dw-s4) 0 var(--dw-s1); font-s
 .hist-head {
   display: flex; align-items: center; justify-content: space-between; gap: var(--dw-s2);
   padding: var(--dw-s3) var(--dw-s3) var(--dw-s2) var(--dw-s4);
-}
-.hist-title, .hist-day {
-  font-size: var(--dw-fs-xs); font-weight: var(--dw-w-medium);
-  text-transform: uppercase; letter-spacing: var(--dw-track-caps); color: var(--dw-muted);
 }
 .hist-body { flex: 1; min-height: 0; overflow-y: auto; padding: 0 var(--dw-s2) var(--dw-s4); }
 .hist-day { margin: var(--dw-s4) var(--dw-s2) var(--dw-s1); }
@@ -2441,19 +2241,7 @@ dialog#modal .mlbl { display: block; margin: var(--dw-s4) 0 var(--dw-s1); font-s
   padding: var(--dw-s2); border-bottom: 1px solid var(--dw-border); font-size: var(--dw-fs-sm);
 }
 .hist-acts { display: flex; gap: var(--dw-s3); flex: none; }
-.hist-link {
-  border: 0; background: transparent; padding: 0; cursor: pointer;
-  color: var(--dw-accent); font-size: var(--dw-fs-sm); font-weight: var(--dw-w-medium);
-}
-.hist-link:hover { text-decoration: underline; }
-.hist-link.danger { color: var(--dw-bad); }
-.hist-mark {
-  display: block; width: calc(100% - 2 * var(--dw-s2)); margin: var(--dw-s3) var(--dw-s2) 0;
-  padding: var(--dw-s2) var(--dw-s3); text-align: left; cursor: pointer;
-  border: 1px dashed var(--dw-border-strong); border-radius: var(--dw-r1);
-  background: transparent; color: var(--dw-muted); font-size: var(--dw-fs-sm);
-}
-.hist-mark:hover { color: var(--dw-text); border-color: var(--dw-muted); background: var(--dw-surface-2); }
+.hist-mark { width: calc(100% - 2 * var(--dw-s2)); margin: var(--dw-s3) var(--dw-s2) 0; } /* the add recipe */
 .hist-empty { margin: var(--dw-s2); font-size: var(--dw-fs-sm); color: var(--dw-muted); line-height: var(--dw-lh-snug); }
 .hist-note {
   display: flex; align-items: center; justify-content: space-between; gap: var(--dw-s2);
@@ -2464,7 +2252,7 @@ dialog#modal .mlbl { display: block; margin: var(--dw-s4) 0 var(--dw-s1); font-s
 
 .hist-compare { flex: 1 1 auto; min-width: 0; overflow: auto; background: var(--dw-bg); }
 .hist-banner {
-  position: sticky; top: 0; z-index: 3;
+  position: sticky; top: 0; z-index: var(--dw-z-sticky);
   display: flex; align-items: center; flex-wrap: wrap; gap: var(--dw-s2) var(--dw-s3);
   padding: var(--dw-s3) var(--dw-s5);
   background: var(--dw-surface); border-bottom: 1px solid var(--dw-border);
@@ -2484,23 +2272,14 @@ dialog#modal .mlbl { display: block; margin: var(--dw-s4) 0 var(--dw-s1); font-s
 /* ---- Properties panel (Stage 6): the chapter's technical facts beside the page — the side
         panel recipe of History (.hist-head / .hist-title / .hist-body), a definition list. ---- */
 .props-list { margin: 0; padding: var(--dw-s1) var(--dw-s2); }
-.props-list dt {
-  margin-top: var(--dw-s4);
-  font-size: var(--dw-fs-xs); font-weight: var(--dw-w-medium);
-  text-transform: uppercase; letter-spacing: var(--dw-track-caps); color: var(--dw-muted);
-}
+.props-list dt { margin-top: var(--dw-s4); } /* the CAPS label */
 .props-list dt:first-child { margin-top: var(--dw-s1); }
 .props-list dd {
   margin: var(--dw-s2) 0 0;
   display: flex; flex-wrap: wrap; align-items: center; gap: var(--dw-s2);
   font-size: var(--dw-fs-sm); min-width: 0;
 }
-.props-select {
-  width: 100%; font: inherit; font-size: var(--dw-fs-sm);
-  border: 1px solid var(--dw-border-strong); border-radius: var(--dw-r1);
-  padding: var(--dw-s2) var(--dw-s3); background: var(--dw-surface); color: var(--dw-text);
-}
-.props-select:focus { outline: none; border-color: var(--dw-accent); box-shadow: var(--dw-focus-ring); }
+.props-select { width: 100%; } /* the field */
 .props-chips { display: flex; flex-wrap: wrap; gap: var(--dw-s1); }
 .props-chip {
   padding: 2px var(--dw-s2); border: 1px solid var(--dw-border); border-radius: var(--dw-r0);
@@ -2527,12 +2306,7 @@ dialog#modal .mlbl { display: block; margin: var(--dw-s4) 0 var(--dw-s1); font-s
    name, and a filter box for long audience lists. */
 .e2-menu .mi .mhint { display: block; margin-top: 2px; font-size: var(--dw-fs-xs); font-weight: var(--dw-w-regular); color: var(--dw-muted); line-height: var(--dw-lh-snug); white-space: normal; }
 .e2-menu .mi:has(.mhint) { height: auto; padding-top: var(--dw-s2); padding-bottom: var(--dw-s2); align-items: flex-start; }
-.e2-menu .mfilter {
-  display: block; width: calc(100% - 2 * var(--dw-s2)); margin: var(--dw-s1) var(--dw-s2) var(--dw-s2);
-  font: inherit; font-size: var(--dw-fs-sm); color: var(--dw-text); background: var(--dw-surface);
-  border: 1px solid var(--dw-border-strong); border-radius: var(--dw-r1); padding: var(--dw-s1) var(--dw-s2);
-}
-.e2-menu .mfilter:focus { outline: none; border-color: var(--dw-accent); box-shadow: var(--dw-focus-ring); }
+.e2-menu .mfilter { display: block; width: calc(100% - 2 * var(--dw-s2)); margin: var(--dw-s1) var(--dw-s2) var(--dw-s2); } /* the field */
 .e2-menu.tree-menu { max-height: min(70vh, 520px); overflow-y: auto; }
 
 /* Preview as: the chrome button shows the audience while a preview is on. */

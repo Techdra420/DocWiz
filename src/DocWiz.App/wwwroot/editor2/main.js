@@ -1614,7 +1614,8 @@ function updateAnchorInfo() {
     el.appendChild(code);
     const copy = document.createElement('button');
     copy.type = 'button';
-    copy.textContent = '⧉ copy link';
+    copy.appendChild(icon('link'));
+    copy.appendChild(document.createTextNode('Copy link'));
     copy.setAttribute('data-tip', 'Copy ' + ref + ' — paste it anywhere a chapter link is asked for.');
     copy.onclick = () => navigator.clipboard && navigator.clipboard.writeText(ref);
     el.appendChild(copy);

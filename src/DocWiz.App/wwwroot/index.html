@@ -240,10 +240,10 @@
       </div><!-- /welcome-cols -->
       <div class="welcome-settings" id="wSettings" hidden>
         <span class="welcome-settings-label">Open the editor in</span>
-        <div class="welcome-settings-toggle" role="group">
-          <button type="button" id="wModeApp" class="wmode"
+        <div class="dw-seg" role="group" aria-label="Open the editor in">
+          <button type="button" id="wModeApp"
             data-tip="Open the editor in its own DocWiz window (no browser). Read/present and the handover still open in your browser. Applies next time you launch.">DocWiz window</button>
-          <button type="button" id="wModeBrowser" class="wmode"
+          <button type="button" id="wModeBrowser"
             data-tip="Open DocWiz as a tab in your default web browser. Applies next time you launch.">Browser tab</button>
         </div>
         <span class="welcome-settings-note" id="wModeNote"></span>
@@ -586,10 +586,10 @@
                 <div class="set-sec-desc">Per-user preferences stored in <span class="dwa-mono">settings.json</span> — saved instantly as you change them (no Save button).</div></div>
               <div class="fcard">
                 <div class="frow"><div class="fl"><div class="ftitle">Window mode</div><div class="fhint">How DocWiz opens on this machine.</div></div>
-                  <div class="fc"><div class="seg" id="winMode"><button data-mode="native" type="button">Native window</button><button data-mode="browser" type="button">Browser tab</button></div>
+                  <div class="fc"><div class="dw-seg" id="winMode" role="group" aria-label="Window mode"><button data-mode="native" type="button" aria-pressed="false">DocWiz window</button><button data-mode="browser" type="button" aria-pressed="false">Browser tab</button></div>
                     <div class="applies">Saved instantly · takes effect the next time you open DocWiz</div></div></div>
                 <div class="frow"><div class="fl"><div class="ftitle">Appearance</div><div class="fhint">The editor and its slide previews. Light unless Windows is set to dark.</div></div>
-                  <div class="fc"><div class="seg" id="themeMode"><button data-theme-mode="system" type="button">Follow Windows</button><button data-theme-mode="light" type="button">Light</button><button data-theme-mode="dark" type="button">Dark</button></div>
+                  <div class="fc"><div class="dw-seg" id="themeMode" role="group" aria-label="Appearance"><button data-theme-mode="system" type="button" aria-pressed="false">Follow Windows</button><button data-theme-mode="light" type="button" aria-pressed="false">Light</button><button data-theme-mode="dark" type="button" aria-pressed="false">Dark</button></div>
                     <div class="applies">Saved instantly · remembered on this computer</div></div></div>
               </div>
             </div>
@@ -610,7 +610,9 @@
 
 <div id="issuesPanel" hidden>
   <div class="issues-head"><b id="issuesTitle">Check results</b>
-    <button id="issuesClose" type="button">×</button></div>
+    <button id="issuesClose" type="button" aria-label="Close the check results" data-tip="Close the check results.">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button></div>
   <ul id="issuesList"></ul>
 </div>
 

@@ -4176,7 +4176,7 @@
     var c = themeChoice();
     document.documentElement.setAttribute('data-theme', c === 'system' ? (darkQuery.matches ? 'dark' : 'light') : c);
     Array.prototype.forEach.call(document.querySelectorAll('#themeMode button'), function (b) {
-      b.classList.toggle('active', b.getAttribute('data-theme-mode') === c);
+      b.setAttribute('aria-pressed', String(b.getAttribute('data-theme-mode') === c));
     });
   }
   function setTheme(choice) {
@@ -4225,7 +4225,7 @@
     // App prefs (window mode) — separate store, applies immediately.
     api.json('/api/settings').then(function (s) {
       Array.prototype.forEach.call(document.querySelectorAll('#winMode button'), function (b) {
-        b.classList.toggle('active', b.getAttribute('data-mode') === (s.windowMode === 'browser' ? 'browser' : 'native'));
+        b.setAttribute('aria-pressed', String(b.getAttribute('data-mode') === (s.windowMode === 'browser' ? 'browser' : 'native')));
       });
     }).catch(quiet);
     // Raw YAML (the whole file)
@@ -4420,7 +4420,7 @@
 
   function setWindowMode(mode) {
     Array.prototype.forEach.call(document.querySelectorAll('#winMode button'), function (b) {
-      b.classList.toggle('active', b.getAttribute('data-mode') === mode);
+      b.setAttribute('aria-pressed', String(b.getAttribute('data-mode') === mode));
     });
     api.send('POST', '/api/settings', { windowMode: mode }).catch(function (e) { reportError(e.message || String(e)); });
   }

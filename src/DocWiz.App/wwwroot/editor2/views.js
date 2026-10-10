@@ -9,7 +9,7 @@ import { TableView } from './tableview.js';
 import { FigureView } from './figureview.js';
 import { TaskItemView } from './taskitemview.js';
 import { nodesFromSegments } from './ingest.js';
-import { sep } from './icons.js';
+import { sep, icon } from './icons.js';
 import { trackWidthDrag } from './boxresize.js';
 import { adjacencyButtons } from './blockadjacency.js';
 import { buildStrip, menuItem, openContextMenu } from './contexttools.js';
@@ -209,8 +209,8 @@ class ContainerView {
         });
       }
     } else if (type === 'center' || type === 'right') {
-      add('↔ Center', 'Center the content.', () => this.patchAttrs({ type: 'center' }), type === 'center');
-      add('⇥ Right', 'Right-align the content.', () => this.patchAttrs({ type: 'right' }), type === 'right');
+      add('Center', 'Center the content.', () => this.patchAttrs({ type: 'center' }), type === 'center').prepend(icon('alignCenter'));
+      add('Right', 'Right-align the content.', () => this.patchAttrs({ type: 'right' }), type === 'right').prepend(icon('alignRight'));
     }
 
     tools.appendChild(sep());

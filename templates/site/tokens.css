@@ -92,6 +92,10 @@
   --dw-r0: 4px;   /* NEW — badges, small inputs */
   --dw-r1: 6px;
   --dw-r2: 10px;
+  /* Control heights (Stage 6) — every button, input and pill is one of three. */
+  --dw-ctl-sm: 28px;  /* in-row tools: tree / rail ⋯, small icon buttons */
+  --dw-ctl-md: 32px;  /* bars, menus, fields: document bar, toolbar, menu items, inputs */
+  --dw-ctl-lg: 36px;  /* the chrome bar and dialog / sheet actions */
   --dw-shadow: 0 1px 3px rgba(16, 24, 32, 0.08);
   --dw-shadow-2: 0 8px 28px rgba(16, 24, 32, 0.18);  /* NEW — dialogs, toasts */
   --dw-focus-ring: 0 0 0 3px var(--dw-accent-glow);  /* NEW — every focusable */

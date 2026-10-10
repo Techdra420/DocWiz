@@ -21,6 +21,7 @@
 import { Plugin, PluginKey } from 'prosemirror-state';
 import { setBlockType, wrapIn } from 'prosemirror-commands';
 import { wrapInList } from 'prosemirror-schema-list';
+import { icon } from './icons.js';
 
 export const slashMenuKey = new PluginKey('dwSlashMenu');
 
@@ -45,27 +46,27 @@ function items(opts) {
       run: () => E.runActiveCmd(setBlockType(schema.nodes.heading, { level: 3 })),
     },
     {
-      key: 'ul', title: 'Bulleted list', desc: 'A list of points', icon: '•',
+      key: 'ul', title: 'Bulleted list', desc: 'A list of points', svg: 'bulletList',
       match: 'bulleted list bullets unordered points',
       run: () => E.runActiveCmd(wrapInList(schema.nodes.bullet_list)),
     },
     {
-      key: 'ol', title: 'Numbered list', desc: 'A numbered list', icon: '1.',
+      key: 'ol', title: 'Numbered list', desc: 'A numbered list', svg: 'orderedList',
       match: 'numbered list ordered steps',
       run: () => E.runActiveCmd(wrapInList(schema.nodes.ordered_list)),
     },
     {
-      key: 'quote', title: 'Quote', desc: 'A quote block', icon: '“',
+      key: 'quote', title: 'Quote', desc: 'A quote block', svg: 'quote',
       match: 'quote blockquote citation',
       run: () => E.runActiveCmd(wrapIn(schema.nodes.blockquote)),
     },
     {
-      key: 'image', title: 'Image', desc: 'A picture from the project assets', icon: '▣',
+      key: 'image', title: 'Image', desc: 'A picture from the project assets', svg: 'image',
       match: 'image picture photo figure asset screenshot',
       run: () => { if (bridge().image) bridge().image(); },
     },
     {
-      key: 'embed', title: 'Linked element', desc: 'Transclude a chapter section (stays in sync)', icon: '↗',
+      key: 'embed', title: 'Linked element', desc: 'Transclude a chapter section (stays in sync)', svg: 'chapterLink',
       match: 'linked element embed transclude section chapter reference link',
       run: () => insertLinkedElement(opts),
     },
@@ -160,7 +161,8 @@ class SlashPopup {
       row.setAttribute('data-tip', it.desc);
       const ic = document.createElement('span');
       ic.className = 'dw-slash-ic';
-      ic.textContent = it.icon;
+      // The editor's one icon set (icons.js); H2 / H3 stay as type labels.
+      if (it.svg) ic.appendChild(icon(it.svg)); else ic.textContent = it.icon;
       const txt = document.createElement('span');
       txt.className = 'dw-slash-text';
       const name = document.createElement('span');

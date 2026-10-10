@@ -38,7 +38,7 @@ conflicts with DESIGN_SYSTEM.md, that doc wins.
   (in `src/DocWiz.Core/Markdown/AudienceContainerRenderer.cs`). Reuse these; don't invent
   parallel ones.
 
-## The 21 rules (1–20 from the design pass; 21 from the 2026-06-17 divergence audit)
+## The 22 rules (1–20 from the design pass; 21 from the 2026-06-17 divergence audit; 22 from Stage 6)
 
 1. No color literals outside tokens.css — every color is `var(--dw-*)`. (Sole
    exception: `@media print` may force `#000`/`#fff`.)
@@ -93,11 +93,17 @@ conflicts with DESIGN_SYSTEM.md, that doc wins.
     reason). Context-bar badges and the `:::` container labels come from ONE map per concept.
     Never stand up a second toolbar / badge / label / vocabulary list kept in sync only by a
     comment (ADR-008 in `docs/ARCHITECTURE.md`).
+22. (Stage 6 step 7) Editor chrome is built from the "Recipes" block at the top of app.css —
+    buttons (secondary / primary / danger / sized / icon / chrome / toolbar / add / text
+    link), fields, the menu container, the CAPS label, the badge, `.dw-seg`, and icons at one
+    1.5px non-scaling stroke. A new component joins a recipe's selector list and adds only
+    placement or a named colour variant. Every control is `--dw-ctl-sm` / `-md` / `-lg`
+    (28 / 32 / 36px); z-index comes only from the `--dw-z-*` scale.
 
 ## Adding a component or page
 
-1. Build from existing recipes (DESIGN_SYSTEM.md §5): buttons
-   (primary/secondary/ghost/danger), cards, badges (`.slide-kind`/`.sev` recipe),
+1. Build from existing recipes (DESIGN_SYSTEM.md §5 and the Recipes block in app.css):
+   buttons, fields, menus (`actionMenu()`), badges, CAPS labels, `.dw-seg`,
    `dialog#modal` + `openModal`/`modalWarn`, `.file-list` rows.
 2. Wire buttons via `on(id, fn)` in app.js (defensive binding); scope group selectors
    (the `.toolbelt button[data-insert]` lesson). Every interactive element gets a
