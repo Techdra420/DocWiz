@@ -151,9 +151,10 @@ function container(node) {
   } else head = type;
 
   const body = blocks(node);
-  // Nested containers: the outer fence must be longer than any inner one.
+  // Nested containers: the outer fence must be longer than any inner one — including one
+  // indented inside a list item (a tagged step inside ::: steps).
   let colons = 3;
-  for (const m of body.matchAll(/^(:{3,})/gm)) colons = Math.max(colons, m[1].length + 1);
+  for (const m of body.matchAll(/^[ \t]*(:{3,})/gm)) colons = Math.max(colons, m[1].length + 1);
   const fence = ':'.repeat(colons);
   return fence + ' ' + head + '\n' + body + '\n' + fence;
 }

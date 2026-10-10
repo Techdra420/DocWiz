@@ -36,13 +36,27 @@ public static class AudienceFilter
             parent.RemoveAt(index);
 
             if (!audiences.Contains(audience, StringComparer.Ordinal))
+            {
+                RemoveIfEmptyListItem(parent);
                 continue;
+            }
 
             var children = container.ToList();
             container.Clear();
             for (var i = 0; i < children.Count; i++)
                 parent.Insert(index + i, children[i]);
         }
+    }
+
+    /// <summary>A step (list item) whose only content was a block for other readers goes with
+    /// it — an empty numbered step would be left otherwise; a list left empty goes too.</summary>
+    private static void RemoveIfEmptyListItem(ContainerBlock parent)
+    {
+        if (parent is not ListItemBlock { Count: 0 } item || item.Parent is not ListBlock list)
+            return;
+        list.Remove(item);
+        if (list.Count == 0 && list.Parent is { } host)
+            host.Remove(list);
     }
 
     private static bool IsRooted(Block block, MarkdownDocument doc)

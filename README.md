@@ -54,7 +54,7 @@ consolidation pass. Decisions and steps are in [docs/ROADMAP.md](docs/ROADMAP.md
 | 3 | Editor app MVP: live-surface chapters, images, links, templates, single exe | Complete (single exe verified on a clean machine) |
 | 4 | View manager in editor, single-file export, packaging | Complete |
 | 5 | Pilot on a real customer project (incl. Word import: editor Import… + New project from Word) | In progress (pilot loop) |
-| 6 | Editor redesign: trust fixes, editable structure, history + autosave, shell, audiences, outputs, consolidation | In progress (steps 1–4 done; step 5 next) |
+| 6 | Editor redesign: trust fixes, editable structure, history + autosave, shell, audiences, outputs, consolidation | In progress (steps 1–5 done; step 6 next) |
 | — | Live editor: one surface that IS the page (M0–M5 ✓ — flipped 2026-06-12 after stakeholder sign-off; ADRs in ARCHITECTURE.md) | Shipped |
 
 ## Start here
@@ -111,7 +111,8 @@ it, save state, Edit · Source · Read, History, Properties), a toolbar with gui
 dialogs for images / elements / chapter links / audience blocks / attachments (image paste
 lands in `assets/` automatically), "Start from" chapter templates, a visual output editor
 with duplication for template-driven trainings, a Read view rendered by the exact build
-pipeline, Project settings as a sheet, and Check / Build handover (the built handover is
+pipeline, Readers on any chapter, paragraph or step with **Preview as** an audience to check
+the result, Project settings as a sheet, and Check / Build handover (the built handover is
 served at `/handover`). The project's name opens the project menu. **Import Word
 document…** turns a Word `.docx` into chapters: pick which sections to
 bring in, then optionally set who reads each chapter — the converter

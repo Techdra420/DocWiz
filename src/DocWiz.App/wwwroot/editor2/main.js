@@ -351,6 +351,7 @@ async function open(file, opts) {
   current.view = new EditorView(article, {
     state: EditorState.create({ schema, doc, plugins: plugins() }),
     nodeViews: nodeViews(schema, contextBar),
+    editable: () => !previewAudience, // Preview as pauses editing (setPreview)
     dispatchTransaction(tr) {
       const view = current.view;
       view.updateState(view.state.apply(tr));
@@ -1373,9 +1374,11 @@ function buildMainToolbar(opts) {
     if (!blockedInCell()) insertBlockAfterSelection(schema.nodes.horizontal_rule.create());
   });
   addSep();
-  add('audience', null, 'Insert content only selected audiences will see.', () => {
-    if (!blockedInCell() && bridge().audience) bridge().audience();
-  });
+  // Readers of the block at the cursor (Stage 6): tag a paragraph, a step, a table … for some
+  // audiences, change who, or give it back to everyone — the same picker as the chapter's.
+  const readersBtn = add('audience', null, 'Who reads this block — tag the paragraph, step or element you are in for some audiences only.', () => {
+    if (!blockedInCell() && bridge().blockReaders) bridge().blockReaders(readersBtn);
+  }, () => { const v = getActiveView(); return !!(v && audienceBlockAt(v.state)); });
   // Slide canvas only: turn the selected block into a live-linked chapter section.
   if (withLinkTool) {
     add('chapterLink', 'Link…', 'Replace the selected block with a live link to a chapter section (it stays in sync).', () => relinkSelection());
@@ -1466,6 +1469,87 @@ function updateToolbarState() {
   for (const { el, isActive } of toolbarButtons) {
     try { el.classList.toggle('active', !!isActive()); } catch { /* selection edge */ }
   }
+}
+
+/* Preview as (Stage 6): the open chapter as one audience's outputs show it — blocks for other
+   readers hidden, the rest without their tags, and editing paused so nothing hidden can change
+   unseen. The hiding is a stylesheet keyed on the blocks' data-aud lists, so it also holds for
+   blocks drawn later. null ends the preview. */
+let previewAudience = null;
+function setPreview(id) {
+  previewAudience = id || null;
+  let style = document.getElementById('e2PreviewStyle');
+  if (!style) {
+    style = document.createElement('style');
+    style.id = 'e2PreviewStyle';
+    document.head.appendChild(style);
+  }
+  // A step whose only content is a hidden block goes too, as in the filtered output.
+  const other = '.aud:not([data-aud~=' + JSON.stringify(previewAudience) + '])';
+  style.textContent = previewAudience
+    ? '#editor2 ' + other + ' { display: none; }\n' +
+      '#editor2 li:has(> ' + other + '):not(:has(> :not(' + other + '))) { display: none; }'
+    : '';
+  document.getElementById('editor2').classList.toggle('e2-previewing', !!previewAudience);
+  if (current && current.view) {
+    current.view.setProps({ editable: () => !previewAudience });
+    if (previewAudience) contextBar.set(null);
+  }
+}
+
+/* Block readers (Stage 6). A block is "for some audiences" by sitting in a `::: audience`
+   container; the Readers control acts on the one the selection is in, else on the blocks the
+   selection covers — inside a list that is the item's content, so one step can be tagged
+   (filtered outputs drop a step left empty). No audiences = everyone = no container. */
+function audienceBlockAt(state) {
+  const sel = state.selection;
+  if (sel instanceof NodeSelection && sel.node.type.name === 'container' && sel.node.attrs.type === 'audience')
+    return { node: sel.node, pos: sel.from };
+  const { $from } = sel;
+  for (let d = $from.depth; d >= 1; d--) {
+    const n = $from.node(d);
+    if (n.type.name === 'container' && n.attrs.type === 'audience') return { node: n, pos: $from.before(d) };
+  }
+  return null;
+}
+
+function readersRange(state) {
+  const sel = state.selection;
+  if (sel instanceof NodeSelection) return state.doc.resolve(sel.from).blockRange(state.doc.resolve(sel.to));
+  return sel.$from.blockRange(sel.$to);
+}
+
+// What the Readers picker shows: the block's audiences ([] = everyone) and what it is.
+function blockReaders() {
+  const view = getActiveView();
+  if (!view) return null;
+  const hit = audienceBlockAt(view.state);
+  const parent = hit ? view.state.doc.resolve(hit.pos).parent : (readersRange(view.state) || {}).parent;
+  return {
+    ids: hit ? hit.node.attrs.args.split(/\s+/).filter(Boolean) : [],
+    kind: parent && parent.type.name === 'list_item' ? 'step' : 'block',
+  };
+}
+
+function setBlockReaders(ids) {
+  const view = getActiveView();
+  if (!view) return;
+  const state = view.state;
+  const hit = audienceBlockAt(state);
+  if (hit) {
+    view.dispatch(ids.length
+      ? state.tr.setNodeMarkup(hit.pos, null, { ...hit.node.attrs, args: ids.join(' ') })
+      : state.tr.replaceWith(hit.pos, hit.pos + hit.node.nodeSize, hit.node.content)); // back to everyone: the tag goes, the content stays
+    return;
+  }
+  if (!ids.length) return;
+  const range = readersRange(state);
+  const wrapping = range && findWrapping(range, schema.nodes.container, { type: 'audience', args: ids.join(' '), label: null });
+  if (!wrapping) {
+    contextBar.flash('This can’t be tagged on its own — click into a paragraph, a step or an element.');
+    return;
+  }
+  view.dispatch(state.tr.wrap(range, wrapping).scrollIntoView());
 }
 
 /* Word-style alignment: a PROPERTY of the selected block, not an insert. The
@@ -1864,6 +1948,9 @@ window.DocWizEditor2 = {
   close,
   save,
   setMode,
+  setPreview,
+  blockReaders,
+  setBlockReaders,
   isBusy,
   // The chapter file the surface holds (null when closed) — app.js saves only when it is
   // still the chapter it shows (opening another chapter is asynchronous).

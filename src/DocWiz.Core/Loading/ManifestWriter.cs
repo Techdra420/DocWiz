@@ -76,16 +76,19 @@ public static class ManifestWriter
         return Join(lines, Nl(yaml));
     }
 
-    /// <summary>Replace the whole top-level `audiences:` sequence (id/title pairs), preserving
+    /// <summary>Replace the whole top-level `audiences:` sequence (id, title and an optional
+    /// description each — values already quoted by the caller where needed), preserving
     /// everything before and after the block.</summary>
-    public static string SetAudiences(string yaml, IEnumerable<(string Id, string Title)> audiences)
+    public static string SetAudiences(string yaml, IEnumerable<(string Id, string Title, string? Description)> audiences)
     {
         var lines = Normalize(yaml);
         var block = new List<string> { "audiences:" };
-        foreach (var (id, title) in audiences)
+        foreach (var (id, title, description) in audiences)
         {
             block.Add($"  - id: {id}");
             block.Add($"    title: {title}");
+            if (!string.IsNullOrEmpty(description))
+                block.Add($"    description: {description}");
         }
         var (start, end) = BlockRange(lines, "audiences");
         if (start < 0) { lines.AddRange(block); return Join(lines, Nl(yaml)); }

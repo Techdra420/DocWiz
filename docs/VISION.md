@@ -135,7 +135,8 @@ chapter and per block (search, "Everyone" shortcut, scales to many audiences), a
 marker on tagged blocks, a manager with a one-line description and usage counts, and
 "Preview as" an audience to check the result. Views as playlists stay the primary way to
 build an output; audience tags are how one source serves several readers without copies.
-See Stage 6 in [ROADMAP.md](ROADMAP.md).
+See Stage 6 in [ROADMAP.md](ROADMAP.md) — shipped as step 5 (2026-10-10), including tagging a
+single step of a procedure (the filtered output drops the step and renumbers the rest).
 
 ## Open wishlist
 

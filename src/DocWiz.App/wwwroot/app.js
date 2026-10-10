@@ -181,6 +181,11 @@
         var row = el('div', 'tree-row');
         row.draggable = true;
         if (c.file === state.currentFile) row.classList.add('current');
+        // Preview as: a chapter this audience's outputs leave out is dimmed (still opens).
+        if (state.previewAudience && (c.audiences || []).indexOf(state.previewAudience) < 0) {
+          row.classList.add('dim');
+          row.setAttribute('data-tip', audienceTitle(state.previewAudience) + '’s outputs leave this chapter out.');
+        }
         var a = el('a');
         var label = el('span', 'tree-label', (num ? chNo + ' ' : '') + (c.title || c.file));
         label.title = c.title || c.file;
@@ -449,10 +454,12 @@
     });
   }
 
-  // The editor's action menus — tree ⋯, the project menu, the document bar's ⋯ and Readers —
-  // are one function on the shared context-menu recipe (.e2-menu). Items: '-' (separator),
-  // { text } (a label), { text, run, danger }, or a checkable { text, checked, run } that
-  // stays open so several can be ticked in a row.
+  // The editor's action menus — tree ⋯, the project menu, the document bar's ⋯, Readers and
+  // Preview as — are one function on the shared context-menu recipe (.e2-menu). Items: '-'
+  // (separator), { text } (a label), { text, hint, run, danger }, or a checkable
+  // { text, hint, checked: fn, run } that stays open so several can be ticked in a row (every
+  // tick is re-read after each run, so one item may change others). opts.filter adds a box
+  // that narrows the checkable items by name — for long audience lists.
   var openMenu = null;
   function closeActionMenu() {
     if (!openMenu) return;
@@ -461,28 +468,53 @@
     openMenu = null;
   }
   var CHECK_ICON = '<svg class="mcheck" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7"/></svg>';
-  function actionMenu(anchor, items) {
+  function actionMenu(anchor, items, opts) {
     closeActionMenu();
     var menu = el('div', 'e2-menu tree-menu');
     menu.setAttribute('role', 'menu');
+    var checks = [];
+    function syncAll() {
+      checks.forEach(function (c) {
+        var on = !!c.it.checked();
+        c.b.classList.toggle('on', on);
+        c.b.setAttribute('aria-checked', String(on));
+      });
+    }
+    var box = null;
+    if (opts && opts.filter) {
+      box = el('input', 'mfilter');
+      box.type = 'search';
+      box.placeholder = opts.filter;
+      box.setAttribute('aria-label', opts.filter);
+      box.oninput = function () {
+        var q = box.value.trim().toLowerCase();
+        checks.forEach(function (c) {
+          c.b.hidden = !!q && c.it.filterable !== false &&
+            (c.it.text + ' ' + (c.it.hint || '')).toLowerCase().indexOf(q) < 0;
+        });
+      };
+      menu.appendChild(box);
+    }
     items.forEach(function (it) {
       if (it === '-') { menu.appendChild(el('div', 'msep')); return; }
       if (!it.run) { menu.appendChild(el('div', 'mlabel', it.text)); return; }
-      var checkable = it.checked !== undefined;
+      var checkable = typeof it.checked === 'function';
       var b = el('button', 'mi' + (it.danger ? ' danger' : '') + (checkable ? ' mcheckable' : ''));
       b.type = 'button';
       b.setAttribute('role', checkable ? 'menuitemcheckbox' : 'menuitem');
-      b.appendChild(el('span', 'mlbl', it.text));
+      var lbl = el('span', 'mlbl', it.text);
+      if (it.hint) lbl.appendChild(el('small', 'mhint', it.hint));
+      b.appendChild(lbl);
       if (checkable) {
         b.insertAdjacentHTML('beforeend', CHECK_ICON);
-        var sync = function (on) { b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); };
-        sync(!!it.checked);
-        b.onclick = function () { sync(it.run()); };
+        checks.push({ it: it, b: b });
+        b.onclick = function () { it.run(); syncAll(); };
       } else {
         b.onclick = function () { closeActionMenu(); it.run(); };
       }
       menu.appendChild(b);
     });
+    syncAll();
     document.body.appendChild(menu);
     var r = anchor.getBoundingClientRect();
     var top = r.bottom + 4;
@@ -491,17 +523,19 @@
     menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - menu.offsetWidth - 8)) + 'px';
     anchor.setAttribute('aria-expanded', 'true');
     openMenu = { menu: menu, anchor: anchor };
-    var first = menu.querySelector('button');
+    var first = box || menu.querySelector('button');
     if (first) first.focus();
   }
   document.addEventListener('mousedown', function (e) {
     if (openMenu && !openMenu.menu.contains(e.target) && !openMenu.anchor.contains(e.target)) closeActionMenu();
   });
-  window.addEventListener('scroll', closeActionMenu, true);
+  window.addEventListener('scroll', function (e) {
+    if (openMenu && !openMenu.menu.contains(e.target)) closeActionMenu(); // a long menu may scroll itself
+  }, true);
   // Arrow keys move between a menu's items (Tab still leaves it).
   document.addEventListener('keydown', function (e) {
     if (!openMenu || (e.key !== 'ArrowDown' && e.key !== 'ArrowUp')) return;
-    var btns = Array.prototype.slice.call(openMenu.menu.querySelectorAll('button'));
+    var btns = Array.prototype.slice.call(openMenu.menu.querySelectorAll('button')).filter(function (b) { return !b.hidden; });
     var i = btns.indexOf(document.activeElement), down = e.key === 'ArrowDown', n = btns.length;
     e.preventDefault();
     btns[i < 0 ? (down ? 0 : n - 1) : (i + (down ? 1 : n - 1)) % n].focus();
@@ -1025,7 +1059,7 @@
     document.body.classList.add('welcome'); // enables the sanctioned hero wash
     $('welcomeScreen').hidden = false;
     $('editorShell').hidden = true;
-    ['checkBtn', 'buildBtn', 'handoverLink', 'packageLink'].forEach(function (id) { $(id).hidden = true; });
+    ['previewBtn', 'checkBtn', 'buildBtn', 'handoverLink', 'packageLink'].forEach(function (id) { $(id).hidden = true; });
     $('projBlock').hidden = true;
     $('projName').textContent = '';
     $('projCode').textContent = '';
@@ -1340,25 +1374,102 @@
       : titles.slice(0, 2).join(', ') + ' +' + (titles.length - 2);
     $('cbReaders').classList.toggle('none', !titles.length);
     renderPropsReaders();
+    updatePreviewBanner(); // a preview shows whether this audience now gets the chapter
+  }
+
+  /* The Readers picker (Stage 6) — one for a chapter and for a block. Everyone first, then the
+     audiences with their one-line description, a filter box when there are many, and Manage
+     audiences…. A chapter's "everyone" is every audience ticked (none ticked = only in the
+     full manual); a block's is no tag at all (unticking the last audience gives it back to
+     everyone). get() returns the ticked ids; set(ids) applies a change. */
+  var READERS_FILTER_FROM = 7;
+  function readersPicker(anchor, question, block, get, set) {
+    var auds = state.project.audiences;
+    var all = auds.map(function (a) { return a.id; });
+    var has = function (id) { return get().indexOf(id) >= 0; };
+    var items = [{ text: question }, {
+      text: 'Everyone',
+      hint: block ? 'No tag — every output shows it' : 'In every audience’s outputs',
+      filterable: false,
+      checked: function () { return block ? get().length === 0 : get().length === all.length; },
+      run: function () { set(block ? [] : all.slice()); },
+    }, '-'];
+    auds.forEach(function (a) {
+      items.push({
+        text: a.title,
+        hint: a.description || '',
+        checked: function () { return has(a.id); },
+        run: function () {
+          var now = get();
+          set(all.filter(function (id) { return id === a.id ? !has(a.id) : now.indexOf(id) >= 0; }));
+        },
+      });
+    });
+    items.push('-', { text: 'Manage audiences…', run: function () { openSettings('audiences'); } });
+    actionMenu(anchor, items, auds.length >= READERS_FILTER_FROM ? { filter: 'Find an audience' } : null);
   }
 
   function readersMenu(anchor) {
-    var items = state.project.audiences.map(function (a) {
-      return {
-        text: a.title,
-        checked: state.chapterAudiences.indexOf(a.id) >= 0,
-        run: function () {
-          var on = state.chapterAudiences.indexOf(a.id) < 0;
-          setReaders(on ? state.chapterAudiences.concat(a.id)
-            : state.chapterAudiences.filter(function (id) { return id !== a.id; }));
-          state.dirty = true; // saves with the next autosave
-          return on;
-        },
-      };
+    readersPicker(anchor, 'Who reads this chapter?', false,
+      function () { return state.chapterAudiences; },
+      function (ids) {
+        setReaders(ids);
+        state.dirty = true; // saves with the next autosave
+      });
+  }
+
+  // The toolbar's Readers button and a tagged block's context bar: who reads the block at the
+  // cursor (main.js finds it, and wraps / retags / unwraps it).
+  function blockReadersMenu(anchor) {
+    var ed = window.DocWizEditor2;
+    var info = ed && ed.blockReaders();
+    if (!info) return;
+    readersPicker(anchor, info.kind === 'step' ? 'Who reads this step?' : 'Who reads this block?', true,
+      function () { var now = ed.blockReaders(); return now ? now.ids : []; },
+      function (ids) { ed.setBlockReaders(ids); });
+  }
+
+  /* ---------- Preview as (Stage 6) ----------
+     The manual as one audience gets it: chapters left out of their outputs dim in the tree, the
+     open chapter hides blocks for other readers (main.js setPreview) with editing paused, and a
+     banner says what is shown. Everyone ends it. */
+  function previewMenu(anchor) {
+    var items = [{ text: 'Preview the manual as…' }, {
+      text: 'Everyone', hint: 'The full manual — every chapter and block',
+      checked: function () { return !state.previewAudience; },
+      run: function () { closeActionMenu(); setPreview(null); },
+    }, '-'];
+    state.project.audiences.forEach(function (a) {
+      items.push({
+        text: a.title, hint: a.description || '',
+        checked: function () { return state.previewAudience === a.id; },
+        run: function () { closeActionMenu(); setPreview(a.id); },
+      });
     });
-    items.unshift({ text: 'Who reads this chapter?' });
-    items.push('-', { text: 'Manage audiences…', run: function () { openSettings('audiences'); } });
-    actionMenu(anchor, items);
+    actionMenu(anchor, items, state.project.audiences.length >= READERS_FILTER_FROM ? { filter: 'Find an audience' } : null);
+  }
+
+  function setPreview(id) {
+    state.previewAudience = id || null;
+    document.body.classList.toggle('previewing', !!state.previewAudience);
+    $('previewLabel').textContent = state.previewAudience ? audienceTitle(state.previewAudience) : 'Everyone';
+    $('previewBtn').classList.toggle('on', !!state.previewAudience);
+    if (window.DocWizEditor2 && window.DocWizEditor2.setPreview) window.DocWizEditor2.setPreview(state.previewAudience);
+    if (state.previewAudience) setChapterMode('edit'); // Source closes (keeping what was typed)
+    renderTree(state.project);
+    updatePreviewBanner();
+  }
+
+  function updatePreviewBanner() {
+    var id = state.previewAudience;
+    var gets = !id || state.chapterAudiences.indexOf(id) >= 0;
+    $('previewBanner').hidden = !id || !state.currentFile;
+    $('editor2').classList.toggle('e2-left-out', !gets);
+    if (!id) return;
+    var who = audienceTitle(id);
+    $('previewText').textContent = gets
+      ? 'Previewing as ' + who + ': blocks for other readers are hidden, and editing is paused.'
+      : who + '’s outputs leave this chapter out — it is only in the full manual and other audiences’ outputs.';
   }
 
   // The title is the chapter's H1 (the server reads it on save), so only the audiences
@@ -1376,6 +1487,7 @@
   }
   function setChapterMode(mode) {
     if (!state.currentFile || !window.DocWizEditor2) return;
+    if (mode === 'source' && state.previewAudience) return; // editing is paused while previewing
     window.DocWizEditor2.setMode(mode).then(markMode).catch(quiet); // a failed save says why in the status line
   }
 
@@ -2073,27 +2185,6 @@
       });
     },
 
-    audience: function () {
-      var checks = state.project.audiences.map(function (a) {
-        return '<label style="margin-right:10px"><input type="checkbox" value="' + esc(a.id) + '"> ' + esc(a.title) + '</label>';
-      }).join('');
-      openModal('Insert audience block',
-        '<p class="mhelp">An audience block is a piece of the chapter that only some readers need. ' +
-        'Check who it is for: the generated views of the <b>other</b> audiences will hide it. ' +
-        'The full manual always shows it, marked with a small tag.</p>' +
-        '<p class="mhelp">Typical uses: a user-only warning, support-only steps, ' +
-        'admin-only technical details.</p>' +
-        '<div class="row">' + checks + '</div>',
-        function (root) {
-          var ids = Array.prototype.slice.call(root.querySelectorAll('input:checked'))
-            .map(function (cb) { return cb.value; });
-          if (ids.length === 0) return modalWarn(root, 'Check at least one audience.');
-          window.DocWizEditor2.insert({ type: 'audience', audiences: ids });
-          state.dirty = true;
-          setStatus('Audience block inserted — replace the placeholder text.', 'ok');
-        });
-    },
-
     dwlink: function () {
       var picker = chapterOptgroups();
       var chapters = picker.chapters;
@@ -2250,7 +2341,7 @@
     image: inserters.image,
     dwlink: inserters.dwlink,
     attachment: inserters.attachment,
-    audience: inserters.audience,
+    blockReaders: blockReadersMenu, // the toolbar's Readers button + a tagged block's tools
     pasteImage: pasteImageDialog,
     pickAsset: pickAssetDialog,
     weblink: webLinkDialog,
@@ -3958,30 +4049,79 @@
     $('numExample').classList.toggle('nonum', !on);
   }
 
+  /* Audiences (Stage 6): one row each — the name, a line saying who they are, and what uses
+     them, so the weight of a delete shows before anyone asks for one. Drag the grip (or focus
+     it and press ↑ / ↓) to reorder; the order is the order everywhere audiences are listed.
+     Ids stay stable and out of sight — renaming never breaks a tag or an output. */
+  var GRIP_ICON = '<svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><circle cx="6" cy="4" r="1.1"/><circle cx="10" cy="4" r="1.1"/><circle cx="6" cy="8" r="1.1"/><circle cx="10" cy="8" r="1.1"/><circle cx="6" cy="12" r="1.1"/><circle cx="10" cy="12" r="1.1"/></svg>';
+
   function renderAudiences(auds) {
     var list = $('audList');
     list.innerHTML = '';
-    auds.forEach(function (a, i) { list.appendChild(audienceRow(a, i, auds.length)); });
+    auds.forEach(function (a, i) { list.appendChild(audienceRow(a, i)); });
   }
 
-  function audienceRow(a, i, total) {
+  function usageText(a) {
+    var parts = [];
+    if (a.chapters) parts.push(a.chapters + ' chapter' + (a.chapters === 1 ? '' : 's'));
+    if (a.blocks) parts.push(a.blocks + ' tagged block' + (a.blocks === 1 ? '' : 's'));
+    if (a.outputs) parts.push(a.outputs + ' output' + (a.outputs === 1 ? '' : 's'));
+    return parts.length ? 'Used by ' + parts.join(' · ') : 'Not used yet';
+  }
+
+  var draggedAudience = null;
+  function audienceRow(a, i) {
     var row = el('div', 'audrow');
-    var title = el('input', 'audtitle');
+    row.audience = a; // id + usage counts travel with the row
+    var grip = el('button', 'aud-grip');
+    grip.type = 'button';
+    grip.innerHTML = GRIP_ICON;
+    grip.setAttribute('aria-label', 'Move ' + (a.title || 'audience'));
+    grip.setAttribute('data-tip', 'Drag to change the order — or focus here and press the up / down arrow keys.');
+    grip.onkeydown = function (e) {
+      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+      e.preventDefault();
+      moveAudience(i, e.key === 'ArrowUp' ? -1 : 1);
+    };
+    grip.onmousedown = function () { row.draggable = true; };
+    row.addEventListener('dragstart', function (e) {
+      draggedAudience = i;
+      row.classList.add('dragging');
+      try { e.dataTransfer.setData('text/plain', a.title || ''); } catch (x) { /* some hosts refuse */ }
+    });
+    row.addEventListener('dragend', function () { row.draggable = false; row.classList.remove('dragging'); draggedAudience = null; });
+    row.addEventListener('dragover', function (e) { if (draggedAudience !== null) e.preventDefault(); });
+    row.addEventListener('drop', function (e) {
+      e.preventDefault();
+      if (draggedAudience === null || draggedAudience === i) return;
+      var auds = collectAudiences();
+      var moved = auds.splice(draggedAudience, 1)[0];
+      auds.splice(i, 0, moved);
+      renderAudiences(auds);
+      setDirty(true);
+    });
+    row.appendChild(grip);
+
+    var main = el('div', 'aud-main');
+    var title = el('input', 'finput audtitle');
     title.value = a.title || '';
-    title.setAttribute('data-id', a.id);
+    title.placeholder = 'Name';
+    title.setAttribute('aria-label', 'Audience name');
     title.oninput = function () { setDirty(true); };
-    row.appendChild(title);
-    var id = el('span', 'audid', a.id);
-    row.appendChild(id);
-    var reorder = el('div', 'reorder');
-    var up = el('button', 'mini', '▲'); up.type = 'button'; up.disabled = i === 0;
-    up.onclick = function () { moveAudience(i, -1); };
-    var down = el('button', 'mini', '▼'); down.type = 'button'; down.disabled = i === total - 1;
-    down.onclick = function () { moveAudience(i, 1); };
-    reorder.appendChild(up); reorder.appendChild(down);
-    row.appendChild(reorder);
-    var del = el('button', 'auddel', '✕'); del.type = 'button';
-    del.setAttribute('data-tip', 'Remove this audience. Warns if chapters or views still reference it.');
+    var desc = el('input', 'finput auddesc');
+    desc.value = a.description || '';
+    desc.placeholder = 'Who is this? — e.g. Operators on the warehouse floor';
+    desc.setAttribute('aria-label', 'Who this audience is');
+    desc.setAttribute('data-tip', 'One line for authors — shown where readers are picked, never in the handover.');
+    desc.oninput = function () { setDirty(true); };
+    main.appendChild(title);
+    main.appendChild(desc);
+    main.appendChild(el('div', 'aud-use', usageText(a)));
+    row.appendChild(main);
+
+    var del = el('button', 'dwa-btn dwa-btn-danger dwa-btn-sm auddel', 'Delete');
+    del.type = 'button';
+    del.setAttribute('data-tip', 'Delete this audience. Its chapter tags go with it; an output made for it has to get another audience first.');
     del.onclick = function () { deleteAudience(a.id); };
     row.appendChild(del);
     return row;
@@ -3989,8 +4129,10 @@
 
   function collectAudiences() {
     return Array.prototype.map.call(document.querySelectorAll('#audList .audrow'), function (row) {
-      return { id: row.querySelector('.audtitle').getAttribute('data-id'),
-               title: row.querySelector('.audtitle').value.trim() };
+      var a = row.audience;
+      return { id: a.id, title: row.querySelector('.audtitle').value.trim(),
+               description: row.querySelector('.auddesc').value.trim(),
+               chapters: a.chapters || 0, blocks: a.blocks || 0, outputs: a.outputs || 0 };
     });
   }
 
@@ -4001,6 +4143,8 @@
     var t = auds[i]; auds[i] = auds[j]; auds[j] = t;
     renderAudiences(auds);
     setDirty(true);
+    var grips = document.querySelectorAll('#audList .aud-grip');
+    if (grips[j]) grips[j].focus();
   }
 
   // Deleting an audience: the server reports what it touches (GET /api/audience-usage). A view
@@ -4020,7 +4164,7 @@
       var msg = nCh
         ? nCh + ' chapter' + (nCh === 1 ? '' : 's') + ' will lose this tag when you save.'
         : 'No chapter is tagged with it.';
-      if (nBl) msg += ' ' + nBl + ' “only for” block' + (nBl === 1 ? '' : 's') + ' in ' +
+      if (nBl) msg += ' ' + nBl + ' tagged block' + (nBl === 1 ? '' : 's') + ' in ' +
         u.blocks.map(function (b) { return '“' + b.title + '”'; }).join(', ') +
         ' still name' + (nBl === 1 ? 's' : '') + ' it; Check will list ' + (nBl === 1 ? 'it' : 'them') + ' so you can decide what to keep.';
       confirmDialog('Delete “' + name + '”?', msg, 'Delete audience', function () {
@@ -4036,9 +4180,11 @@
       var base = slugify(title) || 'audience';
       var id = base, n = 2;
       while (auds.some(function (a) { return a.id === id; })) { id = base + '-' + (n++); }
-      auds.push({ id: id, title: title });
+      auds.push({ id: id, title: title, description: '' });
       renderAudiences(auds);
       setDirty(true);
+      var descs = document.querySelectorAll('#audList .auddesc');
+      if (descs.length) descs[descs.length - 1].focus(); // say who they are next
     });
   }
 
@@ -4065,18 +4211,21 @@
       // Refresh the project model + chrome (name/code may have changed) and the raw view.
       return api.json('/api/project');
     }).then(function (p) {
-      var renumbered = state.project && state.project.numbering !== p.numbering;
-      state.project = p; setProjectHeader(p); renderTree(p);
+      var redraw = state.project && (state.project.numbering !== p.numbering ||
+        JSON.stringify(state.project.audiences) !== JSON.stringify(p.audiences));
+      state.project = p; setProjectHeader(p);
+      // A preview of an audience that is gone ends; the tree redraws either way.
+      if (state.previewAudience && !p.audiences.some(function (a) { return a.id === state.previewAudience; })) setPreview(null);
+      else { renderTree(p); if (state.previewAudience) $('previewLabel').textContent = audienceTitle(state.previewAudience); }
       // The open chapter stays open under the sheet: a deleted audience was stripped from its
-      // file on the server, so drop it here too (a renamed one just shows its new name), and
-      // numbering switched on or off redraws the page (after saving what is pending).
+      // file on the server, so drop it here too (a renamed one just shows its new name); new
+      // numbering or audience names redraw the page (after saving what is pending).
       if (state.currentFile) {
         setReaders(state.chapterAudiences);
-        if (renumbered) flushUntilSaved(3).then(mountLiveEditor).catch(quiet);
+        if (redraw) flushUntilSaved(3).then(mountLiveEditor).catch(quiet);
       }
-      return api.json('/api/yaml?path=docwiz.yaml');
-    }).then(function (r) { $('setRawText').value = r.text || ''; })
-      .catch(function (e) { showToast('Settings not saved', e.message || String(e), 'error'); });
+      loadSettings(); // fresh usage counts and raw YAML
+    }).catch(function (e) { showToast('Settings not saved', e.message || String(e), 'error'); });
   }
 
   function setWindowMode(mode) {
@@ -4286,6 +4435,8 @@
   on('vDuplicateBtn', duplicateView);
   // The document bar: Readers, Edit · Source · Read, Properties, ⋯ (History is wired below).
   on('cbReaders', function () { readersMenu($('cbReaders')); });
+  on('previewBtn', function () { previewMenu($('previewBtn')); });
+  on('previewStop', function () { setPreview(null); });
   on('cbPropsBtn', function () { toggleProps(); });
   on('cbKebabBtn', function () { docBarMenu($('cbKebabBtn')); });
   (function wireDocBar() {

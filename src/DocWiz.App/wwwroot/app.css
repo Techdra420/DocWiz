@@ -1652,15 +1652,6 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
   line-height: 1.5;
   z-index: 1;
 }
-.e2-ctx-check {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--dw-s1);
-  font-size: var(--dw-fs-xs);
-  color: var(--dw-text);
-  margin-right: var(--dw-s2);
-}
-.e2-ctx-check input { accent-color: var(--dw-accent); }
 
 /* Live-linked block chrome (Slides v2, Task 9). Rule 20: this is EDITING chrome only —
    the transcluded CONTENT inside .dw-embed renders through site.css like the rest of the
@@ -2401,16 +2392,15 @@ dialog#modal .mlbl { display: block; margin: var(--dw-s4) 0 var(--dw-s1); font-s
 
 /* Audiences row-list */
 #setPane .rowlist { display: flex; flex-direction: column; gap: var(--dw-s2); }
-#setPane .audrow { display: flex; align-items: center; gap: var(--dw-s3); background: var(--dw-surface); border: 1px solid var(--dw-border); border-radius: var(--dw-r1); padding: var(--dw-s2) var(--dw-s3); }
-#setPane .audtitle { flex: 1; min-width: 120px; font-size: var(--dw-fs-sm); color: var(--dw-text); background: var(--dw-surface); border: 1px solid var(--dw-border-strong); border-radius: var(--dw-r0); padding: var(--dw-s2); outline: none; }
-#setPane .audtitle:focus { border-color: var(--dw-accent); box-shadow: var(--dw-focus-ring); }
-#setPane .audid { font-family: var(--dw-font-mono); font-size: var(--dw-fs-xs); color: var(--dw-muted); background: var(--dw-surface-2); border: 1px solid var(--dw-border); border-radius: var(--dw-r0); padding: var(--dw-s1) var(--dw-s2); white-space: nowrap; }
-#setPane .reorder { display: flex; flex-direction: column; gap: 1px; }
-#setPane .mini { width: 26px; height: 18px; border: 0; background: transparent; color: var(--dw-faint); border-radius: var(--dw-r0); cursor: pointer; display: flex; align-items: center; justify-content: center; }
-#setPane .mini:hover { background: var(--dw-surface-2); color: var(--dw-text); }
-#setPane .mini:disabled { opacity: .3; cursor: default; }
-#setPane .auddel { width: 30px; height: 30px; border: 1px solid transparent; background: transparent; color: var(--dw-faint); border-radius: var(--dw-r0); cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-#setPane .auddel:hover { color: var(--dw-bad); background: var(--dw-bad-bg); }
+/* Audience rows (Stage 6): grip · name over "who is this?" over usage · Delete. No ids. */
+#setPane .audrow { display: flex; align-items: flex-start; gap: var(--dw-s3); background: var(--dw-surface); border: 1px solid var(--dw-border); border-radius: var(--dw-r1); padding: var(--dw-s3); }
+#setPane .audrow.dragging { opacity: .45; }
+#setPane .aud-grip { flex: none; width: 24px; height: 34px; padding: 0; border: 0; background: transparent; color: var(--dw-muted); cursor: grab; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--dw-r0); }
+#setPane .aud-grip:hover { background: var(--dw-surface-2); color: var(--dw-text); }
+#setPane .aud-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--dw-s2); }
+#setPane .audtitle { font-weight: var(--dw-w-medium); }
+#setPane .aud-use { font-size: var(--dw-fs-xs); color: var(--dw-muted); }
+#setPane .auddel { flex: none; margin-top: 2px; }
 #setPane .addrow { display: inline-flex; align-items: center; gap: var(--dw-s2); height: 36px; padding: 0 var(--dw-s4); margin-top: var(--dw-s2); border: 1px dashed var(--dw-border-strong); background: transparent; color: var(--dw-muted); border-radius: var(--dw-r1); font-size: var(--dw-fs-sm); font-weight: var(--dw-w-bold); cursor: pointer; }
 #setPane .addrow:hover { border-color: var(--dw-accent); color: var(--dw-accent); background: var(--dw-accent-bg); }
 
@@ -2537,3 +2527,42 @@ dialog#modal .mlbl { display: block; margin: var(--dw-s4) 0 var(--dw-s1); font-s
 .e2-menu .mi.mcheckable .mcheck { margin-left: auto; visibility: hidden; color: var(--dw-accent); }
 .e2-menu .mi.mcheckable.on { color: var(--dw-text); }
 .e2-menu .mi.mcheckable.on .mcheck { visibility: visible; }
+
+/* ---- Audiences (Stage 6 step 5) --------------------------------------------------------- */
+/* Action menu extras for the Readers picker and Preview as: a one-line hint under an item's
+   name, and a filter box for long audience lists. */
+.e2-menu .mi .mhint { display: block; margin-top: 2px; font-size: var(--dw-fs-xs); font-weight: var(--dw-w-regular); color: var(--dw-muted); line-height: var(--dw-lh-snug); white-space: normal; }
+.e2-menu .mi:has(.mhint) { height: auto; padding-top: var(--dw-s2); padding-bottom: var(--dw-s2); align-items: flex-start; }
+.e2-menu .mfilter {
+  display: block; width: calc(100% - 2 * var(--dw-s2)); margin: var(--dw-s1) var(--dw-s2) var(--dw-s2);
+  font: inherit; font-size: var(--dw-fs-sm); color: var(--dw-text); background: var(--dw-surface);
+  border: 1px solid var(--dw-border-strong); border-radius: var(--dw-r1); padding: var(--dw-s1) var(--dw-s2);
+}
+.e2-menu .mfilter:focus { outline: none; border-color: var(--dw-accent); box-shadow: var(--dw-focus-ring); }
+.e2-menu.tree-menu { max-height: min(70vh, 520px); overflow-y: auto; }
+
+/* Preview as: the chrome button shows the audience while a preview is on. */
+.hd-preview-btn b { font-weight: var(--dw-w-bold); }
+.hd-preview-btn.on { border-color: var(--dw-mark); background: var(--dw-chrome-2); }
+.hd-preview-btn svg:first-child { color: var(--dw-chrome-muted); }
+.hd-preview-btn.on svg:first-child { color: var(--dw-chrome-text); }
+
+/* The preview banner under the document bar. */
+.preview-banner {
+  flex-shrink: 0; display: flex; align-items: center; gap: var(--dw-s3); flex-wrap: wrap;
+  padding: var(--dw-s2) var(--dw-s5);
+  background: var(--dw-accent-bg); border-bottom: 1px solid var(--dw-border);
+  font-size: var(--dw-fs-sm); color: var(--dw-text);
+}
+.preview-banner #previewText { flex: 1 1 320px; min-width: 0; }
+
+/* While previewing, the page reads like that audience's output: other readers' blocks are
+   hidden (main.js stylesheet), the rest lose their margin marker, the tools rest, and a
+   chapter this audience doesn't get is faded. Editing chrome only — the shipped look is
+   site.css. */
+#editor2.e2-previewing .aud { border-left: 0; padding-left: 0; margin-left: 0; }
+#editor2.e2-previewing .aud-tag { display: none; }
+#editor2.e2-previewing .e2-top { opacity: .45; pointer-events: none; }
+#editor2.e2-previewing.e2-left-out article { opacity: .45; }
+.previewing .cb-mode [data-mode="source"] { opacity: .45; pointer-events: none; }
+.side-pane .tree-row.dim > a { opacity: .5; }

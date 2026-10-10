@@ -40,7 +40,7 @@ public sealed record ImportCommitDto(string Token, List<string>? Selected, strin
 public sealed record ImportTokenDto(string Token);
 public sealed record AddExternalDto(string Key, string Folder, bool CopyIn);
 public sealed record ProjectSettingsDto(string? Project, string? Code, string? Customer, string? Version, string? Language, bool Numbering, List<AudienceDto>? Audiences);
-public sealed record AudienceDto(string Id, string Title);
+public sealed record AudienceDto(string Id, string Title, string? Description = null);
 public sealed record ChapterFrontmatterDto(string File, string? Discipline, List<string> Audiences);
 public sealed record ViewSlideDto(string? Layout, string? Include, string? Title, string? Subtitle, string? Markdown,
     Dictionary<string, string>? Regions);
@@ -334,7 +334,7 @@ public static class EditorServer
                 emfCount = EmfRetrofit.CountConvertible(project.Root),
                 isTemplate,
                 numbering = project.Manifest.Numbering,
-                audiences = project.Manifest.Audiences.Select(a => new { a.Id, a.Title }),
+                audiences = project.Manifest.Audiences.Select(a => new { a.Id, a.Title, description = a.Description ?? "" }),
                 // Every section folder, empty ones too — an empty section is a place to add
                 // the first chapter, not something to hide.
                 sections = SectionFolders(project.Root)
@@ -1093,12 +1093,25 @@ public static class EditorServer
         {
             if (NoProject() is { } guard)
                 return guard;
-            var m = LoadParsed(holder.Root!).Project.Manifest;
+            var project = LoadParsed(holder.Root!).Project;
+            var m = project.Manifest;
             return Results.Json(new
             {
                 project = m.Project, code = m.Code, customer = m.Customer, version = m.Version,
                 language = m.Language, numbering = m.Numbering,
-                audiences = m.Audiences.Select(a => new { id = a.Id, title = a.Title }),
+                // Each audience with what uses it, so the list shows the weight of a delete
+                // before anyone asks for one.
+                audiences = m.Audiences.Select(a =>
+                {
+                    var usage = AudienceUsage.Find(project, a.Id);
+                    return new
+                    {
+                        id = a.Id, title = a.Title, description = a.Description ?? "",
+                        chapters = usage.TaggedChapters.Count,
+                        blocks = usage.BlockChapters.Sum(b => b.Count),
+                        outputs = usage.Views.Count,
+                    };
+                }),
             });
         });
 
@@ -1147,7 +1160,8 @@ public static class EditorServer
             yaml = ManifestWriter.SetScalar(yaml, "language", Q(dto.Language));
             yaml = ManifestWriter.SetScalar(yaml, "numbering", dto.Numbering ? "true" : "false");
             yaml = ManifestWriter.SetAudiences(yaml,
-                (dto.Audiences ?? []).Select(a => (a.Id, (string)Q(a.Title))));
+                (dto.Audiences ?? []).Select(a => (a.Id, Q(a.Title),
+                    string.IsNullOrWhiteSpace(a.Description) ? null : (string?)Q(a.Description.Trim()))));
             ProjectWrites.Write(holder.Root!, path, yaml);
             AudienceRemoval.StripFromChapters(current, removed.Select(a => a.Id).ToList());
             return Results.Ok();
@@ -1458,7 +1472,7 @@ public static class EditorServer
             // paths — neither needs every chapter's parsed AST, so skip ParseAll. The single
             // target chapter is parsed once below.
             var project = ProjectLoader.Load(holder.Root!);
-            var pipeline = DocWizMarkdown.CreatePipeline();
+            var pipeline = DocWizMarkdown.CreatePipeline(project.Manifest.Audiences);
             var (_, body) = FrontmatterParser.Split(File.ReadAllText(path));
             var doc = Markdig.Markdown.Parse(body, pipeline);
             LinkRewriter.Rewrite(doc, project, id => $"{id}.html");
@@ -1730,7 +1744,7 @@ public static class EditorServer
     private static (DocProject Project, Markdig.MarkdownPipeline Pipeline) LoadParsed(string root)
     {
         var project = ProjectLoader.Load(root);
-        var pipeline = DocWizMarkdown.CreatePipeline();
+        var pipeline = DocWizMarkdown.CreatePipeline(project.Manifest.Audiences);
         DocWizMarkdown.ParseAll(project, pipeline);
         return (project, pipeline);
     }

@@ -154,10 +154,12 @@ prose always keeps the column; print disables the breakout (full page width alre
 In the live editor the active table additionally offers a Focus mode (full-pane,
 edit-time only — nothing about the page changes).
 
-**`.aud` / `.aud-tag`** — audience callout: `background: var(--dw-accent-bg)`,
-`border: 1px solid var(--dw-border)`, `border-left: 3px solid var(--dw-accent)`, r1 (right side),
-padding s4. `.aud-tag`: CAPS xs 600 tracked `--dw-accent`. Per-audience accents stay navy —
-the tag text differentiates; color-coding three audiences adds noise.
+**`.aud` / `.aud-tag`** — audience block, a quiet margin marker (Stage 6; was a filled
+callout): no fill, no box — `border-left: 2px solid var(--dw-border-strong)`, padding-left s4,
+pulled left by s4 + 2px so its text lines up with the paragraphs around it (inside a step,
+`li > .aud`, with no vertical margin, so the step keeps its rhythm). `.aud-tag`: "Only for User, Support" — CAPS xs 600 tracked
+`--dw-muted`. No colour per audience — the label differentiates; with many tagged blocks a
+coloured box per block turned the page into a patchwork.
 
 **`.dw-figure` / `figcaption`** — caption: `--dw-fs-sm` `--dw-muted`, margin-top s2;
 the label ("Table 1") in 600: `Table 1 — Device list`. Em dash, not colon.
@@ -216,10 +218,29 @@ r1, 2px inset; buttons xs 600 `--dw-muted`, r0; selected (`aria-selected` for ta
 sidebar tabs, Edit · Source · Read and History's scope. (The settings `.seg` and the welcome
 window-mode toggle are older; step 7 folds them in.)
 
-**Action menus** — every editor menu (tree ⋯, project menu, the document bar's ⋯, Readers) is
-app.js `actionMenu()` on the `.e2-menu` recipe: items, CAPS labels, separators, danger items,
-and checkable items (`.mcheckable`: a trailing accent tick when on; the menu stays open while
-ticking). Esc closes it and returns focus; arrow keys move between items.
+**Action menus** — every editor menu (tree ⋯, project menu, the document bar's ⋯, Readers,
+Preview as) is app.js `actionMenu()` on the `.e2-menu` recipe: items, CAPS labels,
+separators, danger items, an optional one-line `.mhint` (xs muted) under an item's name, and
+checkable items (`.mcheckable`: a trailing accent tick when on; the menu stays open while
+ticking). Long lists get a `.mfilter` box (the input recipe) and scroll inside the menu. Esc
+closes it and returns focus; arrow keys move between items.
+
+**Readers picker** (Stage 6) — the action menu for "who reads this": a CAPS question ("Who
+reads this chapter / step / block?"), *Everyone*, the audiences with their description as the
+hint, a filter box from 7 audiences, *Manage audiences…*. Neutral throughout — no colour per
+audience. The same picker serves the chapter pill and the toolbar's Readers button (a tagged
+block's context bar opens it too).
+
+**Audience block marker** (site.css, ships) — a tagged block stays in the text: a 2px
+`--dw-border-strong` rule in the left margin (the block pulls left by `s4` + 2px so its text
+aligns) and an xs CAPS `--dw-muted` "Only for …" label; inside a step it drops its vertical
+margin.
+
+**Preview as** (Stage 6) — a chrome-secondary button "Preview as **Everyone** ▾" before Check
+(`.on`: `--dw-mark` border on `--dw-chrome-2`); while on, a `.preview-banner` (`--dw-accent-bg`,
+hairline, sm text + a `.hist-link` "Stop preview") sits under the document bar; other readers'
+blocks are hidden, the page's markers and tools rest (tools at .45 opacity), a chapter the
+audience doesn't get fades to .45, and its tree row dims to .5.
 
 **`.sidebar`** (Stage 6) — 280px `--dw-surface-2` column: `.dw-seg.side-tabs` (Manual ·
 Outputs · Files, full width) over one scrolling `.side-pane` per tab, *Project settings* in
@@ -238,7 +259,7 @@ target with a 2px accent line above a row, or an `--dw-accent-bg` wash on a sect
 **`.chapterbar`** — the document bar (Stage 6): `Section / Title` crumb (section
 `--dw-faint`, title 600) · `.cb-readers` pill (neutral: surface, `--dw-border-strong`, r1,
 people icon + "User, Support +2" / "All readers" / "No readers" + chevron; opens the
-checkable Readers menu) · right: save state (amber `.cb-save-dot` while edits are pending,
+Readers picker) · right: save state (amber `.cb-save-dot` while edits are pending,
 `#status` xs muted text) · `.dw-seg.cb-mode` Edit · Source · Read · icon buttons
 (`.cb-kebab-btn`, 34px, r1; pressed = `--dw-accent-bg` + accent) for History, Properties and
 ⋯. No ID chip, no Save button, no audience toggles.

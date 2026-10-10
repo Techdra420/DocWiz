@@ -13,7 +13,10 @@ namespace DocWiz.Core.Markdown;
 /// </summary>
 public static class DocWizMarkdown
 {
-    public static MarkdownPipeline CreatePipeline() => new MarkdownPipelineBuilder()
+    /// <summary>The pipeline. Pass the project's <paramref name="audiences"/> wherever HTML is
+    /// rendered for people to read, so audience blocks name their readers by title; parsing
+    /// is the same either way.</summary>
+    public static MarkdownPipeline CreatePipeline(IReadOnlyList<AudienceDef>? audiences = null) => new MarkdownPipelineBuilder()
         .UsePipeTables()
         .UseTaskLists()
         // Strikethrough ONLY (stakeholder-approved flavor addition, 2026-06-12) —
@@ -30,7 +33,7 @@ public static class DocWizMarkdown
         // hard line break (incl. inside a table cell) via an in-place inline parser — no
         // source rewrite, so byte-surgical save offsets stay 1:1 (see DocWizLineBreak.cs).
         .Use(new DocWizLineBreakExtension())
-        .Use(new DocWizRenderingExtension())
+        .Use(new DocWizRenderingExtension(audiences))
         .Use(new DocWizFiguresExtension())
         .Use(new DocWizGroupExtension())
         .Build();

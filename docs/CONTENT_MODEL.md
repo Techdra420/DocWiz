@@ -68,6 +68,7 @@ language: en
 audiences:
   - id: user
     title: User
+    description: Warehouse staff at the scanner stations   # optional
   - id: support
     title: Support
   - id: admin
@@ -81,7 +82,11 @@ external:
 ```
 
 `audiences` is project-configurable, not hardcoded — a project can add `trainer`
-or a customer-specific audience without engine changes.
+or a customer-specific audience without engine changes. The list's order is the order the
+editor shows audiences in. `id` is stable (tags and outputs point at it; the editor derives
+it from the first title and never shows it), so `title` can be renamed freely.
+`description` (Stage 6, optional) is one line for authors — "who is this?" — shown where
+readers are picked; it never appears in the handover.
 
 ## Chapter frontmatter
 
@@ -126,7 +131,26 @@ Receiving posts to the ledger through the `movements` endpoint; retries are logg
 ```
 
 Unfenced content is visible to **all** audiences listed in the chapter frontmatter.
-The full manual always shows everything (it is the source of truth).
+The full manual always shows everything (it is the source of truth), each tagged block with a
+quiet marker in the margin labelled "Only for User, Support" (audience titles; the ids when
+rendered without a project).
+
+**A single step can be tagged** (Stage 6): put the container inside the list item. A filtered
+output drops a step whose only content is for other readers — no empty number is left, and
+the remaining steps renumber:
+
+```markdown
+1. Switch the scanner station on.
+2. ::: audience admin
+   Check that the overnight sync finished.
+   :::
+3. Open the task list.
+```
+
+A chapter with an empty `audiences:` list appears only in the full manual (Check warns);
+every audience ticked is "everyone". In the editor the Readers control sets both: the
+chapter's pill in the document bar, and the toolbar's Readers button for the paragraph, step or
+element at the cursor (it wraps, retags, or — "Everyone" — unwraps the container).
 
 ## Stable section anchors
 

@@ -2,6 +2,7 @@ using DocWiz.Core.Loading;
 using DocWiz.Core.Markdown;
 using DocWiz.Core.Models;
 using DocWiz.Core.Validation;
+using Markdig.Syntax;
 using Xunit;
 
 namespace DocWiz.Core.Tests;
@@ -35,7 +36,44 @@ public class MarkdownPipelineTests
         var html = DocWizMarkdown.RenderHtml(doc, pipeline);
 
         Assert.Contains("data-aud=\"operator maintenance\"", html);
-        Assert.Contains("operator · maintenance only", html);
+        Assert.Contains("Only for operator, maintenance", html); // no project: the ids
+    }
+
+    [Fact]
+    public void AudienceContainer_NamesItsReadersByTitle_WhenTheProjectIsKnown()
+    {
+        var pipeline = DocWizMarkdown.CreatePipeline(
+            [new AudienceDef { Id = "operator", Title = "Operátor" }, new AudienceDef { Id = "maintenance", Title = "Maintenance" }]);
+        var doc = Markdig.Markdown.Parse("::: audience operator maintenance\nHi.\n:::\n", pipeline);
+        var html = DocWizMarkdown.RenderHtml(doc, pipeline);
+
+        Assert.Contains("data-aud=\"operator maintenance\"", html);
+        Assert.Contains(">Only for Operátor, Maintenance</span>", html);
+    }
+
+    [Fact]
+    public void AudienceFilter_DropsAStepWhoseOnlyContentIsForOtherReaders()
+    {
+        var pipeline = DocWizMarkdown.CreatePipeline();
+        var md = "1. Scan the delivery note.\n2. ::: audience admin\n   Check the server log.\n   :::\n3. Confirm the shelf.\n";
+        var doc = Markdig.Markdown.Parse(md, pipeline);
+        AudienceFilter.Apply(doc, "user");
+        var html = DocWizMarkdown.RenderHtml(doc, pipeline);
+
+        Assert.Equal(2, System.Text.RegularExpressions.Regex.Matches(html, "<li>").Count);
+        Assert.DoesNotContain("server log", html);
+
+        // Inside ::: steps the outer fence is longer (the editor's serializer writes it so).
+        var inSteps = Markdig.Markdown.Parse(":::: steps\n\n" + md + "\n::::\n", pipeline);
+        Assert.Empty(ProjectValidatorProbe.UnknownContainers(inSteps));
+        AudienceFilter.Apply(inSteps, "user");
+        Assert.Equal(2, System.Text.RegularExpressions.Regex.Matches(DocWizMarkdown.RenderHtml(inSteps, pipeline), "<li>").Count);
+
+        var adminDoc = Markdig.Markdown.Parse(md, pipeline);
+        AudienceFilter.Apply(adminDoc, "admin");
+        var adminHtml = DocWizMarkdown.RenderHtml(adminDoc, pipeline);
+        Assert.Equal(3, System.Text.RegularExpressions.Regex.Matches(adminHtml, "<li>").Count);
+        Assert.Contains("server log", adminHtml);
     }
 
     [Fact]
@@ -59,6 +97,16 @@ public class MarkdownPipelineTests
         Assert.Contains("daily-startup", anchors);
         Assert.Contains("some-other-title", anchors);
     }
+}
+
+internal static class ProjectValidatorProbe
+{
+    /// <summary>Container names the pipeline doesn't know — what Check warns about.</summary>
+    public static List<string> UnknownContainers(Markdig.Syntax.MarkdownDocument doc) =>
+        doc.Descendants<Markdig.Extensions.CustomContainers.CustomContainer>()
+            .Select(c => c.Info ?? "")
+            .Where(info => !DocWizContainerRenderer.KnownContainers.Contains(info))
+            .ToList();
 }
 
 public class ProjectRoundtripTests : IDisposable

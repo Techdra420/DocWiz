@@ -95,7 +95,7 @@ public static class EditorDoc
     public static List<EditorSegmentDto> BuildSegments(
         DocProject project, string body, string? audience, bool resolveEmbeds)
     {
-        var pipeline = DocWizMarkdown.CreatePipeline();
+        var pipeline = DocWizMarkdown.CreatePipeline(project.Manifest.Audiences);
         var rendered = BlockSegmenter.SegmentAndRender(body, pipeline, doc => RewriteForSurface(doc, project));
 
         var segments = new List<EditorSegmentDto>(rendered.Count);

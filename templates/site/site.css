@@ -285,25 +285,27 @@ article[data-num] h3::before {
 .sr-snip mark { background: var(--dw-accent-glow); color: inherit; padding: 0 1px; }
 .sr-empty { padding: var(--dw-s3); color: var(--dw-muted); font-size: var(--dw-fs-sm); }
 
-/* ---- Audience callout -------------------------------------------------------- */
+/* ---- Audience block: a quiet marker in the margin (Stage 6) ---------------------
+   Blocks for some readers only — a paragraph, a step, a table — stay in the flow of the text;
+   a thin rule in the margin and a small "Only for …" label mark them, so a page with many
+   tagged blocks still reads as one page. Filtered outputs drop the marker with the block. */
 .aud {
-  background: var(--dw-accent-surface);
-  border: 1px solid var(--dw-border);
-  border-left: 3px solid var(--dw-accent);
-  border-radius: 0 var(--dw-r1) var(--dw-r1) 0;
-  padding: var(--dw-s4);
-  margin: var(--dw-s4) 0;
+  border-left: 2px solid var(--dw-border-strong);
+  padding: 0 0 0 var(--dw-s4);
+  margin: var(--dw-s4) 0 var(--dw-s4) calc(-1 * var(--dw-s4) - 2px);
 }
 .aud .aud-tag {
   font-size: var(--dw-fs-xs);
   text-transform: uppercase;
   letter-spacing: var(--dw-track-caps);
   font-weight: var(--dw-w-medium);
-  color: var(--dw-accent);
+  color: var(--dw-muted);
   display: block;
   margin-bottom: var(--dw-s1);
 }
 .aud > :last-child { margin-bottom: 0; }
+/* A tagged step: the text lines up with the other steps and the step keeps its rhythm. */
+li > .aud { margin-top: 0; margin-bottom: 0; }
 
 /* ---- Content elements (the ::: library — see CONTENT_MODEL.md) ----------------- */
 .dw-callout {

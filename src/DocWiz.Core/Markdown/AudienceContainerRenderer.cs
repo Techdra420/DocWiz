@@ -1,3 +1,4 @@
+using DocWiz.Core.Models;
 using Markdig;
 using Markdig.Extensions.CustomContainers;
 using Markdig.Renderers;
@@ -5,8 +6,10 @@ using Markdig.Renderers.Html;
 
 namespace DocWiz.Core.Markdown;
 
-/// <summary>Registers DocWiz HTML rendering overrides on top of the stock extensions.</summary>
-public sealed class DocWizRenderingExtension : IMarkdownExtension
+/// <summary>Registers DocWiz HTML rendering overrides on top of the stock extensions.
+/// <paramref name="audiences"/> (the project's, when known) lets audience blocks name their
+/// readers by title; without it they fall back to the ids.</summary>
+public sealed class DocWizRenderingExtension(IReadOnlyList<AudienceDef>? audiences = null) : IMarkdownExtension
 {
     public void Setup(MarkdownPipelineBuilder pipeline)
     {
@@ -16,8 +19,20 @@ public sealed class DocWizRenderingExtension : IMarkdownExtension
     public void Setup(MarkdownPipeline pipeline, IMarkdownRenderer renderer)
     {
         if (renderer is HtmlRenderer html)
-            html.ObjectRenderers.ReplaceOrAdd<HtmlCustomContainerRenderer>(new DocWizContainerRenderer());
+            html.ObjectRenderers.ReplaceOrAdd<HtmlCustomContainerRenderer>(new DocWizContainerRenderer(audiences));
     }
+}
+
+/// <summary>The tag an audience block carries in the full manual — "Only for User, Support".
+/// The editor's node view builds the same words (views.js audienceTagLabel; pinned by
+/// AudienceTagParityTests).</summary>
+public static class AudienceTag
+{
+    public const string Prefix = "Only for ";
+
+    public static string Label(IEnumerable<string> ids, IReadOnlyList<AudienceDef>? audiences) =>
+        Prefix + string.Join(", ", ids.Select(id =>
+            audiences?.FirstOrDefault(a => a.Id == id)?.Title is { Length: > 0 } title ? title : id));
 }
 
 /// <summary>
@@ -31,7 +46,7 @@ public sealed class DocWizRenderingExtension : IMarkdownExtension
 /// - `center` / `right` — text alignment for the content inside
 /// Unknown names render as a plain div (the validator warns about them).
 /// </summary>
-public sealed class DocWizContainerRenderer : HtmlObjectRenderer<CustomContainer>
+public sealed class DocWizContainerRenderer(IReadOnlyList<AudienceDef>? audiences = null) : HtmlObjectRenderer<CustomContainer>
 {
     /// <summary>Container names accepted by the pipeline; shared with the validator.</summary>
     public static readonly IReadOnlySet<string> KnownContainers = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
@@ -48,12 +63,12 @@ public sealed class DocWizContainerRenderer : HtmlObjectRenderer<CustomContainer
         switch (info.ToLowerInvariant())
         {
             case "audience":
-                var audiences = arguments.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                var ids = AudienceFilter.AudienceIds(obj);
                 renderer.Write("<div class=\"aud\" data-aud=\"");
-                renderer.WriteEscape(string.Join(" ", audiences));
+                renderer.WriteEscape(string.Join(" ", ids));
                 renderer.Write("\"><span class=\"aud-tag\">");
-                renderer.WriteEscape(string.Join(" · ", audiences));
-                renderer.WriteLine(" only</span>");
+                renderer.WriteEscape(AudienceTag.Label(ids, audiences));
+                renderer.WriteLine("</span>");
                 renderer.WriteChildren(obj);
                 renderer.WriteLine("</div>");
                 break;
