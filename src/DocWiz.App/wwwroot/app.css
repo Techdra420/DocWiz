@@ -2535,3 +2535,91 @@ dialog#modal .mlbl { display: block; margin: var(--dw-s4) 0 var(--dw-s1); font-s
 #setPane .warnbox .wb-text { font-size: var(--dw-fs-sm); color: var(--dw-text); line-height: var(--dw-lh-body); }
 #setPane textarea.finput { resize: vertical; line-height: var(--dw-lh-body); }
 
+/* ---- Change history (Stage 6 step 3) ------------------------------------------------
+   The History panel beside the chapter, and the compare view: the older version rendered
+   like the page, with blocks added since (green) and removed since (red, struck) marked by
+   classes on the blocks themselves. Editing chrome only — the content look stays site.css. */
+.hist-panel {
+  width: 300px; flex: none; min-height: 0;
+  display: flex; flex-direction: column;
+  background: var(--dw-surface); border-left: 1px solid var(--dw-border);
+}
+.hist-head {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--dw-s2);
+  padding: var(--dw-s3) var(--dw-s3) var(--dw-s2) var(--dw-s4);
+}
+.hist-title, .hist-day {
+  font-size: var(--dw-fs-xs); font-weight: var(--dw-w-medium);
+  text-transform: uppercase; letter-spacing: var(--dw-track-caps); color: var(--dw-muted);
+}
+.hist-seg {
+  display: inline-flex; padding: 2px; gap: 2px;
+  background: var(--dw-surface-2); border: 1px solid var(--dw-border); border-radius: var(--dw-r1);
+}
+.hist-seg button {
+  border: 0; background: transparent; cursor: pointer;
+  padding: var(--dw-s1) var(--dw-s2); border-radius: var(--dw-r0);
+  font-size: var(--dw-fs-xs); font-weight: var(--dw-w-medium); color: var(--dw-muted);
+}
+.hist-seg button[aria-selected="true"] { background: var(--dw-surface); color: var(--dw-text); box-shadow: var(--dw-shadow); }
+.hist-body { flex: 1; min-height: 0; overflow-y: auto; padding: 0 var(--dw-s2) var(--dw-s4); }
+.hist-day { margin: var(--dw-s4) var(--dw-s2) var(--dw-s1); }
+.hist-entry {
+  display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: var(--dw-s2);
+  width: 100%; text-align: left; cursor: pointer;
+  border: 0; background: transparent; border-radius: var(--dw-r1);
+  padding: var(--dw-s2); color: var(--dw-text); font-size: var(--dw-fs-sm);
+}
+.hist-entry:hover { background: var(--dw-surface-2); }
+.hist-entry.on { background: var(--dw-accent-bg); box-shadow: inset 3px 0 0 var(--dw-accent); }
+.hist-entry.current .hist-text > span { font-weight: var(--dw-w-medium); }
+.hist-time {
+  font-family: var(--dw-font-mono); font-size: var(--dw-fs-xs); color: var(--dw-faint);
+  font-variant-numeric: tabular-nums; padding-top: 2px;
+}
+.hist-text { display: flex; flex-direction: column; min-width: 0; overflow-wrap: anywhere; }
+.hist-text small { font-size: var(--dw-fs-xs); color: var(--dw-faint); }
+.hist-row {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--dw-s2);
+  padding: var(--dw-s2); border-bottom: 1px solid var(--dw-border); font-size: var(--dw-fs-sm);
+}
+.hist-acts { display: flex; gap: var(--dw-s3); flex: none; }
+.hist-link {
+  border: 0; background: transparent; padding: 0; cursor: pointer;
+  color: var(--dw-accent); font-size: var(--dw-fs-sm); font-weight: var(--dw-w-medium);
+}
+.hist-link:hover { text-decoration: underline; }
+.hist-link.danger { color: var(--dw-bad); }
+.hist-mark {
+  display: block; width: calc(100% - 2 * var(--dw-s2)); margin: var(--dw-s3) var(--dw-s2) 0;
+  padding: var(--dw-s2) var(--dw-s3); text-align: left; cursor: pointer;
+  border: 1px dashed var(--dw-border-strong); border-radius: var(--dw-r1);
+  background: transparent; color: var(--dw-muted); font-size: var(--dw-fs-sm);
+}
+.hist-mark:hover { color: var(--dw-text); border-color: var(--dw-muted); background: var(--dw-surface-2); }
+.hist-empty { margin: var(--dw-s2); font-size: var(--dw-fs-sm); color: var(--dw-muted); line-height: var(--dw-lh-snug); }
+.hist-note {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--dw-s2);
+  margin: var(--dw-s3) var(--dw-s2) 0; padding: var(--dw-s2) var(--dw-s3);
+  background: var(--dw-accent-bg); border-radius: var(--dw-r1); font-size: var(--dw-fs-sm);
+}
+.hist-foot { margin: var(--dw-s4) var(--dw-s2) 0; font-size: var(--dw-fs-xs); color: var(--dw-faint); }
+
+.hist-compare { flex: 1 1 auto; min-width: 0; overflow: auto; background: var(--dw-bg); }
+.hist-banner {
+  position: sticky; top: 0; z-index: 3;
+  display: flex; align-items: center; flex-wrap: wrap; gap: var(--dw-s2) var(--dw-s3);
+  padding: var(--dw-s3) var(--dw-s5);
+  background: var(--dw-surface); border-bottom: 1px solid var(--dw-border);
+  font-size: var(--dw-fs-sm);
+}
+.hist-banner-text { flex: 1 1 260px; min-width: 0; }
+.hist-key { padding: 0 var(--dw-s1); border-radius: var(--dw-r0); font-size: var(--dw-fs-xs); white-space: nowrap; }
+.hist-key-ins { background: var(--dw-ok-bg); color: var(--dw-ok); }
+.hist-key-del { background: var(--dw-bad-bg); color: var(--dw-bad); text-decoration: line-through; }
+.hist-meta { margin: var(--dw-s3) var(--dw-s5) 0; font-size: var(--dw-fs-sm); color: var(--dw-muted); }
+.hist-compare .hist-ins { background: var(--dw-ok-bg); box-shadow: -12px 0 0 -9px var(--dw-ok); }
+.hist-compare .hist-del {
+  background: var(--dw-bad-bg); box-shadow: -12px 0 0 -9px var(--dw-bad);
+  text-decoration: line-through; text-decoration-color: var(--dw-bad);
+}

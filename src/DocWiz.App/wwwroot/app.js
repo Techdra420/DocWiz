@@ -439,6 +439,319 @@
     }, true);
   }
 
+  /* ---------- change history (Stage 6 step 3) ----------
+     The History panel beside the chapter: this chapter's timeline (compare any entry with now,
+     restore it — a restore is itself a new entry, so it can be undone) and the project's named
+     versions and recently deleted files. All of it lives in .docwiz/history; pending edits are
+     always saved before anything is restored, so nothing current is lost. */
+
+  var hist = { open: false, scope: 'chapter', comparing: null, undo: null };
+  var HIST_LABEL = { original: 'As it was before history started', save: 'Saved', rename: 'Renamed' };
+  var DELETED_KIND = { chapter: 'Chapter', view: 'Output', attachment: 'Attachment', image: 'Image', file: 'File' };
+
+  function clockTime(iso) { return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
+  function dayLabel(iso) {
+    var d = new Date(iso), today = new Date(), yesterday = new Date();
+    yesterday.setDate(today.getDate() - 1);
+    if (d.toDateString() === today.toDateString()) return 'Today';
+    if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+    return d.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short',
+      year: d.getFullYear() === today.getFullYear() ? undefined : 'numeric' });
+  }
+  function whenLabel(iso) {
+    var day = dayLabel(iso);
+    return (day === 'Today' ? 'today' : day === 'Yesterday' ? 'yesterday' : day) + ' at ' + clockTime(iso);
+  }
+  function entryLabel(e) {
+    return e.kind === 'restore' ? 'Restored the version from ' + whenLabel(e.restoredFrom) : (HIST_LABEL[e.kind] || 'Saved');
+  }
+  function audienceTitle(id) {
+    var a = (state.project.audiences || []).filter(function (x) { return x.id === id; })[0];
+    return a ? a.title : id;
+  }
+  function saveIfDirty() {
+    return state.dirty && state.currentFile ? saveChapter() : Promise.resolve();
+  }
+
+  function toggleHistory(open) {
+    hist.open = open === undefined ? !hist.open : !!open;
+    $('histPanel').hidden = !hist.open;
+    $('cbHistoryBtn').setAttribute('aria-pressed', String(hist.open));
+    if (!hist.open) endCompare();
+    else refreshHistory();
+  }
+
+  function refreshHistory() {
+    if (!hist.open) return;
+    Array.prototype.forEach.call(document.querySelectorAll('#histPanel [data-hscope]'), function (b) {
+      b.setAttribute('aria-selected', String(b.getAttribute('data-hscope') === hist.scope));
+    });
+    $('histChapter').hidden = hist.scope !== 'chapter';
+    $('histProject').hidden = hist.scope !== 'project';
+    if (hist.scope === 'chapter') loadChapterHistory(); else loadProjectHistory();
+  }
+
+  // A newly opened chapter starts with no comparison and no pending undo.
+  function historyChapterChanged() {
+    hist.undo = null;
+    endCompare();
+  }
+
+  function loadChapterHistory() {
+    var box = $('histChapter');
+    if (!state.currentFile) { box.innerHTML = ''; return; }
+    api.json('/api/history?file=' + encodeURIComponent(state.currentFile)).then(function (r) {
+      box.innerHTML = '';
+      if (hist.undo) {
+        var note = el('div', 'hist-note');
+        note.appendChild(el('span', null, 'Restored the version from ' + hist.undo.label + '.'));
+        var undo = el('button', 'hist-link', 'Undo');
+        undo.type = 'button';
+        undo.onclick = function () {
+          var target = hist.undo;
+          hist.undo = null;
+          restoreEntry({ id: target.entryId }, { undoing: true });
+        };
+        note.appendChild(undo);
+        box.appendChild(note);
+      }
+      if (!r.entries.length) {
+        box.appendChild(el('p', 'hist-empty', 'No history yet. From now on, every save of this chapter is kept here.'));
+        return;
+      }
+      var lastDay = null;
+      r.entries.forEach(function (e) {
+        var day = dayLabel(e.utc);
+        if (day !== lastDay) { box.appendChild(el('div', 'hist-day', day)); lastDay = day; }
+        var b = el('button', 'hist-entry' + (e.current ? ' current' : '') +
+          (hist.comparing && hist.comparing.id === e.id ? ' on' : '') + (!hist.comparing && e.current ? ' on' : ''));
+        b.type = 'button';
+        b.appendChild(el('span', 'hist-time', clockTime(e.utc)));
+        var text = el('span', 'hist-text');
+        text.appendChild(el('span', null, e.current ? 'Current version' : entryLabel(e)));
+        if (e.current) text.appendChild(el('small', null, entryLabel(e)));
+        b.appendChild(text);
+        b.onclick = function () { if (e.current) endCompare(); else compareWith(e); };
+        box.appendChild(b);
+      });
+    }).catch(function (e) {
+      box.innerHTML = '';
+      box.appendChild(el('p', 'hist-empty', e.message || String(e)));
+    });
+  }
+
+  function compareWith(entry) {
+    saveIfDirty()
+      .then(function () {
+        return api.json('/api/history/compare?file=' + encodeURIComponent(state.currentFile) +
+          '&entry=' + encodeURIComponent(entry.id));
+      })
+      .then(function (r) { hist.comparing = entry; renderCompare(entry, r); loadChapterHistory(); })
+      .catch(function (e) { showToast('Can’t show that version', e.message || String(e), 'error'); });
+  }
+
+  // The older version reads like the page: the same pipeline HTML, with blocks removed since
+  // marked red and blocks added since marked green (classes on each block — no wrappers, so the
+  // page's own styles and numbering apply unchanged).
+  function renderCompare(entry, r) {
+    var view = $('histCompare');
+    view.innerHTML = '';
+    var bar = el('div', 'hist-banner');
+    var msg = el('span', 'hist-banner-text');
+    msg.innerHTML = 'Comparing the version from <b>' + esc(whenLabel(entry.utc)) + '</b> with now. ' +
+      '<span class="hist-key hist-key-ins">added since</span> <span class="hist-key hist-key-del">removed since</span>';
+    var restore = el('button', null, 'Restore this version');
+    restore.type = 'button';
+    restore.onclick = function () { restoreEntry(entry); };
+    var back = el('button', null, 'Back to now');
+    back.type = 'button';
+    back.onclick = endCompare;
+    bar.appendChild(msg); bar.appendChild(restore); bar.appendChild(back);
+    view.appendChild(bar);
+
+    var notes = [];
+    if (r.titleBefore !== r.titleNow) notes.push('The title was “' + r.titleBefore + '”.');
+    if (r.audiencesBefore.join() !== r.audiencesNow.join())
+      notes.push('Readers were: ' + (r.audiencesBefore.map(audienceTitle).join(', ') || 'none') + '.');
+    if (!r.blocks.some(function (b) { return b.state !== 'same'; })) notes.push('The text is the same as now.');
+    if (notes.length) view.appendChild(el('p', 'hist-meta', notes.join(' ')));
+
+    var article = el('article');
+    var live = document.querySelector('#editor2 > article');
+    if (live && live.hasAttribute('data-num')) {
+      article.setAttribute('data-num', '');
+      article.style.setProperty('--dwch', live.style.getPropertyValue('--dwch'));
+    }
+    r.blocks.forEach(function (b) {
+      var tpl = document.createElement('template');
+      tpl.innerHTML = b.html;
+      Array.prototype.slice.call(tpl.content.children).forEach(function (node) {
+        if (b.state !== 'same') node.classList.add('hist-' + b.state);
+        article.appendChild(node);
+      });
+    });
+    view.appendChild(article);
+    $('editor2').hidden = true;
+    view.hidden = false;
+    view.scrollTop = 0;
+  }
+
+  function endCompare() {
+    var was = !!hist.comparing;
+    hist.comparing = null;
+    $('histCompare').hidden = true;
+    $('histCompare').innerHTML = '';
+    $('editor2').hidden = false;
+    if (was && hist.open) loadChapterHistory();
+  }
+
+  function restoreEntry(entry, opts) {
+    saveIfDirty()
+      .then(function () {
+        return api.send('POST', '/api/history/restore', { file: state.currentFile, entry: entry.id });
+      })
+      .then(function (res) {
+        state.currentFile = res.file;
+        hist.comparing = null;
+        endCompare();
+        return loadProject().then(function () {
+          updateCrumb();
+          mountLiveEditor();
+          return api.json('/api/history?file=' + encodeURIComponent(state.currentFile));
+        });
+      })
+      .then(function (r) {
+        // The entry before the restore is the state it replaced — Undo puts that back.
+        hist.undo = opts && opts.undoing ? null
+          : { label: whenLabel(entry.utc), entryId: r.entries[1] && r.entries[1].id };
+        if (hist.undo && !hist.undo.entryId) hist.undo = null;
+        loadChapterHistory();
+        setStatus(opts && opts.undoing ? 'Restore undone' : 'Restored ✓', 'ok');
+      })
+      .catch(function (e) { showToast('Not restored', e.message || String(e), 'error'); });
+  }
+
+  function loadProjectHistory() {
+    var box = $('histProject');
+    api.json('/api/history/project').then(function (r) {
+      box.innerHTML = '';
+      box.appendChild(el('div', 'hist-day', 'Named versions'));
+      if (!r.versions.length)
+        box.appendChild(el('p', 'hist-empty', 'None yet. Mark one before you send a handover, so you can always get back to it.'));
+      r.versions.forEach(function (v) {
+        var row = el('div', 'hist-row');
+        var text = el('span', 'hist-text');
+        text.appendChild(el('b', null, v.name));
+        text.appendChild(el('small', null, whenLabel(v.utc)));
+        var acts = el('span', 'hist-acts');
+        var rs = el('button', 'hist-link', 'Restore…');
+        rs.type = 'button';
+        rs.onclick = function () { restoreVersion(v); };
+        var del = el('button', 'hist-link danger', 'Delete');
+        del.type = 'button';
+        del.onclick = function () {
+          confirmDialog('Delete the version “' + v.name + '”?', 'Only this saved copy goes. Your documentation is not affected.',
+            'Delete version', function () {
+              api.send('DELETE', '/api/history/version?id=' + encodeURIComponent(v.id))
+                .then(loadProjectHistory).catch(function (e) { showToast('Not deleted', e.message || String(e), 'error'); });
+            }, true);
+        };
+        acts.appendChild(rs); acts.appendChild(del);
+        row.appendChild(text); row.appendChild(acts);
+        box.appendChild(row);
+      });
+      var mark = el('button', 'hist-mark', 'Mark a version…');
+      mark.type = 'button';
+      mark.onclick = markVersion;
+      box.appendChild(mark);
+
+      box.appendChild(el('div', 'hist-day', 'Recently deleted'));
+      if (!r.deleted.length)
+        box.appendChild(el('p', 'hist-empty', 'Nothing deleted. Deleted chapters, outputs and attachments wait here until you clean up.'));
+      r.deleted.forEach(function (d) {
+        var row = el('div', 'hist-row');
+        var text = el('span', 'hist-text');
+        text.appendChild(el('b', null, d.title));
+        text.appendChild(el('small', null, (DELETED_KIND[d.kind] || 'File') + ' · deleted ' + whenLabel(d.utc)));
+        var rs = el('button', 'hist-link', 'Restore');
+        rs.type = 'button';
+        rs.onclick = function () {
+          api.send('POST', '/api/history/deleted-restore', { stamp: d.stamp, path: d.path })
+            .then(function (res) {
+              showToast('Restored', '“' + d.title + '” is back (' + res.path + ').', 'success');
+              return loadProject().then(loadProjectHistory);
+            })
+            .catch(function (e) { showToast('Not restored', e.message || String(e), 'error'); });
+        };
+        row.appendChild(text); row.appendChild(rs);
+        box.appendChild(row);
+      });
+
+      var foot = el('div', 'hist-foot');
+      foot.appendChild(el('span', null, 'History uses ' + fmtBytes(r.stats.bytes) + '. '));
+      var manage = el('button', 'hist-link', 'Clean up…');
+      manage.type = 'button';
+      manage.onclick = function () { openSettings('history'); };
+      foot.appendChild(manage);
+      box.appendChild(foot);
+    }).catch(function (e) {
+      box.innerHTML = '';
+      box.appendChild(el('p', 'hist-empty', e.message || String(e)));
+    });
+  }
+
+  function markVersion() {
+    promptDialog('Mark a version', 'Name', 'e.g. Handover to customer 1.0', 'Mark version', function (name) {
+      saveIfDirty()
+        .then(function () { return api.send('POST', '/api/history/version', { name: name }); })
+        .then(function () {
+          showToast('Version marked', '“' + name + '” is kept until you delete it.', 'success');
+          refreshHistory();
+        })
+        .catch(function (e) { showToast('Not marked', e.message || String(e), 'error'); });
+    });
+  }
+
+  function restoreVersion(v) {
+    confirmDialog('Restore the whole project to “' + v.name + '”?',
+      'Every chapter and output goes back to how it was then; images and attachments are not affected. ' +
+      'The current state is kept as a version first, so you can come back to it.',
+      'Restore project', function () {
+        saveIfDirty()
+          .then(function () { return api.send('POST', '/api/history/version-restore', { id: v.id }); })
+          .then(function () {
+            flashAfterReload('Project restored', 'Back to “' + v.name + '”. The state before is kept as “Before restoring ' + v.name + '”.');
+            location.hash = '';
+            location.reload();
+          })
+          .catch(function (e) { showToast('Not restored', e.message || String(e), 'error'); });
+      }, true);
+  }
+
+  function loadHistoryStats() {
+    api.json('/api/history/project').then(function (r) {
+      var s = r.stats;
+      $('histStats').textContent = fmtBytes(s.bytes) + ' — ' + s.snapshots + ' saved version' + (s.snapshots === 1 ? '' : 's') +
+        ' of files, ' + s.versions + ' named version' + (s.versions === 1 ? '' : 's') + ', ' + s.deleted + ' deleted file' + (s.deleted === 1 ? '' : 's') + '.';
+    }).catch(function (e) { $('histStats').textContent = e.message || String(e); });
+  }
+
+  function cleanUpHistory() {
+    var sel = $('histCleanAge');
+    var days = parseInt(sel.value, 10);
+    var label = sel.options[sel.selectedIndex].textContent.toLowerCase();
+    confirmDialog('Remove history ' + label + '?',
+      'Older saves and deleted files go for good. Named versions and your documentation are not affected.',
+      'Clean up', function () {
+        api.send('POST', '/api/history/cleanup', { days: days })
+          .then(function (res) {
+            showToast('Cleaned up', res.removed + ' old entr' + (res.removed === 1 ? 'y' : 'ies') + ' removed.', 'success');
+            loadHistoryStats();
+          })
+          .catch(function (e) { showToast('Not cleaned up', e.message || String(e), 'error'); });
+      }, true);
+  }
+
   // By POSITION, not text — heading text differs between surfaces (markdown
   // markers, "{#anchor}" suffixes), but the H2/H3 order is identical everywhere.
   // The outline lists levels 2 and 3 in document order, so index into the same
@@ -865,11 +1178,13 @@
       var slugEl = $('fmId').querySelector('.cb-id-slug');
       if (slugEl) slugEl.textContent = ch.id;
       updateCrumb();
+      historyChapterChanged();
       renderAudienceChecks(ch.audiences);
       state.dirty = false;
       setStatus('');
       renderTree(state.project);
       mountLiveEditor();
+      refreshHistory(); // an open History panel follows to the newly opened chapter
     });
   }
 
@@ -958,7 +1273,10 @@
         if (doc && doc.file) state.currentFile = doc.file;
         state.dirty = false;
         setStatus('Saved ✓', 'ok');
-        return loadProject().then(updateCrumb);
+        return loadProject().then(function () {
+          updateCrumb();
+          if (!hist.comparing) refreshHistory(); // the save is the newest entry now
+        });
       })
       .catch(function (e) {
         setStatus('Save failed: ' + e.message, 'err');
@@ -2534,6 +2852,12 @@
         showIssues(res.ok ? 'Build OK' : 'Build failed — fix the errors', res.issues);
         $('handoverLink').hidden = !res.ok;
         $('packageLink').hidden = !res.ok;
+        if (res.ok) {
+          // A finished handover is a natural moment to keep a named version.
+          var t = showToast('Handover built', 'Click here to keep this state as a named version.', 'success');
+          t.style.cursor = 'pointer';
+          t.onclick = function () { t.classList.remove('show'); markVersion(); };
+        }
       })
       .catch(function (e) {
         // Save failed (build skipped — never build stale content) or build request failed.
@@ -3229,6 +3553,7 @@
     var crumb = $('crumbSec');
     var active = document.querySelector('#setRail .set-item[data-sec="' + sec + '"]');
     if (crumb && active) crumb.textContent = active.textContent;
+    if (sec === 'history') loadHistoryStats();
   }
 
   function loadSettings() {
@@ -3388,6 +3713,8 @@
   }
 
   function show(sectionId) {
+    // Leaving the chapter editor ends a history comparison (the live surface comes back).
+    if (sectionId !== 'chapterEditor' && hist.comparing) endCompare();
     // Leaving the view editor: tear down any mounted slide-zone editors (Task 7b) so
     // their ProseMirror views don't leak and the shared toolbar's active view resets.
     if (sectionId !== 'viewEditor' && window.DocWizSlideEdit) window.DocWizSlideEdit.unmountAll();
@@ -3684,6 +4011,20 @@
     });
   })();
   on('issuesClose', function () { $('issuesPanel').hidden = true; });
+  // History (Stage 6 step 3): the chapter bar's toggle, the panel's scope tabs, Settings › History.
+  on('cbHistoryBtn', function () { toggleHistory(); });
+  (function wireHistoryScope() {
+    var panel = $('histPanel');
+    if (panel) panel.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-hscope]');
+      if (!b) return;
+      hist.scope = b.getAttribute('data-hscope');
+      if (hist.scope !== 'chapter') endCompare();
+      refreshHistory();
+    });
+  })();
+  on('histCleanBtn', cleanUpHistory);
+  on('histOpenBtn', function () { api.send('POST', '/api/history/open-folder', {}).catch(quiet); });
   document.addEventListener('keydown', function (e) {
     if ((e.ctrlKey || e.metaKey) && e.key === 's') {
       e.preventDefault();

@@ -21,7 +21,7 @@ public static class AudienceRemoval
             var (yaml, rawBody) = FrontmatterParser.Split(File.ReadAllText(chapter.FilePath));
             var fm = ChapterYaml.Parse(yaml);
             fm["audiences"] = ChapterYaml.AudienceList(fm).Where(a => !removedIds.Contains(a)).ToList();
-            File.WriteAllText(chapter.FilePath, ChapterYaml.Compose(fm, rawBody.TrimStart('\n')));
+            ProjectWrites.Write(project.Root, chapter.FilePath, ChapterYaml.Compose(fm, rawBody.TrimStart('\n')));
             changed++;
         }
         return changed;

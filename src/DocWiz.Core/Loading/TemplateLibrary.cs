@@ -114,13 +114,16 @@ public static class TemplateLibrary
             throw new DocWizLoadException($"Folder '{dest}' already exists and is not empty.");
 
         var outputDir = Path.GetFullPath(Path.Combine(source, "output"));
+        var editorDataDir = Path.GetFullPath(Path.Combine(source, ProjectLayout.EditorDataFolder));
         Directory.CreateDirectory(dest);
         foreach (var srcPath in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
         {
             var full = Path.GetFullPath(srcPath);
-            // Skip the build output tree (top-level output/ and anything under it).
+            // Skip the build output tree (top-level output/ and anything under it) and the editor's
+            // own data (.docwiz/ — change history): a copy or a template starts with a clean history.
             if (full.StartsWith(outputDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(full, outputDir, StringComparison.OrdinalIgnoreCase))
+                || string.Equals(full, outputDir, StringComparison.OrdinalIgnoreCase)
+                || full.StartsWith(editorDataDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
                 continue;
 
             var rel = Path.GetRelativePath(source, full);

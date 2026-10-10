@@ -361,6 +361,12 @@
             Save
           </button>
 
+          <!-- History panel toggle (Stage 6 step 3) -->
+          <button type="button" class="cb-kebab-btn" id="cbHistoryBtn" aria-pressed="false" aria-controls="histPanel"
+            data-tip="History — earlier versions of this chapter, named versions of the project, and recently deleted files.">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1"/><path d="M3.5 4.5v4h4"/><path d="M12 7.5v4.8l3.2 2"/></svg>
+          </button>
+
           <!-- Kebab popup holding Delete chapter -->
           <div class="cb-kebab-wrap">
             <button type="button" class="cb-kebab-btn" id="cbKebabBtn" aria-haspopup="true" aria-expanded="false"
@@ -381,6 +387,20 @@
       </div>
       <div class="split">
         <div id="editor2" class="dw-live-surface dw-zoomable"></div>
+        <!-- An older version beside now: the page with what was added/removed since (app.js). -->
+        <div id="histCompare" class="dw-live-surface hist-compare" hidden></div>
+        <!-- History panel: this chapter's timeline | the project's versions and deleted files. -->
+        <aside id="histPanel" class="hist-panel" hidden aria-label="History">
+          <div class="hist-head">
+            <span class="hist-title">History</span>
+            <div class="hist-seg" role="tablist" aria-label="History scope">
+              <button type="button" role="tab" aria-selected="true" data-hscope="chapter">This chapter</button>
+              <button type="button" role="tab" aria-selected="false" data-hscope="project">Project</button>
+            </div>
+          </div>
+          <div class="hist-body" id="histChapter"></div>
+          <div class="hist-body" id="histProject" hidden></div>
+        </aside>
       </div>
     </section>
 
@@ -504,6 +524,7 @@
           <div class="set-item active" data-sec="general">General</div>
           <div class="set-item" data-sec="audiences">Audiences</div>
           <div class="set-item" data-sec="output">Handover output</div>
+          <div class="set-item" data-sec="history">History</div>
           <div class="set-grp">Preferences</div>
           <div class="set-item" data-sec="application">Application</div>
           <div class="set-grp">Advanced</div>
@@ -557,6 +578,18 @@
                   <div class="fc"><div class="toggle-row"><button class="switch" id="numSwitch" role="switch" aria-checked="true" type="button"></button><span class="tlabel" id="numLabel">On — headings numbered</span></div>
                     <div class="num-example" id="numExample"><span class="lvl"><span class="n">1</span><span class="t">Getting Started</span></span><span class="lvl"><span class="n">1.1</span><span class="t">Installation</span></span><span class="lvl"><span class="n">1.1.1</span><span class="t">Requirements</span></span></div>
                   </div></div>
+              </div>
+            </div>
+
+            <div class="set-section" id="secHistory">
+              <div class="set-sec-head"><div class="set-sec-title">History</div>
+                <div class="set-sec-desc">Earlier versions of chapters, named versions of the project, and recently deleted files — kept in <span class="dwa-mono">.docwiz/history</span> inside the project until you remove them. Removing any of it never changes your documentation. Actions here apply immediately.</div></div>
+              <div class="fcard">
+                <div class="frow"><div class="fl"><div class="ftitle">Size</div></div><div class="fc"><div class="applies" id="histStats">—</div></div></div>
+                <div class="frow"><div class="fl"><div class="ftitle">Clean up</div><div class="fhint">Named versions are always kept.</div></div>
+                  <div class="fc"><div class="inline-row"><select class="finput" id="histCleanAge"><option value="30">Older than 30 days</option><option value="90" selected>Older than 90 days</option><option value="365">Older than a year</option></select>
+                    <button class="dwa-btn dwa-btn-secondary dwa-btn-sm" id="histCleanBtn" type="button">Clean up</button></div></div></div>
+                <div class="frow"><div class="fl"><div class="ftitle">Folder</div></div><div class="fc"><button class="dwa-btn dwa-btn-secondary dwa-btn-sm" id="histOpenBtn" type="button">Open history folder</button></div></div>
               </div>
             </div>
 
