@@ -10,6 +10,7 @@
   var TOAST_HIDE_MS = 8000;          // error toast auto-dismiss
   var TIP_HOVER_DELAY = 1500;
   var TIP_FOCUS_DELAY = 150;
+  var AUTOSAVE_IDLE_MS = 2000;       // autosave this long after the last edit (Stage 6)
   var PREVIEW_DEBOUNCE = 400;        // canvas refresh after structural changes
   var PREVIEW_DEBOUNCE_TITLE = 800;  // title field re-renders the whole canvas
 
@@ -49,7 +50,8 @@
     reportError((e.reason && e.reason.message) || 'request failed');
   });
 
-  var state = { project: null, currentFile: null, currentYaml: null, currentView: null, viewSlides: null };
+  var state = { project: null, currentFile: null, currentYaml: null, currentView: null, viewSlides: null, chapterAudiences: [] };
+  var editGen = 0; // counts edits; see the dirty setter and the save paths
 
   // Unsaved changes are visible, not just tracked: every Save button grows a dot the
   // moment the content diverges from disk. A property setter catches all assignment
@@ -60,14 +62,17 @@
       get: function () { return dirty; },
       set: function (v) {
         dirty = !!v;
-        // Chapter bar gets a 'dirty' class that shows the amber save dot.
-        var cb = document.querySelector('.chapterbar');
-        if (cb) cb.classList.toggle('dirty', dirty);
-        // Legacy class on yaml/view save buttons.
-        ['vSaveBtn', 'yamlSaveBtn'].forEach(function (id) {
-          var b = $(id);
-          if (b) b.classList.toggle('dirty', dirty);
+        // The chapter's and the output's bars get a 'dirty' class that shows the amber save dot.
+        Array.prototype.forEach.call(document.querySelectorAll('.chapterbar'), function (cb) {
+          cb.classList.toggle('dirty', dirty);
         });
+        // Legacy class on the yaml save button.
+        var yb = $('yamlSaveBtn');
+        if (yb) yb.classList.toggle('dirty', dirty);
+        if (dirty) {
+          editGen++; // a save only clears "dirty" if nothing was edited after it started
+          scheduleAutosave(); // every edit source flips this, so autosave sees them all
+        }
       },
     });
   })();
@@ -108,45 +113,102 @@
     $('projName').textContent = p.project;
     $('projCode').textContent = p.code;
     $('projBlock').hidden = false;
-    $('navWrap').hidden = false;
     // The "Editing template" badge marks that every live save lands in the template
     // master — the footgun this whole workflow is designed around.
     $('tplBadge').hidden = !p.isTemplate;
-    // Word vector images need a one-shot conversion before they render — show the action
-    // (with the live count) only when the open project still has any.
-    var emfBtn = $('convertEmfBtn');
-    emfBtn.hidden = !(p.emfCount > 0);
-    if (p.emfCount > 0)
-      $('convertEmfLabel').textContent = 'Convert ' + p.emfCount + ' EMF/WMF…';
   }
 
+  // The project menu (the project's name in the header): everything that acts on the whole
+  // project. Word vector images need a one-shot conversion before they render — that item
+  // shows (with the live count) only while the open project still has any. The program's
+  // build date closes the menu, so "which version am I running" is one click away.
+  function projectMenu(anchor) {
+    var p = state.project;
+    var items = [
+      { text: 'Switch project…', run: closeProject },
+      { text: 'Open project folder', run: function () { api.send('POST', '/api/open-folder', {}).catch(quiet); } },
+      '-',
+      { text: 'Import Word document…', run: importDocx },
+      { text: 'Export PDF or HTML…', run: openExportPdf },
+    ];
+    if (p && p.emfCount > 0)
+      items.push({ text: 'Convert ' + p.emfCount + ' Word image' + (p.emfCount === 1 ? '' : 's') + ' to PNG…', run: convertEmf });
+    items.push('-',
+      { text: 'Save a copy as…', run: saveAs },
+      { text: 'Save as template…', run: saveAsTemplate });
+    if (state.buildStamp) items.push('-', { text: 'DocWiz build ' + state.buildStamp });
+    actionMenu(anchor, items);
+  }
+
+  // True while a tree name is being edited inline — a re-render (e.g. after an autosave)
+  // would throw the half-typed name away; renameInline re-renders when it finishes.
+  var treeRenaming = false;
+
   function renderTree(p) {
+    if (treeRenaming) return;
     var tree = $('tree');
     tree.innerHTML = '';
     // Word-style flat chapter numbers (1, 2, 3 … across the project); section
     // groups stay unnumbered — same scheme as the generated handover.
     var num = p.numbering;
     var chNo = 0;
-    p.sections.forEach(function (s) {
-      var grp = el('div', 'grp');
-      grp.appendChild(el('span', 'tree-label', s.title));
-      grp.appendChild(moveTools('section', function (dir) {
-        moveItem('/api/section-move', { folder: s.folder, direction: dir });
-      }));
+    p.sections.forEach(function (s, si) {
+      // Section header: the name (double-click renames the folder it IS), + adds a chapter
+      // here, ⋯ holds the rest. Dropping a dragged chapter on it appends it to this section.
+      var grp = el('div', 'grp tree-sec');
+      var secLabel = el('span', 'tree-label', s.title);
+      secLabel.title = s.title;
+      secLabel.ondblclick = function () {
+        renameInline(secLabel, s.title, function (name) { return renameSectionAt(si, name); });
+      };
+      grp.appendChild(secLabel);
+      grp.appendChild(treeAction('plus', 'Add a chapter to “' + s.title + '”', function () { newChapter(s.folder); }));
+      grp.appendChild(treeAction('more', 'Section actions', function (btn) { sectionMenu(btn, s, si, p.sections, secLabel); }));
+      dropTarget(grp, si, function () { return s.chapters.length; });
       tree.appendChild(grp);
-      s.chapters.forEach(function (c) {
+      if (!s.chapters.length) {
+        var empty = el('button', 'tree-empty', 'No chapters yet — add one');
+        empty.type = 'button';
+        empty.onclick = function () { newChapter(s.folder); };
+        dropTarget(empty, si, function () { return 0; });
+        tree.appendChild(empty);
+      }
+      s.chapters.forEach(function (c, ci) {
         chNo++;
+        // Chapter row: the link opens it; ⋯ for rename/move/delete; drag to move it (within
+        // or between sections); double-click the name to rename (title, H1 and file follow).
+        var row = el('div', 'tree-row');
+        row.draggable = true;
+        if (c.file === state.currentFile) row.classList.add('current');
+        // Preview as: a chapter this audience's outputs leave out is dimmed (still opens).
+        if (state.previewAudience && (c.audiences || []).indexOf(state.previewAudience) < 0) {
+          row.classList.add('dim');
+          row.setAttribute('data-tip', audienceTitle(state.previewAudience) + '’s outputs leave this chapter out.');
+        }
         var a = el('a');
-        a.appendChild(el('span', 'tree-label',
-          (num ? chNo + ' ' : '') + (c.title || c.file)));
-        a.appendChild(moveTools('chapter', function (dir) {
-          moveItem('/api/chapter-move', { file: c.file, direction: dir });
-        }));
+        var label = el('span', 'tree-label', (num ? chNo + ' ' : '') + (c.title || c.file));
+        label.title = c.title || c.file;
+        a.appendChild(label);
         a.href = '#';
         a.dataset.file = c.file;
-        if (c.file === state.currentFile) a.classList.add('current');
         a.onclick = function (e) { e.preventDefault(); openChapter(c.file); };
-        tree.appendChild(a);
+        label.ondblclick = function (e) {
+          e.preventDefault();
+          row.draggable = false;
+          renameInline(label, c.title, function (title) { return renameChapterTo(c, title); });
+        };
+        row.appendChild(a);
+        row.appendChild(treeAction('more', 'Chapter actions', function (btn) {
+          chapterMenu(btn, c, s, ci, p.sections, function () { label.ondblclick(new Event('dblclick')); });
+        }));
+        row.addEventListener('dragstart', function (e) {
+          dragging = { chapter: c, si: si, index: ci };
+          e.dataTransfer.effectAllowed = 'move';
+          try { e.dataTransfer.setData('text/plain', c.title || c.file); } catch (x) { /* some hosts refuse */ }
+        });
+        row.addEventListener('dragend', function () { dragging = null; clearDropMarks(); });
+        dropTarget(row, si, function () { return ci; });
+        tree.appendChild(row);
         // Subchapter outline (H2s and H3s), expanded for the open chapter only —
         // numbers match the handover's in-page heading numbers (N.1, N.1.1 …).
         if (c.file === state.currentFile) {
@@ -167,70 +229,903 @@
         }
       });
     });
-    tree.appendChild(el('div', 'grp', 'Views'));
-    p.views.forEach(function (v) {
-      var a = el('a', null, v.title + ' · ' + v.mode);
-      a.href = '#';
-      a.setAttribute('data-tip', 'Audience view for "' + v.audience + '" (' +
-        (v.mode === 'slides' ? 'presentation' : 'filtered page') +
-        '). Built from chapter sections — edit it visually here.');
-      if (v.file === state.currentView) a.classList.add('current');
-      a.onclick = function (e) { e.preventDefault(); openView(v.file); };
-      tree.appendChild(a);
-    });
-    var addView = el('a', 'tree-add', '+ New view');
-    addView.href = '#';
-    addView.onclick = function (e) { e.preventDefault(); newView(); };
-    tree.appendChild(addView);
-    var draftView = el('a', 'tree-add', 'Draft from manual…');
-    draftView.href = '#';
-    draftView.setAttribute('data-tip',
-      'Generate a starting slide deck from one chapter — a slide per section, each ' +
-      'showing the live chapter content. A first draft to trim and rearrange, not a ' +
-      'finished deck.');
-    draftView.onclick = function (e) { e.preventDefault(); draftFromManual(); };
-    tree.appendChild(draftView);
-
-    // Handover artifacts — things bundled into the handover beyond chapters/views.
-    tree.appendChild(el('div', 'grp', 'Handover artifacts'));
-    var attachItem = el('a', null, 'Attachments');
-    attachItem.href = '#';
-    attachItem.setAttribute('data-tip', 'Files in attachments/ (PDFs, datasheets) bundled on the handover Attachments tab.');
-    if (state.currentArtifact === 'attach') attachItem.classList.add('current');
-    attachItem.onclick = function (e) { e.preventDefault(); openAttach(); };
-    tree.appendChild(attachItem);
-    var docsItem = el('a', null, 'Documentation packages');
-    docsItem.href = '#';
-    docsItem.setAttribute('data-tip', 'External HTML documentation bundled as handover tabs — e.g. a generated API site shown under the API Reference tab.');
-    if (state.currentArtifact === 'docs') docsItem.classList.add('current');
-    docsItem.onclick = function (e) { e.preventDefault(); openDocs(); };
-    tree.appendChild(docsItem);
-
-    tree.appendChild(el('div', 'grp', 'Project'));
-    var m = el('a', null, 'Project settings');
-    m.href = '#';
-    m.setAttribute('data-tip', 'Project name, code, customer, version, language, audiences and handover output — plus app preferences. The interactive editor for docwiz.yaml (raw YAML lives under Advanced).');
-    if (state.currentArtifact === 'settings') m.classList.add('current');
-    m.onclick = function (e) { e.preventDefault(); openSettings(); };
-    tree.appendChild(m);
+    var addSection = el('button', 'tree-new-section', '+ New section');
+    addSection.type = 'button';
+    addSection.setAttribute('data-tip', 'Add a section to the manual. Its name becomes the folder name, so any name works except \\ / : * ? " < > |.');
+    addSection.onclick = function () {
+      promptDialog('New section', 'Name', 'e.g. Údržba', 'Create section', function (name) {
+        addSectionNamed(name).catch(quiet);
+      });
+    };
+    tree.appendChild(addSection);
+    renderOutputs(p);
   }
 
-  // ▲▼ reorder handles, revealed on hover. Spans, not <button>s — a button inside
-  // the chapter <a> would be invalid HTML and steal the row click.
-  function moveTools(what, onMove) {
-    var span = el('span', 'tree-tools');
-    [['▲', -1, 'up'], ['▼', 1, 'down']].forEach(function (d) {
-      var b = el('span', 'tbtn', d[0]);
-      b.setAttribute('data-tip', 'Move this ' + what + ' one position ' + d[2] +
-        '. Only the order number changes — links and views keep working (stable IDs).');
-      b.onclick = function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        onMove(d[1]);
-      };
-      span.appendChild(b);
+  /* ---------- sidebar tabs (Stage 6): Manual · Outputs · Files ----------
+     Opening something shows its tab; the tabs themselves only switch what the sidebar lists. */
+
+  function setSideTab(name) {
+    Array.prototype.forEach.call(document.querySelectorAll('.side-tabs [data-side]'), function (b) {
+      b.setAttribute('aria-selected', String(b.getAttribute('data-side') === name));
     });
-    return span;
+    $('tree').hidden = name !== 'manual';
+    $('outputsPane').hidden = name !== 'outputs';
+    $('filesPane').hidden = name !== 'files';
+    if (name === 'files') renderFiles();
+  }
+
+  // A sidebar row: a link that opens something (the tree's row recipe), current when open.
+  function sideLink(text, tip, isCurrent, onOpen) {
+    var a = el('a');
+    a.appendChild(el('span', 'tree-label', text));
+    a.href = '#';
+    if (tip) a.setAttribute('data-tip', tip);
+    if (isCurrent) a.classList.add('current');
+    a.onclick = function (e) { e.preventDefault(); onOpen(); };
+    return a;
+  }
+
+  function sideAction(text, tip, run) {
+    var b = el('button', 'tree-new-section', text);
+    b.type = 'button';
+    if (tip) b.setAttribute('data-tip', tip);
+    b.onclick = run;
+    return b;
+  }
+
+  // Outputs: the slide decks and documents built from the manual, then what the handover
+  // bundles besides them.
+  function renderOutputs(p) {
+    var pane = $('outputsPane');
+    pane.innerHTML = '';
+    [['slides', 'Slide decks', 'A click-through presentation'], ['document', 'Documents', 'One filtered page']]
+      .forEach(function (kind) {
+        var views = p.views.filter(function (v) { return (v.mode === 'slides') === (kind[0] === 'slides'); });
+        if (!views.length) return;
+        pane.appendChild(el('div', 'grp', kind[1]));
+        views.forEach(function (v) {
+          var a = sideLink(v.title, kind[2] + ' for ' + audienceTitle(v.audience) +
+            ' — built from the manual; edit it visually here.', v.file === state.currentView,
+            function () { openView(v.file); });
+          a.appendChild(el('span', 'side-meta', audienceTitle(v.audience)));
+          pane.appendChild(a);
+        });
+      });
+    if (!p.views.length) pane.appendChild(el('p', 'side-empty', 'No outputs yet. An output is a slide deck or a document for one audience, built from the manual.'));
+    pane.appendChild(sideAction('+ New output',
+      'Create a slide deck or a document for one audience.', newView));
+    pane.appendChild(sideAction('Draft slides from a chapter…',
+      'Generate a starting slide deck from one chapter — a slide per section, each showing the live chapter ' +
+      'content. A first draft to trim and rearrange, not a finished deck.', draftFromManual));
+
+    pane.appendChild(el('div', 'grp', 'Bundled with the handover'));
+    pane.appendChild(sideLink('Documentation packages',
+      'Separate HTML documentation shipped as its own tab in the handover — e.g. a generated API reference.',
+      state.currentArtifact === 'docs', openDocs));
+  }
+
+  // Files: the project's pictures and attachments. Clicking one puts it into the page being
+  // edited — through the same Insert dialogs as the toolbar, with that file already picked.
+  var IMAGE_EXT = /\.(png|jpe?g|gif|svg|webp|bmp)$/i;
+  function renderFiles() {
+    var pane = $('filesPane');
+    Promise.all([api.json('/api/assets'), api.json('/api/attachments')]).then(function (r) {
+      pane.innerHTML = '';
+      var pictures = (r[0].files || []).filter(function (f) { return IMAGE_EXT.test(f); });
+      var attachments = r[1].files || [];
+      pane.appendChild(el('div', 'grp', 'Pictures'));
+      if (!pictures.length) pane.appendChild(el('p', 'side-empty', 'No pictures yet — paste a screenshot into a chapter, or insert one from the toolbar.'));
+      pictures.forEach(function (name) {
+        var a = sideLink(baseName(name), 'Put this picture into the page you are editing (' + name + ').', false,
+          function () { insertFromFiles('image', name); });
+        var img = el('img', 'side-thumb');
+        img.src = '/assets/' + name.split('/').map(encodeURIComponent).join('/');
+        img.alt = '';
+        img.loading = 'lazy';
+        a.insertBefore(img, a.firstChild);
+        pane.appendChild(a);
+      });
+      pane.appendChild(el('div', 'grp', 'Attachments'));
+      if (!attachments.length) pane.appendChild(el('p', 'side-empty', 'No attachments yet — PDFs and datasheets that ship with the handover.'));
+      attachments.forEach(function (name) {
+        pane.appendChild(sideLink(baseName(name), 'Link this file from the page you are editing (' + name + ').', false,
+          function () { insertFromFiles('attachment', name); }));
+      });
+      var manage = sideAction('Manage attachments…', 'Upload or delete attachments — they ship on the handover’s Attachments tab.', openAttach);
+      if (state.currentArtifact === 'attach') manage.classList.add('current');
+      pane.appendChild(manage);
+    }).catch(function (e) { reportError(e.message || String(e)); });
+  }
+
+  function insertFromFiles(kind, name) {
+    var surface = window.DocWizEditor2 && window.DocWizEditor2.getActiveView && window.DocWizEditor2.getActiveView();
+    if (!surface || (!state.currentFile && !state.currentView)) {
+      noticeDialog('Open a page first', 'Open a chapter (or click into a slide) and put the cursor where the ' +
+        (kind === 'image' ? 'picture' : 'link') + ' should go — then click the file again.');
+      return;
+    }
+    inserters[kind](name);
+  }
+
+  /* ---------- structure editing in the tree (Stage 6 step 2) ----------
+     Sections and chapters are renamed, added, moved and deleted where the author sees them.
+     The folder name IS the section name and a chapter file follows its title, so each change
+     renames real folders and files; links use ids (ADR-005) and keep working. */
+
+  var TREE_ICONS = {
+    plus: '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg>',
+    more: '<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="3.5" cy="8" r="1.1"/><circle cx="8" cy="8" r="1.1"/><circle cx="12.5" cy="8" r="1.1"/></svg>',
+  };
+
+  // A hover-revealed action button on a tree row (always reachable by keyboard).
+  function treeAction(icon, label, onClick) {
+    var b = el('button', 'tree-act');
+    b.type = 'button';
+    b.innerHTML = TREE_ICONS[icon];
+    b.setAttribute('aria-label', label);
+    b.setAttribute('data-tip', label);
+    if (icon === 'more') b.setAttribute('aria-haspopup', 'menu');
+    b.onclick = function (e) { e.preventDefault(); e.stopPropagation(); onClick(b); };
+    return b;
+  }
+
+  // Runs a structure change. Pending edits of the open chapter are saved first (a rename or
+  // move renames its file); afterwards the tree reloads and the open chapter is found again by
+  // its id — the editor follows it when its file moved or opts.reopen says its title changed
+  // (in place, so the page's Ctrl+Z history stays).
+  function structureChange(method, url, body, opts) {
+    var before = state.dirty && state.currentFile ? saveChapter() : Promise.resolve();
+    return before
+      .then(function () { return api.send(method, url, body); })
+      .then(function (res) {
+        return loadProject().then(function () {
+          if (state.currentId && state.currentFile) {
+            var file = chapterFileFor(state.currentId);
+            if (!file) { state.currentFile = null; state.currentId = null; show('welcome'); }
+            else if (file !== state.currentFile || (opts && opts.reopen)) {
+              var was = state.currentFile;
+              state.currentFile = file;
+              window.DocWizEditor2.follow(was, file).catch(function (e) { reportError(e.message); });
+            }
+            if (file) { renderTree(state.project); updateCrumb(); renderProps(); }
+          }
+          return res;
+        });
+      })
+      .catch(function (e) {
+        showToast('Not changed', e.message || String(e), 'error');
+        renderTree(state.project);
+        throw e;
+      });
+  }
+
+  // Inline rename in the tree: Enter or leaving the field saves, Esc cancels.
+  function renameInline(labelEl, current, commit) {
+    var input = el('input', 'tree-rename');
+    input.type = 'text';
+    input.value = current;
+    input.setAttribute('aria-label', 'New name');
+    labelEl.replaceWith(input);
+    input.focus();
+    input.select();
+    treeRenaming = true;
+    var done = false;
+    function finish(save) {
+      if (done) return;
+      done = true;
+      treeRenaming = false;
+      var v = input.value.trim();
+      if (save && v && v !== current) commit(v).catch(quiet);
+      else renderTree(state.project);
+    }
+    input.onkeydown = function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(false); }
+    };
+    input.onblur = function () { finish(true); };
+    input.onclick = function (e) { e.preventDefault(); e.stopPropagation(); };
+  }
+
+  /* Ctrl+Z for the sidebar (Stage 6). Each change made there records a step in the editor's
+     one undo order (DocWizEditor2.recordStep) — how to take it back and how to do it again —
+     so Ctrl+Z / Ctrl+Y and the toolbar take sidebar changes and page edits newest first. A
+     step finds its chapter again by id and its section by position, which still hold after
+     the renumbering a change does to its neighbours. A toast says what changed, with Undo. */
+  function undoable(title, what, undo, redo) {
+    var E = window.DocWizEditor2;
+    if (!E || !E.recordStep) return;
+    function run(fn, done) {
+      return function () {
+        return Promise.resolve().then(fn).then(
+          function () { showToast(done, title + '.', 'success'); },
+          function (e) { showToast('Not changed', e.message || String(e), 'error'); throw e; });
+      };
+    }
+    var step = { undo: run(undo, 'Undone'), redo: run(redo, 'Redone') };
+    E.recordStep(step);
+    var toast = showToast(title, what, 'success');
+    var b = el('button', 'hist-link', 'Undo');
+    b.type = 'button';
+    b.onclick = function () { toast.classList.remove('show'); E.undoStep(step); };
+    toast.appendChild(b);
+  }
+
+  function folderAt(si) {
+    var s = state.project.sections[si];
+    if (!s) throw new Error('That section is no longer there.');
+    return s.folder;
+  }
+  function fileOf(id) {
+    var file = chapterFileFor(id);
+    if (!file) throw new Error('That chapter is no longer there.');
+    return file;
+  }
+  function sectionIndex(folder) {
+    return state.project.sections.map(function (s) { return s.folder; }).indexOf(folder);
+  }
+
+  // The sidebar's changes, each addressed by what holds while others happen around it.
+  var change = {
+    renameSection: function (si, name) { return structureChange('POST', '/api/section-rename', { folder: folderAt(si), name: name }); },
+    moveSection: function (si, dir) { return structureChange('POST', '/api/section-move', { folder: folderAt(si), direction: dir }); },
+    addSection: function (name) { return structureChange('POST', '/api/section', { name: name }); },
+    deleteSection: function (si) { return structureChange('DELETE', '/api/section?folder=' + encodeURIComponent(folderAt(si))); },
+    renameChapter: function (id, title) {
+      var file = fileOf(id);
+      return structureChange('POST', '/api/chapter-rename', { file: file, title: title }, { reopen: file === state.currentFile });
+    },
+    moveChapter: function (id, dir) { return structureChange('POST', '/api/chapter-move', { file: fileOf(id), direction: dir }); },
+    moveChapterTo: function (id, si, index) {
+      return structureChange('POST', '/api/chapter-move-to', { file: fileOf(id), folder: folderAt(si), index: index });
+    },
+    deleteChapter: function (id) { return structureChange('DELETE', '/api/chapter?file=' + encodeURIComponent(fileOf(id))); },
+    // Back from Recently deleted: the newest copy of the file that was at `path`.
+    restoreChapter: function (path) {
+      return api.json('/api/history/project').then(function (h) {
+        var hit = h.deleted.filter(function (d) { return d.path === path; })
+          .sort(function (a, b) { return a.stamp < b.stamp ? 1 : -1; })[0];
+        if (!hit) throw new Error('It is no longer in Recently deleted.');
+        return structureChange('POST', '/api/history/deleted-restore', { stamp: hit.stamp, path: hit.path });
+      });
+    },
+  };
+
+  function renameSectionAt(si, name) {
+    var before = state.project.sections[si].title;
+    return change.renameSection(si, name).then(function () {
+      undoable('Section renamed', '“' + before + '” is now “' + name + '”.',
+        function () { return change.renameSection(si, before); },
+        function () { return change.renameSection(si, name); });
+    });
+  }
+
+  function moveSectionAt(si, dir) {
+    var title = state.project.sections[si].title;
+    return change.moveSection(si, dir).then(function () {
+      undoable('Section moved', '“' + title + '” moved ' + (dir < 0 ? 'up' : 'down') + '.',
+        function () { return change.moveSection(si + dir, -dir); },
+        function () { return change.moveSection(si, dir); });
+    });
+  }
+
+  function addSectionNamed(name) {
+    return change.addSection(name).then(function (res) {
+      var si = sectionIndex(res.folder);
+      undoable('Section added', '“' + name + '” added.',
+        function () { return change.deleteSection(si); },
+        function () { return change.addSection(name); });
+    });
+  }
+
+  function removeSectionAt(si) {
+    var title = state.project.sections[si].title;
+    return change.deleteSection(si).then(function () {
+      undoable('Section deleted', '“' + title + '” deleted.',
+        function () {
+          // A new section comes last: move it back up to where it was.
+          return change.addSection(title).then(function (res) {
+            var chain = Promise.resolve();
+            for (var at = sectionIndex(res.folder); at > si; at--) chain = chain.then(change.moveSection.bind(null, at, -1));
+            return chain;
+          });
+        },
+        function () { return change.deleteSection(si); });
+    });
+  }
+
+  function renameChapterTo(c, title) {
+    var before = c.title;
+    return change.renameChapter(c.id, title).then(function () {
+      undoable('Chapter renamed', '“' + before + '” is now “' + title + '”.',
+        function () { return change.renameChapter(c.id, before); },
+        function () { return change.renameChapter(c.id, title); });
+    });
+  }
+
+  function moveChapterBy(c, dir) {
+    return change.moveChapter(c.id, dir).then(function () {
+      undoable('Chapter moved', '“' + c.title + '” moved ' + (dir < 0 ? 'up' : 'down') + '.',
+        function () { return change.moveChapter(c.id, -dir); },
+        function () { return change.moveChapter(c.id, dir); });
+    });
+  }
+
+  // From place ci of section si to place `index` among the chapters of section ti.
+  function moveChapterInto(c, si, ci, ti, index) {
+    var into = state.project.sections[ti].title;
+    return change.moveChapterTo(c.id, ti, index).then(function () {
+      undoable('Chapter moved', '“' + c.title + '” moved' + (ti === si ? '.' : ' to “' + into + '”.'),
+        function () { return change.moveChapterTo(c.id, si, ci); },
+        function () { return change.moveChapterTo(c.id, ti, index); });
+    });
+  }
+
+  // A new chapter (newChapter's dialog), and the section made for it when withSection.
+  function chapterAdded(c, si, withSection) {
+    var section = state.project.sections[si].title, path = c.file;
+    undoable('Chapter added', '“' + c.title + '” added to “' + section + '”.',
+      function () {
+        path = fileOf(c.id);
+        return change.deleteChapter(c.id).then(function () { return withSection ? change.deleteSection(si) : null; });
+      },
+      function () {
+        return (withSection ? change.addSection(section) : Promise.resolve())
+          .then(function () { return change.restoreChapter(path); });
+      });
+  }
+
+  // A deleted chapter (deleteChapter's dialog) comes back from Recently deleted — and opens
+  // again if it was the open one.
+  function chapterDeleted(id, title, path, wasOpen) {
+    undoable('Chapter deleted', '“' + title + '” moved to Recently deleted.',
+      function () {
+        return change.restoreChapter(path).then(function () { if (wasOpen) openChapter(fileOf(id)); });
+      },
+      function () { path = fileOf(id); return change.deleteChapter(id); });
+  }
+
+  // Drag a chapter onto another chapter (lands before it) or onto a section header (lands at
+  // its end). Indexes are positions in the target section without the dragged chapter.
+  var dragging = null;
+  function clearDropMarks() {
+    Array.prototype.forEach.call(document.querySelectorAll('#tree .drop-target'), function (n) {
+      n.classList.remove('drop-target');
+    });
+  }
+  function dropTarget(elm, ti, indexOf) {
+    elm.addEventListener('dragover', function (e) {
+      if (!dragging) return;
+      e.preventDefault();
+      if (!elm.classList.contains('drop-target')) { clearDropMarks(); elm.classList.add('drop-target'); }
+    });
+    elm.addEventListener('drop', function (e) {
+      e.preventDefault();
+      clearDropMarks();
+      var d = dragging; dragging = null;
+      if (!d) return;
+      var index = indexOf();
+      if (d.si === ti && d.index < index) index--; // it leaves its old slot first
+      if (d.si === ti && d.index === index) return;
+      moveChapterInto(d.chapter, d.si, d.index, ti, index).catch(quiet);
+    });
+  }
+
+  // The editor's action menus — tree ⋯, the project menu, the document bar's ⋯, Readers and
+  // Preview as — are one function on the shared context-menu recipe (.e2-menu). Items: '-'
+  // (separator), { text } (a label), { text, hint, run, danger }, or a checkable
+  // { text, hint, checked: fn, run } that stays open so several can be ticked in a row (every
+  // tick is re-read after each run, so one item may change others). opts.filter adds a box
+  // that narrows the checkable items by name — for long audience lists.
+  var openMenu = null;
+  function closeActionMenu() {
+    if (!openMenu) return;
+    openMenu.menu.remove();
+    openMenu.anchor.setAttribute('aria-expanded', 'false');
+    openMenu = null;
+  }
+  var CHECK_ICON = '<svg class="mcheck" viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 8.5l3 3 6-7"/></svg>';
+  function actionMenu(anchor, items, opts) {
+    closeActionMenu();
+    var menu = el('div', 'e2-menu tree-menu');
+    menu.setAttribute('role', 'menu');
+    var checks = [];
+    function syncAll() {
+      checks.forEach(function (c) {
+        var on = !!c.it.checked();
+        c.b.classList.toggle('on', on);
+        c.b.setAttribute('aria-checked', String(on));
+      });
+    }
+    var box = null;
+    if (opts && opts.filter) {
+      box = el('input', 'mfilter');
+      box.type = 'search';
+      box.placeholder = opts.filter;
+      box.setAttribute('aria-label', opts.filter);
+      box.oninput = function () {
+        var q = box.value.trim().toLowerCase();
+        checks.forEach(function (c) {
+          c.b.hidden = !!q && c.it.filterable !== false &&
+            (c.it.text + ' ' + (c.it.hint || '')).toLowerCase().indexOf(q) < 0;
+        });
+      };
+      menu.appendChild(box);
+    }
+    items.forEach(function (it) {
+      if (it === '-') { menu.appendChild(el('div', 'msep')); return; }
+      if (!it.run) { menu.appendChild(el('div', 'mlabel', it.text)); return; }
+      var checkable = typeof it.checked === 'function';
+      var b = el('button', 'mi' + (it.danger ? ' danger' : '') + (checkable ? ' mcheckable' : ''));
+      b.type = 'button';
+      b.setAttribute('role', checkable ? 'menuitemcheckbox' : 'menuitem');
+      var lbl = el('span', 'mlbl', it.text);
+      if (it.hint) lbl.appendChild(el('small', 'mhint', it.hint));
+      b.appendChild(lbl);
+      if (checkable) {
+        b.insertAdjacentHTML('beforeend', CHECK_ICON);
+        checks.push({ it: it, b: b });
+        b.onclick = function () { it.run(); syncAll(); };
+      } else {
+        b.onclick = function () { closeActionMenu(); it.run(); };
+      }
+      menu.appendChild(b);
+    });
+    syncAll();
+    document.body.appendChild(menu);
+    var r = anchor.getBoundingClientRect();
+    var top = r.bottom + 4;
+    if (top + menu.offsetHeight > window.innerHeight - 8) top = Math.max(8, r.top - menu.offsetHeight - 4);
+    menu.style.top = top + 'px';
+    menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - menu.offsetWidth - 8)) + 'px';
+    anchor.setAttribute('aria-expanded', 'true');
+    openMenu = { menu: menu, anchor: anchor };
+    var first = box || menu.querySelector('button');
+    if (first) first.focus();
+  }
+  document.addEventListener('mousedown', function (e) {
+    if (openMenu && !openMenu.menu.contains(e.target) && !openMenu.anchor.contains(e.target)) closeActionMenu();
+  });
+  window.addEventListener('scroll', function (e) {
+    if (openMenu && !openMenu.menu.contains(e.target)) closeActionMenu(); // a long menu may scroll itself
+  }, true);
+  // Arrow keys move between a menu's items (Tab still leaves it).
+  document.addEventListener('keydown', function (e) {
+    if (!openMenu || (e.key !== 'ArrowDown' && e.key !== 'ArrowUp')) return;
+    var btns = Array.prototype.slice.call(openMenu.menu.querySelectorAll('button')).filter(function (b) { return !b.hidden; });
+    var i = btns.indexOf(document.activeElement), down = e.key === 'ArrowDown', n = btns.length;
+    e.preventDefault();
+    btns[i < 0 ? (down ? 0 : n - 1) : (i + (down ? 1 : n - 1)) % n].focus();
+  });
+
+  function sectionMenu(anchor, s, si, sections, labelEl) {
+    var items = [
+      { text: 'Rename section', run: function () { labelEl.ondblclick(); } },
+      { text: 'Add a chapter here', run: function () { newChapter(s.folder); } },
+    ];
+    if (si > 0) items.push({ text: 'Move up', run: function () { moveSectionAt(si, -1).catch(quiet); } });
+    if (si < sections.length - 1) items.push({ text: 'Move down', run: function () { moveSectionAt(si, 1).catch(quiet); } });
+    items.push('-', { text: 'Delete section…', danger: true, run: function () { deleteSection(s, si); } });
+    actionMenu(anchor, items);
+  }
+
+  // One chapter menu for the tree's ⋯ and the document bar's ⋯. rename() starts the inline
+  // rename on the chapter's tree row.
+  function chapterMenu(anchor, c, s, ci, sections, rename) {
+    var items = [{ text: 'Rename', run: rename }];
+    if (ci > 0) items.push({ text: 'Move up', run: function () { moveChapterBy(c, -1).catch(quiet); } });
+    if (ci < s.chapters.length - 1) items.push({ text: 'Move down', run: function () { moveChapterBy(c, 1).catch(quiet); } });
+    var others = sections.filter(function (x) { return x.folder !== s.folder; });
+    if (others.length) {
+      items.push('-', { text: 'Move to section' });
+      others.forEach(function (o) {
+        items.push({ text: o.title, run: function () {
+          moveChapterInto(c, sections.indexOf(s), ci, sections.indexOf(o), o.chapters.length).catch(quiet);
+        } });
+      });
+    }
+    items.push('-', { text: 'Delete chapter…', danger: true, run: function () { deleteChapter(c.file); } });
+    actionMenu(anchor, items);
+  }
+
+  // The document bar's ⋯: the open chapter's tree menu. Rename shows the Manual tab and
+  // renames on the chapter's row there.
+  function docBarMenu(anchor) {
+    var p = state.project, where = findChapterByFile(state.currentFile);
+    if (!where) return;
+    chapterMenu(anchor, where.chapter, where.section, where.section.chapters.indexOf(where.chapter), p.sections, function () {
+      setSideTab('manual');
+      var label = document.querySelector('#tree .tree-row.current .tree-label');
+      if (label) { label.scrollIntoView({ block: 'nearest' }); label.ondblclick(new Event('dblclick')); }
+    });
+  }
+
+  function deleteSection(s, si) {
+    if (s.chapters.length) {
+      noticeDialog('“' + s.title + '” still has chapters',
+        'Move its ' + s.chapters.length + ' chapter' + (s.chapters.length === 1 ? '' : 's') +
+        ' to another section or delete ' + (s.chapters.length === 1 ? 'it' : 'them') + ' first, then delete the section.');
+      return;
+    }
+    confirmDialog('Delete “' + s.title + '”?', 'The empty section and its folder are removed. Ctrl+Z brings it back.', 'Delete section', function () {
+      removeSectionAt(si).catch(quiet);
+    }, true);
+  }
+
+  /* ---------- change history (Stage 6 step 3) ----------
+     The History panel beside the chapter: this chapter's timeline (compare any entry with now,
+     restore it — a restore is itself a new entry, so it can be undone) and the project's named
+     versions and recently deleted files. All of it lives in .docwiz/history; pending edits are
+     always saved before anything is restored, so nothing current is lost. */
+
+  var hist = { open: false, scope: 'chapter', comparing: null, undo: null };
+  var HIST_LABEL = { original: 'As it was before history started', save: 'Saved', rename: 'Renamed' };
+  var DELETED_KIND = { chapter: 'Chapter', view: 'Output', attachment: 'Attachment', image: 'Image', file: 'File' };
+
+  function clockTime(iso) { return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
+  function dayLabel(iso) {
+    var d = new Date(iso), today = new Date(), yesterday = new Date();
+    yesterday.setDate(today.getDate() - 1);
+    if (d.toDateString() === today.toDateString()) return 'Today';
+    if (d.toDateString() === yesterday.toDateString()) return 'Yesterday';
+    return d.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short',
+      year: d.getFullYear() === today.getFullYear() ? undefined : 'numeric' });
+  }
+  function whenLabel(iso) {
+    var day = dayLabel(iso);
+    return (day === 'Today' ? 'today' : day === 'Yesterday' ? 'yesterday' : day) + ' at ' + clockTime(iso);
+  }
+  function entryLabel(e) {
+    return e.kind === 'restore' ? 'Restored the version from ' + whenLabel(e.restoredFrom) : (HIST_LABEL[e.kind] || 'Saved');
+  }
+  function audienceTitle(id) {
+    var a = (state.project.audiences || []).filter(function (x) { return x.id === id; })[0];
+    return a ? a.title : id;
+  }
+  function saveIfDirty() {
+    return state.dirty && state.currentFile ? saveChapter() : Promise.resolve();
+  }
+
+  // History and Properties share the space beside the page: opening one closes the other.
+  function toggleHistory(open) {
+    hist.open = open === undefined ? !hist.open : !!open;
+    $('histPanel').hidden = !hist.open;
+    $('cbHistoryBtn').setAttribute('aria-pressed', String(hist.open));
+    if (!hist.open) endCompare();
+    else { toggleProps(false); refreshHistory(); }
+  }
+
+  function refreshHistory() {
+    if (!hist.open) return;
+    Array.prototype.forEach.call(document.querySelectorAll('#histPanel [data-hscope]'), function (b) {
+      b.setAttribute('aria-selected', String(b.getAttribute('data-hscope') === hist.scope));
+    });
+    $('histChapter').hidden = hist.scope !== 'chapter';
+    $('histAll').hidden = hist.scope !== 'all';
+    $('histProject').hidden = hist.scope !== 'project';
+    if (hist.scope === 'chapter') loadChapterHistory();
+    else if (hist.scope === 'all') loadAllHistory();
+    else loadProjectHistory();
+  }
+
+  // A newly opened chapter starts with no comparison and no pending undo.
+  function historyChapterChanged() {
+    hist.undo = null;
+    endCompare();
+  }
+
+  function loadChapterHistory() {
+    var box = $('histChapter');
+    if (!state.currentFile) { box.innerHTML = ''; return; }
+    api.json('/api/history?file=' + encodeURIComponent(state.currentFile)).then(function (r) {
+      box.innerHTML = '';
+      if (hist.undo) {
+        var note = el('div', 'hist-note');
+        note.appendChild(el('span', null, 'Restored the version from ' + hist.undo.label + '.'));
+        var undo = el('button', 'hist-link', 'Undo');
+        undo.type = 'button';
+        undo.onclick = function () {
+          var target = hist.undo;
+          hist.undo = null;
+          restoreEntry({ id: target.entryId }, { undoing: true });
+        };
+        note.appendChild(undo);
+        box.appendChild(note);
+      }
+      if (!r.entries.length) {
+        box.appendChild(el('p', 'hist-empty', 'No history yet. From now on, every save of this chapter is kept here.'));
+        return;
+      }
+      var lastDay = null;
+      r.entries.forEach(function (e) {
+        var day = dayLabel(e.utc);
+        if (day !== lastDay) { box.appendChild(el('div', 'hist-day', day)); lastDay = day; }
+        var b = el('button', 'hist-entry' + (e.current ? ' current' : '') +
+          (hist.comparing && hist.comparing.id === e.id ? ' on' : '') + (!hist.comparing && e.current ? ' on' : ''));
+        b.type = 'button';
+        b.appendChild(el('span', 'hist-time', clockTime(e.utc)));
+        var text = el('span', 'hist-text');
+        text.appendChild(el('span', null, e.current ? 'Current version' : entryLabel(e)));
+        if (e.current) text.appendChild(el('small', null, entryLabel(e)));
+        b.appendChild(text);
+        b.onclick = function () { if (e.current) endCompare(); else compareWith(e); };
+        box.appendChild(b);
+      });
+    }).catch(function (e) {
+      box.innerHTML = '';
+      box.appendChild(el('p', 'hist-empty', e.message || String(e)));
+    });
+  }
+
+  function compareWith(entry) {
+    saveIfDirty()
+      .then(function () {
+        return api.json('/api/history/compare?file=' + encodeURIComponent(state.currentFile) +
+          '&entry=' + encodeURIComponent(entry.id));
+      })
+      .then(function (r) { hist.comparing = entry; renderCompare(entry, r); refreshHistory(); })
+      .catch(function (e) { showToast('Can’t show that version', e.message || String(e), 'error'); });
+  }
+
+  /* All chapters: every chapter's changes in one list, newest first. A row opens its chapter
+     and compares that version with now — what a row in This chapter does — and the list stays,
+     so the changes can be gone through one after another. */
+  var ALL_PAGE = 50;
+  function loadAllHistory() {
+    var box = $('histAll');
+    var scroll = box.scrollTop; // a re-draw (another chapter opened) keeps the place
+    api.json('/api/history/all').then(function (r) {
+      box.innerHTML = '';
+      if (!r.entries.length) {
+        box.appendChild(el('p', 'hist-empty', 'No changes yet. From now on, every save of every chapter is listed here.'));
+        return;
+      }
+      var shown = 0, lastDay = null, more = null;
+      function upTo(n) {
+        if (more) more.remove();
+        r.entries.slice(shown, n).forEach(function (e) {
+          var day = dayLabel(e.utc);
+          if (day !== lastDay) { box.appendChild(el('div', 'hist-day', day)); lastDay = day; }
+          var here = e.file === state.currentFile;
+          var on = here && (hist.comparing ? hist.comparing.id === e.id : e.current);
+          var b = el('button', 'hist-entry' + (on ? ' on' : ''));
+          b.type = 'button';
+          b.appendChild(el('span', 'hist-time', clockTime(e.utc)));
+          var text = el('span', 'hist-text');
+          text.appendChild(el('span', null, e.title));
+          text.appendChild(el('small', null, entryLabel(e) + (e.current ? ' · current version' : '')));
+          b.appendChild(text);
+          b.onclick = function () { showEntry(e); };
+          box.appendChild(b);
+        });
+        shown = hist.allShown = Math.min(n, r.entries.length);
+        if (shown < r.entries.length) {
+          more = el('button', 'hist-mark', 'Show older changes');
+          more.type = 'button';
+          more.onclick = function () { upTo(shown + ALL_PAGE); };
+          box.appendChild(more);
+        }
+      }
+      upTo(Math.max(hist.allShown || 0, ALL_PAGE));
+      box.scrollTop = scroll;
+    }).catch(function (e) {
+      box.innerHTML = '';
+      box.appendChild(el('p', 'hist-empty', e.message || String(e)));
+    });
+  }
+
+  function showEntry(e) {
+    saveIfDirty()
+      .then(function () { return e.file === state.currentFile ? null : openChapter(e.file); })
+      .then(function () {
+        if (!e.current) compareWith(e);
+        else if (hist.comparing) endCompare();
+        else refreshHistory();
+      })
+      .catch(function (x) { showToast('Can’t show that version', x.message || String(x), 'error'); });
+  }
+
+  // The older version reads like the page: the same pipeline HTML, with blocks removed since
+  // marked red and blocks added since marked green (classes on each block — no wrappers, so the
+  // page's own styles and numbering apply unchanged).
+  function renderCompare(entry, r) {
+    var view = $('histCompare');
+    view.innerHTML = '';
+    var bar = el('div', 'hist-banner');
+    var msg = el('span', 'hist-banner-text');
+    msg.innerHTML = 'Comparing the version from <b>' + esc(whenLabel(entry.utc)) + '</b> with now. ' +
+      '<span class="hist-key hist-key-ins">added since</span> <span class="hist-key hist-key-del">removed since</span>';
+    var restore = el('button', null, 'Restore this version');
+    restore.type = 'button';
+    restore.onclick = function () { restoreEntry(entry); };
+    var back = el('button', null, 'Back to now');
+    back.type = 'button';
+    back.onclick = endCompare;
+    bar.appendChild(msg); bar.appendChild(restore); bar.appendChild(back);
+    view.appendChild(bar);
+
+    var notes = [];
+    if (r.titleBefore !== r.titleNow) notes.push('The title was “' + r.titleBefore + '”.');
+    if (r.audiencesBefore.join() !== r.audiencesNow.join())
+      notes.push('Readers were: ' + (r.audiencesBefore.map(audienceTitle).join(', ') || 'none') + '.');
+    if (!r.blocks.some(function (b) { return b.state !== 'same'; })) notes.push('The text is the same as now.');
+    if (notes.length) view.appendChild(el('p', 'hist-meta', notes.join(' ')));
+
+    var article = el('article');
+    var live = document.querySelector('#editor2 > article');
+    if (live && live.hasAttribute('data-num')) {
+      article.setAttribute('data-num', '');
+      article.style.setProperty('--dwch', live.style.getPropertyValue('--dwch'));
+    }
+    r.blocks.forEach(function (b) {
+      var tpl = document.createElement('template');
+      tpl.innerHTML = b.html;
+      Array.prototype.slice.call(tpl.content.children).forEach(function (node) {
+        if (b.state !== 'same') node.classList.add('hist-' + b.state);
+        article.appendChild(node);
+      });
+    });
+    view.appendChild(article);
+    $('editor2').hidden = true;
+    view.hidden = false;
+    view.scrollTop = 0;
+  }
+
+  function endCompare() {
+    var was = !!hist.comparing;
+    hist.comparing = null;
+    $('histCompare').hidden = true;
+    $('histCompare').innerHTML = '';
+    $('editor2').hidden = false;
+    if (was && hist.open) refreshHistory();
+  }
+
+  function restoreEntry(entry, opts) {
+    saveIfDirty()
+      .then(function () {
+        return api.send('POST', '/api/history/restore', { file: state.currentFile, entry: entry.id });
+      })
+      .then(function (res) {
+        state.currentFile = res.file;
+        hist.comparing = null;
+        endCompare();
+        return loadProject().then(function () {
+          updateCrumb();
+          var where = findChapterByFile(state.currentFile);
+          if (where) setReaders(where.chapter.audiences || []); // the restored version's readers
+          mountLiveEditor();
+          return api.json('/api/history?file=' + encodeURIComponent(state.currentFile));
+        });
+      })
+      .then(function (r) {
+        // The entry before the restore is the state it replaced — Undo puts that back.
+        hist.undo = opts && opts.undoing ? null
+          : { label: whenLabel(entry.utc), entryId: r.entries[1] && r.entries[1].id };
+        if (hist.undo && !hist.undo.entryId) hist.undo = null;
+        refreshHistory();
+        setStatus(opts && opts.undoing ? 'Restore undone' : 'Restored ✓', 'ok');
+      })
+      .catch(function (e) { showToast('Not restored', e.message || String(e), 'error'); });
+  }
+
+  function loadProjectHistory() {
+    var box = $('histProject');
+    api.json('/api/history/project').then(function (r) {
+      box.innerHTML = '';
+      box.appendChild(el('div', 'hist-day', 'Named versions'));
+      if (!r.versions.length)
+        box.appendChild(el('p', 'hist-empty', 'None yet. Mark one before you send a handover, so you can always get back to it.'));
+      r.versions.forEach(function (v) {
+        var row = el('div', 'hist-row');
+        var text = el('span', 'hist-text');
+        text.appendChild(el('b', null, v.name));
+        text.appendChild(el('small', null, whenLabel(v.utc)));
+        var acts = el('span', 'hist-acts');
+        var rs = el('button', 'hist-link', 'Restore…');
+        rs.type = 'button';
+        rs.onclick = function () { restoreVersion(v); };
+        var del = el('button', 'hist-link danger', 'Delete');
+        del.type = 'button';
+        del.onclick = function () {
+          confirmDialog('Delete the version “' + v.name + '”?', 'Only this saved copy goes. Your documentation is not affected.',
+            'Delete version', function () {
+              api.send('DELETE', '/api/history/version?id=' + encodeURIComponent(v.id))
+                .then(loadProjectHistory).catch(function (e) { showToast('Not deleted', e.message || String(e), 'error'); });
+            }, true);
+        };
+        acts.appendChild(rs); acts.appendChild(del);
+        row.appendChild(text); row.appendChild(acts);
+        box.appendChild(row);
+      });
+      var mark = el('button', 'hist-mark', 'Mark a version…');
+      mark.type = 'button';
+      mark.onclick = markVersion;
+      box.appendChild(mark);
+
+      box.appendChild(el('div', 'hist-day', 'Recently deleted'));
+      if (!r.deleted.length)
+        box.appendChild(el('p', 'hist-empty', 'Nothing deleted. Deleted chapters, outputs and attachments wait here until you clean up.'));
+      r.deleted.forEach(function (d) {
+        var row = el('div', 'hist-row');
+        var text = el('span', 'hist-text');
+        text.appendChild(el('b', null, d.title));
+        text.appendChild(el('small', null, (DELETED_KIND[d.kind] || 'File') + ' · deleted ' + whenLabel(d.utc)));
+        var rs = el('button', 'hist-link', 'Restore');
+        rs.type = 'button';
+        rs.onclick = function () {
+          api.send('POST', '/api/history/deleted-restore', { stamp: d.stamp, path: d.path })
+            .then(function (res) {
+              showToast('Restored', '“' + d.title + '” is back (' + res.path + ').', 'success');
+              return loadProject().then(loadProjectHistory);
+            })
+            .catch(function (e) { showToast('Not restored', e.message || String(e), 'error'); });
+        };
+        row.appendChild(text); row.appendChild(rs);
+        box.appendChild(row);
+      });
+
+      var foot = el('div', 'hist-foot');
+      foot.appendChild(el('span', null, 'History uses ' + fmtBytes(r.stats.bytes) + '. '));
+      var manage = el('button', 'hist-link', 'Clean up…');
+      manage.type = 'button';
+      manage.onclick = function () { openSettings('history'); };
+      foot.appendChild(manage);
+      box.appendChild(foot);
+    }).catch(function (e) {
+      box.innerHTML = '';
+      box.appendChild(el('p', 'hist-empty', e.message || String(e)));
+    });
+  }
+
+  function markVersion() {
+    promptDialog('Mark a version', 'Name', 'e.g. Handover to customer 1.0', 'Mark version', function (name) {
+      saveIfDirty()
+        .then(function () { return api.send('POST', '/api/history/version', { name: name }); })
+        .then(function () {
+          showToast('Version marked', '“' + name + '” is kept until you delete it.', 'success');
+          refreshHistory();
+        })
+        .catch(function (e) { showToast('Not marked', e.message || String(e), 'error'); });
+    });
+  }
+
+  function restoreVersion(v) {
+    confirmDialog('Restore the whole project to “' + v.name + '”?',
+      'Every chapter and output goes back to how it was then; images and attachments are not affected. ' +
+      'The current state is kept as a version first, so you can come back to it.',
+      'Restore project', function () {
+        saveIfDirty()
+          .then(function () { return api.send('POST', '/api/history/version-restore', { id: v.id }); })
+          .then(function () {
+            flashAfterReload('Project restored', 'Back to “' + v.name + '”. The state before is kept as “Before restoring ' + v.name + '”.');
+            location.hash = '';
+            location.reload();
+          })
+          .catch(function (e) { showToast('Not restored', e.message || String(e), 'error'); });
+      }, true);
+  }
+
+  function loadHistoryStats() {
+    api.json('/api/history/project').then(function (r) {
+      var s = r.stats;
+      $('histStats').textContent = fmtBytes(s.bytes) + ' — ' + s.snapshots + ' saved version' + (s.snapshots === 1 ? '' : 's') +
+        ' of files, ' + s.versions + ' named version' + (s.versions === 1 ? '' : 's') + ', ' + s.deleted + ' deleted file' + (s.deleted === 1 ? '' : 's') + '.';
+    }).catch(function (e) { $('histStats').textContent = e.message || String(e); });
+  }
+
+  function cleanUpHistory() {
+    var sel = $('histCleanAge');
+    var days = parseInt(sel.value, 10);
+    var label = sel.options[sel.selectedIndex].textContent.toLowerCase();
+    confirmDialog('Remove history ' + label + '?',
+      'Older saves and deleted files go for good. Named versions and your documentation are not affected.',
+      'Clean up', function () {
+        api.send('POST', '/api/history/cleanup', { days: days })
+          .then(function (res) {
+            showToast('Cleaned up', res.removed + ' old entr' + (res.removed === 1 ? 'y' : 'ies') + ' removed.', 'success');
+            loadHistoryStats();
+          })
+          .catch(function (e) { showToast('Not cleaned up', e.message || String(e), 'error'); });
+      }, true);
   }
 
   // By POSITION, not text — heading text differs between surfaces (markdown
@@ -248,26 +1143,6 @@
     var bar = scroller && scroller.querySelector('.e2-top');
     if (scroller) scroller.style.scrollPaddingTop = (bar ? bar.offsetHeight : 0) + 'px';
     target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-
-  function moveItem(url, body) {
-    // fmId is now a chip div; read the slug span for the chapter id.
-    var fmIdEl = $('fmId');
-    var openId = state.currentFile ? (fmIdEl && fmIdEl.querySelector('.cb-id-slug') ? fmIdEl.querySelector('.cb-id-slug').textContent : null) : null;
-    api.send('POST', url, body)
-      .then(loadProject)
-      .then(function () {
-        // Renumbering may have renamed the open chapter's file — re-resolve by id.
-        if (!openId) return;
-        (state.project.sections || []).forEach(function (s) {
-          s.chapters.forEach(function (c) {
-            if (c.id === openId) state.currentFile = c.file;
-          });
-        });
-        renderTree(state.project);
-        mountLiveEditor(); // reload — the open chapter's number may have changed
-      })
-      .catch(function (e) { reportError(e.message); });
   }
 
   function el(tag, cls, text) {
@@ -350,15 +1225,16 @@
   }
 
   function init() {
-    // Build stamp in the header: makes "which binary am I running" answerable
-    // from any screenshot (stale-exe sessions are indistinguishable otherwise).
+    // A success message queued before a reload (flashAfterReload).
+    try {
+      var flash = JSON.parse(sessionStorage.getItem('dwFlash') || 'null');
+      sessionStorage.removeItem('dwFlash');
+      if (flash) showToast(flash.title, flash.message, 'success');
+    } catch (e) { /* storage off or malformed — nothing to show */ }
+    // Build stamp (shown at the foot of the project menu): makes "which binary am I running"
+    // answerable (stale-exe sessions are indistinguishable otherwise).
     fetch('/api/version').then(function (r) { return r.json(); }).then(function (v) {
-      var el = $('buildStamp');
-      if (el && v.built) {
-        el.textContent = v.built;
-        var meta = $('buildMeta');
-        if (meta) meta.hidden = false;
-      }
+      if (v.built) state.buildStamp = v.built;
     }).catch(quiet);
     fetch('/api/project').then(function (r) {
       if (r.status === 409) {
@@ -375,7 +1251,9 @@
         if (h.indexOf('#chapter=') === 0) {
           var rest = h.slice(9);
           var amp = rest.indexOf('&'); // old &v2=1 links still open fine — v2 IS the editor
-          openChapter(decodeURIComponent(amp >= 0 ? rest.slice(0, amp) : rest));
+          var linked = decodeURIComponent(amp >= 0 ? rest.slice(0, amp) : rest);
+          // Files follow their titles now, so an old link may name a renamed chapter: skip it.
+          if (findChapterByFile(linked)) openChapter(linked);
         } else if (h.indexOf('#view=') === 0) {
           openView(decodeURIComponent(h.slice(6)));
         } else if (h === '#docs') {
@@ -398,9 +1276,8 @@
     document.body.classList.add('welcome'); // enables the sanctioned hero wash
     $('welcomeScreen').hidden = false;
     $('editorShell').hidden = true;
-    ['checkBtn', 'buildBtn', 'buildMeta', 'handoverLink', 'packageLink'].forEach(function (id) { $(id).hidden = true; });
+    ['previewBtn', 'checkBtn', 'buildBtn', 'handoverLink', 'packageLink'].forEach(function (id) { $(id).hidden = true; });
     $('projBlock').hidden = true;
-    $('navWrap').hidden = true;
     $('projName').textContent = '';
     $('projCode').textContent = '';
 
@@ -657,202 +1534,28 @@
     box.hidden = false;
   }
 
-  /* ---------- discipline dropdown (custom — native <select> is OS-rendered) ----------
-     Standard discipline values; unknown values (imported chapters) are added at open time.
-     API: discDropdown.setVal(v) syncs trigger + hidden input.
-          discDropdown.ensureVal(v) adds a dynamic option if v is not in the list.
-          The hidden input #fmDiscipline.value is always the canonical value. */
-
-  var DISC_OPTS = [
-    '',
-    'overview', 'setup', 'operations',
-    'troubleshooting', 'reference', 'integration',
-  ];
-
-  var discDropdown = (function buildDisciplineDropdown() {
-    var mountEl = $('fmDisciplineDropdown');
-    var hiddenInput = $('fmDiscipline');
-    if (!mountEl || !hiddenInput) return null;
-
-    // Dynamic option list (starts as the standard set; extras pushed at runtime)
-    var optList = DISC_OPTS.slice();
-    var onChangeCb = null; // set by openChapter
-
-    // DOM
-    var trigger = document.createElement('button');
-    trigger.type = 'button';
-    trigger.className = 'dw-sel-trigger cb-disc-trigger';
-    trigger.setAttribute('data-tip', 'Which kind of chapter this is (setup, operations, troubleshooting, …).');
-    trigger.setAttribute('aria-haspopup', 'listbox');
-    trigger.setAttribute('aria-expanded', 'false');
-
-    var trigLabel = document.createElement('span');
-    trigger.appendChild(trigLabel);
-
-    // Inline chevron SVG — use setAttribute for class on SVGElement (className is read-only)
-    var chevSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    chevSvg.setAttribute('viewBox', '0 0 10 6');
-    chevSvg.setAttribute('width', '10');
-    chevSvg.setAttribute('height', '6');
-    chevSvg.setAttribute('aria-hidden', 'true');
-    chevSvg.setAttribute('class', 'dw-sel-chev');
-    var chevPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    chevPath.setAttribute('d', 'M1 1l4 4 4-4');
-    chevPath.setAttribute('fill', 'none');
-    chevPath.setAttribute('stroke', 'currentColor');
-    chevPath.setAttribute('stroke-width', '1.7');
-    chevPath.setAttribute('stroke-linecap', 'round');
-    chevPath.setAttribute('stroke-linejoin', 'round');
-    chevSvg.appendChild(chevPath);
-    trigger.appendChild(chevSvg);
-
-    mountEl.appendChild(trigger);
-
-    var popup = document.createElement('div');
-    popup.className = 'dw-sel-popup';
-    popup.setAttribute('role', 'listbox');
-    popup.setAttribute('aria-label', 'Discipline');
-    popup.hidden = true;
-
-    var optEls = []; // rebuilt on open
-    var hiIdx = 0;
-
-    function buildOptEls() {
-      popup.innerHTML = '';
-      optEls = optList.map(function (v, idx) {
-        var optEl = document.createElement('div');
-        optEl.className = 'dw-sel-opt';
-        optEl.setAttribute('role', 'option');
-        optEl.setAttribute('data-v', v);
-        optEl.setAttribute('aria-selected', hiddenInput.value === v ? 'true' : 'false');
-        optEl.textContent = v === '' ? '(none)' : v;
-        optEl.onmousedown = function (e) { e.preventDefault(); };
-        optEl.onclick = function () { select(v); closePopup(); };
-        optEl.onmouseenter = function () { setHi(idx); };
-        popup.appendChild(optEl);
-        return optEl;
-      });
-    }
-
-    function setHi(idx) {
-      hiIdx = idx;
-      optEls.forEach(function (el, i) { el.classList.toggle('dw-sel-hi', i === idx); });
-    }
-
-    function setVal(v) {
-      hiddenInput.value = v;
-      trigLabel.textContent = v === '' ? '(none)' : v;
-      optEls.forEach(function (el) {
-        el.setAttribute('aria-selected', el.getAttribute('data-v') === v ? 'true' : 'false');
-      });
-    }
-
-    function ensureVal(v) {
-      if (!v) return;
-      var found = optList.some(function (o) { return o === v; });
-      if (!found) optList.push(v);
-    }
-
-    function select(v) {
-      setVal(v);
-      if (onChangeCb) onChangeCb();
-    }
-
-    function openPopup() {
-      buildOptEls();
-      document.body.appendChild(popup);
-      popup.hidden = false;
-      trigger.setAttribute('aria-expanded', 'true');
-      var rect = trigger.getBoundingClientRect();
-      popup.style.left = Math.round(rect.left) + 'px';
-      popup.style.top = Math.round(rect.bottom + 2) + 'px';
-      popup.style.minWidth = Math.round(rect.width) + 'px';
-      var pw = popup.offsetWidth;
-      var vw = window.innerWidth;
-      if (rect.left + pw > vw - 8) popup.style.left = Math.max(8, vw - pw - 8) + 'px';
-      var ci = optList.indexOf(hiddenInput.value);
-      setHi(ci >= 0 ? ci : 0);
-      document.addEventListener('mousedown', outsideClick, true);
-      document.addEventListener('keydown', popupKey, true);
-    }
-
-    function closePopup() {
-      popup.hidden = true;
-      trigger.setAttribute('aria-expanded', 'false');
-      document.removeEventListener('mousedown', outsideClick, true);
-      document.removeEventListener('keydown', popupKey, true);
-      if (document.body.contains(popup)) document.body.removeChild(popup);
-      trigger.focus();
-    }
-
-    function outsideClick(e) {
-      if (!popup.contains(e.target) && e.target !== trigger) closePopup();
-    }
-
-    function popupKey(e) {
-      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closePopup(); return; }
-      if (e.key === 'ArrowDown') { e.preventDefault(); setHi((hiIdx + 1) % optEls.length); return; }
-      if (e.key === 'ArrowUp') { e.preventDefault(); setHi((hiIdx - 1 + optEls.length) % optEls.length); return; }
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        if (optList[hiIdx] !== undefined) { select(optList[hiIdx]); closePopup(); }
-        return;
-      }
-    }
-
-    trigger.onclick = function (e) {
-      e.preventDefault();
-      if (!popup.hidden) { closePopup(); } else { openPopup(); }
-    };
-
-    trigger.addEventListener('keydown', function (e) {
-      if ((e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') && popup.hidden) {
-        e.preventDefault();
-        openPopup();
-      }
-    });
-
-    // Initialise display
-    trigLabel.textContent = '(none)';
-
-    return {
-      setVal: setVal,
-      ensureVal: ensureVal,
-      setOnChange: function (cb) { onChangeCb = cb; },
-    };
-  })();
-
   /* ---------- chapter editing ---------- */
 
+  // Resolves once the chapter is on the page (History › All chapters compares it then).
   function openChapter(file) {
-    if (!confirmDiscard()) return;
-    api.json('/api/chapter?file=' + encodeURIComponent(file)).then(function (ch) {
+    if (!confirmDiscard(openChapter, arguments)) return Promise.resolve();
+    return api.json('/api/chapter?file=' + encodeURIComponent(file)).then(function (ch) {
       state.currentFile = file;
+      state.currentId = ch.id;
       state.currentYaml = null;
       state.currentView = null;
       show('chapterEditor');
-      // fmId is now a read-only chip (div > .cb-id-slug span), not an input.
-      var slugEl = $('fmId').querySelector('.cb-id-slug');
-      if (slugEl) slugEl.textContent = ch.id;
-      $('fmTitle').value = ch.title;
-      // Disciplines outside the standard list (imported projects use section names)
-      // get added dynamically so nothing is lost on save.
-      if (discDropdown) {
-        discDropdown.ensureVal(ch.discipline);
-        discDropdown.setVal(ch.discipline || '');
-        discDropdown.setOnChange(function () { state.dirty = true; });
-      } else {
-        // Fallback: if the custom dropdown failed to init (missing mount element),
-        // write directly to the hidden input so chapterFormValues still works.
-        $('fmDiscipline').value = ch.discipline || '';
-      }
-      // Wire dirty tracking for the metadata fields (audience toggles wire inside renderAudienceChecks).
-      $('fmTitle').oninput = function () { state.dirty = true; };
-      renderAudienceChecks(ch.audiences);
+      setSideTab('manual');
+      updateCrumb();
+      historyChapterChanged();
+      setReaders(ch.audiences);
       state.dirty = false;
       setStatus('');
       renderTree(state.project);
-      mountLiveEditor();
+      var mounted = mountLiveEditor();
+      refreshHistory(); // an open History panel follows to the newly opened chapter
+      renderProps();    // and so does an open Properties panel
+      return mounted;
     });
   }
 
@@ -861,68 +1564,336 @@
      (module scripts are deferred). */
 
   function mountLiveEditor() {
-    if (!state.currentFile) return;
+    if (!state.currentFile) return Promise.resolve();
     if (window.DocWizEditor2) {
-      window.DocWizEditor2
+      markMode('edit'); // a newly opened chapter shows the page
+      return window.DocWizEditor2
         .open(state.currentFile, {
           onDirty: function () { state.dirty = true; },
           audiences: state.project.audiences,
         })
         .catch(function (e) { reportError(e.message); });
-    } else {
-      setTimeout(mountLiveEditor, EDITOR2_RETRY_MS); // module still loading
     }
+    setTimeout(mountLiveEditor, EDITOR2_RETRY_MS); // module still loading
+    return Promise.resolve();
   }
 
-  // Audience dot color map: maps audience id prefix to a token class.
-  var AUD_DOT_MAP = { user: 'cb-dot-op', support: 'cb-dot-ma', admin: 'cb-dot-en' };
+  /* ---------- the document bar (Stage 6) ---------- */
 
-  function renderAudienceChecks(selected) {
-    var container = $('fmAudiences');
-    container.innerHTML = '';
+  // Readers: who this chapter is for (its `audiences:`), in the project's audience order.
+  function setReaders(ids) {
+    state.chapterAudiences = state.project.audiences
+      .map(function (a) { return a.id; })
+      .filter(function (id) { return ids.indexOf(id) >= 0; });
+    var titles = state.chapterAudiences.map(audienceTitle);
+    var all = state.project.audiences.length;
+    $('cbReadersLabel').textContent = !titles.length ? 'No readers'
+      : titles.length === all && all > 1 ? 'All readers'
+      : titles.length <= 2 ? titles.join(', ')
+      : titles.slice(0, 2).join(', ') + ' +' + (titles.length - 2);
+    $('cbReaders').classList.toggle('none', !titles.length);
+    renderPropsReaders();
+    updatePreviewBanner(); // a preview shows whether this audience now gets the chapter
+  }
+
+  /* The Readers picker (Stage 6) — one for a chapter and for a block. Everyone first, then the
+     audiences with their one-line description, a filter box when there are many, and Manage
+     audiences…. A chapter's "everyone" is every audience ticked (none ticked = only in the
+     full manual); a block's is no tag at all (unticking the last audience gives it back to
+     everyone). get() returns the ticked ids; set(ids) applies a change. */
+  var READERS_FILTER_FROM = 7;
+  function readersPicker(anchor, question, block, get, set) {
+    var auds = state.project.audiences;
+    var all = auds.map(function (a) { return a.id; });
+    var has = function (id) { return get().indexOf(id) >= 0; };
+    var items = [{ text: question }, {
+      text: 'Everyone',
+      hint: block ? 'No tag — every output shows it' : 'In every audience’s outputs',
+      filterable: false,
+      checked: function () { return block ? get().length === 0 : get().length === all.length; },
+      run: function () { set(block ? [] : all.slice()); },
+    }, '-'];
+    auds.forEach(function (a) {
+      items.push({
+        text: a.title,
+        hint: a.description || '',
+        checked: function () { return has(a.id); },
+        run: function () {
+          var now = get();
+          set(all.filter(function (id) { return id === a.id ? !has(a.id) : now.indexOf(id) >= 0; }));
+        },
+      });
+    });
+    items.push('-', { text: 'Manage audiences…', run: function () { openSettings('audiences'); } });
+    actionMenu(anchor, items, auds.length >= READERS_FILTER_FROM ? { filter: 'Find an audience' } : null);
+  }
+
+  function readersMenu(anchor) {
+    readersPicker(anchor, 'Who reads this chapter?', false,
+      function () { return state.chapterAudiences; },
+      function (ids) {
+        setReaders(ids);
+        state.dirty = true; // saves with the next autosave
+      });
+  }
+
+  // The toolbar's Readers button and a tagged block's context bar: who reads the block at the
+  // cursor (main.js finds it, and wraps / retags / unwraps it).
+  function blockReadersMenu(anchor) {
+    var ed = window.DocWizEditor2;
+    var info = ed && ed.blockReaders();
+    if (!info) return;
+    readersPicker(anchor, info.kind === 'step' ? 'Who reads this step?' : 'Who reads this block?', true,
+      function () { var now = ed.blockReaders(); return now ? now.ids : []; },
+      function (ids) { ed.setBlockReaders(ids); });
+  }
+
+  /* ---------- Preview as (Stage 6) ----------
+     The manual as one audience gets it: chapters left out of their outputs dim in the tree, the
+     open chapter hides blocks for other readers (main.js setPreview) with editing paused, and a
+     banner says what is shown. Everyone ends it. */
+  function previewMenu(anchor) {
+    var items = [{ text: 'Preview the manual as…' }, {
+      text: 'Everyone', hint: 'The full manual — every chapter and block',
+      checked: function () { return !state.previewAudience; },
+      run: function () { closeActionMenu(); setPreview(null); },
+    }, '-'];
     state.project.audiences.forEach(function (a) {
-      var btn = el('button');
-      btn.type = 'button';
-      btn.className = 'cb-aud-btn';
-      btn.dataset.aud = a.id;
-      btn.dataset.on = selected.indexOf(a.id) >= 0 ? '1' : '0';
+      items.push({
+        text: a.title, hint: a.description || '',
+        checked: function () { return state.previewAudience === a.id; },
+        run: function () { closeActionMenu(); setPreview(a.id); },
+      });
+    });
+    actionMenu(anchor, items, state.project.audiences.length >= READERS_FILTER_FROM ? { filter: 'Find an audience' } : null);
+  }
 
-      // Color dot
-      var dot = el('span');
-      dot.className = 'cb-aud-dot ' + (AUD_DOT_MAP[a.id] || 'cb-dot-en');
-      dot.setAttribute('aria-hidden', 'true');
-      btn.appendChild(dot);
+  function setPreview(id) {
+    state.previewAudience = id || null;
+    document.body.classList.toggle('previewing', !!state.previewAudience);
+    $('previewLabel').textContent = state.previewAudience ? audienceTitle(state.previewAudience) : 'Everyone';
+    $('previewBtn').classList.toggle('on', !!state.previewAudience);
+    if (window.DocWizEditor2 && window.DocWizEditor2.setPreview) window.DocWizEditor2.setPreview(state.previewAudience);
+    if (state.previewAudience) setChapterMode('edit'); // Source closes (keeping what was typed)
+    renderTree(state.project);
+    updatePreviewBanner();
+  }
 
-      // Label text
-      btn.appendChild(document.createTextNode(a.title));
+  function updatePreviewBanner() {
+    var id = state.previewAudience;
+    var gets = !id || state.chapterAudiences.indexOf(id) >= 0;
+    $('previewBanner').hidden = !id || !state.currentFile;
+    $('editor2').classList.toggle('e2-left-out', !gets);
+    if (!id) return;
+    var who = audienceTitle(id);
+    $('previewText').textContent = gets
+      ? 'Previewing as ' + who + ': blocks for other readers are hidden, and editing is paused.'
+      : who + '’s outputs leave this chapter out — it is only in the full manual and other audiences’ outputs.';
+  }
 
-      btn.onclick = function () {
-        var on = btn.dataset.on === '1';
-        btn.dataset.on = on ? '0' : '1';
-        state.dirty = true;
-      };
-      container.appendChild(btn);
+  // The title is the chapter's H1 (the server reads it on save), so only the audiences
+  // travel with the body. `discipline` is no longer edited — it records the skeleton the
+  // chapter started from and the server leaves it as it is.
+  function chapterFormValues() {
+    return { title: '', audiences: state.chapterAudiences.slice() };
+  }
+
+  // Edit · Source · Read. Read opens a tab and leaves the mode as it was.
+  function markMode(mode) {
+    Array.prototype.forEach.call(document.querySelectorAll('.cb-mode [data-mode]'), function (b) {
+      if (b.getAttribute('data-mode') !== 'read') b.setAttribute('aria-pressed', String(b.getAttribute('data-mode') === mode));
+    });
+  }
+  function setChapterMode(mode) {
+    if (!state.currentFile || !window.DocWizEditor2) return;
+    if (mode === 'source' && state.previewAudience) return; // editing is paused while previewing
+    window.DocWizEditor2.setMode(mode).then(markMode).catch(quiet); // a failed save says why in the status line
+  }
+
+  // Properties: the chapter's section (change it to move the chapter), readers, where it is
+  // used, its permanent link id and its file. Remembered open or closed on this computer.
+  var props = { open: false };
+  try { props.open = localStorage.getItem('dw-props-open') === '1'; } catch (e) { /* storage off */ }
+  function toggleProps(open) {
+    props.open = open === undefined ? !props.open : !!open;
+    try { localStorage.setItem('dw-props-open', props.open ? '1' : '0'); } catch (e) { /* storage off */ }
+    $('propsPanel').hidden = !props.open;
+    $('cbPropsBtn').setAttribute('aria-pressed', String(props.open));
+    if (props.open) { toggleHistory(false); renderProps(); }
+  }
+
+  function renderProps() {
+    if (!props.open || !state.currentFile) return;
+    var where = findChapterByFile(state.currentFile);
+    var body = $('propsBody');
+    if (!where) { body.innerHTML = ''; return; }
+    var c = where.chapter;
+    body.innerHTML = '';
+    var dl = el('dl', 'props-list');
+    function row(label, content) {
+      dl.appendChild(el('dt', null, label));
+      var dd = el('dd');
+      content.forEach(function (n) { dd.appendChild(n); });
+      dl.appendChild(dd);
+      return dd;
+    }
+
+    var sec = el('select', 'props-select');
+    sec.setAttribute('aria-label', 'Section');
+    state.project.sections.forEach(function (s) {
+      var o = el('option', null, s.title);
+      o.value = s.folder;
+      o.selected = s === where.section;
+      sec.appendChild(o);
+    });
+    sec.onchange = function () {
+      var sections = state.project.sections;
+      var ti = sectionIndex(sec.value);
+      moveChapterInto(c, sections.indexOf(where.section), where.section.chapters.indexOf(c), ti, sections[ti].chapters.length)
+        .catch(function () { renderProps(); });
+    };
+    row('Section', [sec]);
+
+    var readers = el('span', 'props-chips');
+    readers.id = 'propsReaders';
+    var change = el('button', 'hist-link', 'Change');
+    change.type = 'button';
+    change.onclick = function () { readersMenu($('cbReaders')); };
+    row('Readers', [readers, change]);
+
+    var used = row('Used in', [el('span', 'props-note', 'Looking…')]);
+    api.json('/api/chapter-usage?file=' + encodeURIComponent(c.file)).then(function (u) {
+      used.innerHTML = '';
+      u.outputs.forEach(function (o) {
+        var n = o.slides.length;
+        var a = el('a', 'props-used', o.title);
+        a.href = '#';
+        a.appendChild(el('small', null, o.mode === 'slides'
+          ? (n === 1 ? 'slide ' : 'slides ') + o.slides.join(', ')
+          : (n === 1 ? 'section ' : 'sections ') + o.slides.join(', ')));
+        a.onclick = function (e) { e.preventDefault(); openView(o.file); };
+        used.appendChild(a);
+      });
+      u.linkedFrom.forEach(function (ch) {
+        var a = el('a', 'props-used', ch.title);
+        a.href = '#';
+        a.appendChild(el('small', null, 'links here'));
+        a.onclick = function (e) { e.preventDefault(); openChapter(ch.file); };
+        used.appendChild(a);
+      });
+      if (!u.outputs.length && !u.linkedFrom.length)
+        used.appendChild(el('span', 'props-note', 'Not in any output yet, and no chapter links here.'));
+    }).catch(function (e) { used.innerHTML = ''; used.appendChild(el('span', 'props-note', e.message || String(e))); });
+
+    var copy = el('button', 'hist-link', 'Copy link');
+    copy.type = 'button';
+    copy.setAttribute('data-tip', 'Copies dw:' + c.id + ' — paste it wherever a chapter link is asked for.');
+    copy.onclick = function () {
+      if (navigator.clipboard) navigator.clipboard.writeText('dw:' + c.id).then(function () {
+        setStatus('Link copied', 'ok');
+      }).catch(quiet);
+    };
+    row('Link ID', [el('code', 'props-code', c.id), copy,
+      el('small', 'props-note', 'Never changes, so links and slides keep working after renames.')]);
+    row('File', [el('code', 'props-code props-path', c.file)]);
+
+    body.appendChild(dl);
+    renderPropsReaders();
+  }
+
+  function renderPropsReaders() {
+    var box = $('propsReaders');
+    if (!box) return;
+    box.innerHTML = '';
+    if (!state.chapterAudiences.length) box.appendChild(el('span', 'props-note', 'No one — it appears only in the full manual.'));
+    state.chapterAudiences.forEach(function (id) { box.appendChild(el('span', 'props-chip', audienceTitle(id))); });
+  }
+
+  // The chapter bar's "Section / Title" label, from the loaded project (titles follow the H1).
+  function updateCrumb() {
+    var where = findChapterByFile(state.currentFile);
+    $('fmCrumbSec').textContent = where ? where.section.title : '';
+    $('fmCrumbTitle').textContent = where ? where.chapter.title : '';
+  }
+
+  function findChapterByFile(file) {
+    var found = null;
+    ((state.project && state.project.sections) || []).forEach(function (s) {
+      s.chapters.forEach(function (c) { if (c.file === file) found = { section: s, chapter: c }; });
+    });
+    return found;
+  }
+
+  /* ---------- autosave (Stage 6 step 3 — switched on together with history) ----------
+     Edits are written a moment after you stop typing, and before leaving a screen or the
+     window; every save is also a History entry, so nothing written is ever lost. Autosave
+     waits while a save would interrupt (Source mode, a table cell being edited, an IME
+     composition). Saves of one editor never overlap (a second one queues behind the first),
+     so autosave, Ctrl+S, and Build can't race each other into a "changed on disk" refusal. */
+  var autosaveTimer = null;
+  function scheduleAutosave() {
+    clearTimeout(autosaveTimer);
+    autosaveTimer = setTimeout(autosaveNow, AUTOSAVE_IDLE_MS);
+  }
+  function autosaveNow() {
+    autosaveTimer = null;
+    if (!state.dirty && !slideZonesDirty()) return;
+    var ed = window.DocWizEditor2;
+    if (window.__dwActiveCell || (state.currentFile && ed && ed.isBusy && ed.isBusy())) {
+      scheduleAutosave();
+      return;
+    }
+    flushEdits().catch(quiet); // a failure stays visible in the status line
+  }
+  // Saves the open chapter's or view's pending edits now.
+  function flushEdits() {
+    clearTimeout(autosaveTimer);
+    autosaveTimer = null;
+    if (!state.dirty && !slideZonesDirty()) return Promise.resolve();
+    if (state.currentFile) return saveChapter();
+    if (state.currentView) return saveView({ auto: true });
+    return Promise.resolve();
+  }
+
+  // Before leaving a screen: save until nothing is pending (keystrokes that landed while a save
+  // was in flight are not in it, so one more round picks them up).
+  function flushUntilSaved(rounds) {
+    return flushEdits().then(function () {
+      return (state.dirty || slideZonesDirty()) && rounds > 1 ? flushUntilSaved(rounds - 1) : null;
     });
   }
 
-  function chapterFormValues() {
-    return {
-      title: $('fmTitle').value,
-      discipline: $('fmDiscipline').value,
-      audiences: Array.prototype.slice
-        .call($('fmAudiences').querySelectorAll('[data-on="1"]'))
-        .map(function (btn) { return btn.dataset.aud; }),
-    };
+  var chapterSaving = Promise.resolve();
+  function saveChapter() {
+    var run = function () { return saveChapterNow(); };
+    var p = chapterSaving.then(run, run);
+    chapterSaving = p.catch(function () {});
+    return p;
   }
 
-  function saveChapter() {
+  function saveChapterNow() {
     if (!state.currentFile) return Promise.resolve();
-    // Byte-surgical save through the live surface (only edited blocks re-emit).
+    // Another chapter is being opened: the surface still holds the previous one, whose edits
+    // were saved before the switch (confirmDiscard) — nothing here to save.
+    if (window.DocWizEditor2.openFile() !== state.currentFile) return Promise.resolve();
+    // Byte-surgical save through the live surface (only edited blocks re-emit). A changed H1
+    // renames the chapter file — the returned document carries the new path.
+    setStatus('Saving…');
+    var gen = editGen;
+    var savedFile = state.currentFile;
     return window.DocWizEditor2.save(chapterFormValues())
-      .then(function () {
-        state.dirty = false;
-        setStatus('Saved ✓', 'ok');
-        return loadProject();
+      .then(function (doc) {
+        // Follow a rename (changed H1) — only if this chapter is still the open one.
+        if (doc && doc.file && state.currentFile === savedFile) state.currentFile = doc.file;
+        // Edits made while the save was in flight are not in it — stay dirty for the next one.
+        if (editGen === gen && !(doc && doc.editedDuringSave)) state.dirty = false;
+        else scheduleAutosave();
+        setStatus('Saved ' + clockTime(new Date()), 'ok');
+        return loadProject().then(function () {
+          updateCrumb();
+          if (!hist.comparing) refreshHistory(); // the save is the newest entry now
+          if (doc && doc.file !== savedFile) renderProps(); // renamed: a new file name
+        });
       })
       .catch(function (e) {
         setStatus('Save failed: ' + e.message, 'err');
@@ -930,11 +1901,21 @@
       });
   }
 
-  function setStatus(text, cls) {
-    var s = $('status');
+  // The chapter bar's status line; setViewStatus is the output bar's.
+  function setStatus(text, cls) { statusLine($('status'), text, cls); }
+  function setViewStatus(text, cls) { statusLine($('vStatus'), text, cls); }
+  function statusLine(s, text, cls) {
     s.textContent = text;
+    s.title = text; // the line is cut short when the bar is narrow
     // Preserve the structural class ('cb-status') and only toggle ok/err modifiers.
     s.className = 'cb-status' + (cls ? ' ' + cls : '');
+  }
+
+  // Messages from the live surface (link, image, embed tools) go to the status line of the
+  // editor that is on screen — the chapter bar's line is hidden while a view is edited.
+  function editorStatus(text, cls) {
+    if (!$('viewEditor').hidden) setViewStatus(text, cls);
+    else setStatus(text, cls);
   }
 
   // True when the slide-zone editors hold edits not yet saved (Task 7c). state.dirty is
@@ -946,8 +1927,39 @@
     return !!(window.DocWizSlideEdit && window.DocWizSlideEdit.isDirty && window.DocWizSlideEdit.isDirty());
   }
 
-  function confirmDiscard() {
-    return (!state.dirty && !slideZonesDirty()) || window.confirm('Discard unsaved changes?');
+  function settingsDirty() {
+    var pane = $('setPane');
+    return !!pane && pane.classList.contains('dirty');
+  }
+
+  // Unsaved-work guard for every navigation. Returns true when nothing is unsaved (chapter,
+  // view, slide zones, Project settings). Otherwise it asks in a DocWiz dialog and returns
+  // false; "Discard changes" then re-runs retry(...args) once with the guard satisfied.
+  var discardConfirmed = false;
+  function confirmDiscard(retry, args) {
+    if (discardConfirmed) { discardConfirmed = false; return true; }
+    if (!state.dirty && !slideZonesDirty() && !settingsDirty()) return true;
+    // Chapter and view edits autosave: leaving saves them first (nothing to discard). A
+    // failed save keeps you here — the status line says why.
+    if (!settingsDirty() && (state.currentFile || state.currentView)) {
+      flushUntilSaved(3).then(function () {
+        discardConfirmed = true;
+        try { retry.apply(null, args || []); } finally { discardConfirmed = false; }
+      }).catch(quiet);
+      return false;
+    }
+    confirmDialog('Discard unsaved changes?',
+      settingsDirty() && !state.dirty
+        ? 'Your Project settings changes haven’t been saved yet.'
+        : 'Your latest changes haven’t been saved yet.',
+      'Discard changes', function () {
+        setDirty(false);
+        state.dirty = false; // the next screen replaces the edited content
+        if (window.DocWizSlideEdit && window.DocWizSlideEdit.markClean) window.DocWizSlideEdit.markClean();
+        discardConfirmed = true;
+        try { retry.apply(null, args || []); } finally { discardConfirmed = false; }
+      }, true);
+    return false;
   }
 
   /* ---------- insert helpers ---------- */
@@ -1097,8 +2109,9 @@
   }
 
   /* Selectable file list used by the image and attachment dialogs: the project's
-     files are the visible, primary choice — not a dropdown, not a browser picker. */
-  function createFileList(listEl, files, thumbPrefix, onSelect) {
+     files are the visible, primary choice — not a dropdown, not a browser picker. `initial`
+     (optional) is the file picked when the list opens; otherwise the first one. */
+  function createFileList(listEl, files, thumbPrefix, onSelect, initial) {
     var selected = null;
     function add(name, doSelect) {
       var row = el('button', 'file-row');
@@ -1131,16 +2144,21 @@
       if (row) row.classList.add('selected');
       onSelect(name);
     }
-    files.forEach(function (f) { add(f, false); });
-    if (files.length > 0) listEl.querySelector('.file-row').click();
+    var initialRow = null;
+    files.forEach(function (f) { var row = add(f, false); if (f === initial) initialRow = row; });
+    if (initialRow) { initialRow.click(); initialRow.scrollIntoView({ block: 'nearest' }); }
+    else if (files.length > 0) listEl.querySelector('.file-row').click();
     return {
       get: function () { return selected; },
       add: function (name) { add(name, true); },
     };
   }
 
+  // Accented letters keep their base letter ("Školení" → "skoleni"), like the server's
+  // HeadingScanner.Slug, instead of vanishing.
   function slugify(text) {
-    return text.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    return text.trim().normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   }
 
   function baseName(path) {
@@ -1278,7 +2296,7 @@
   // via DocWizEditor2.presets) — the px values exist in exactly one place. The
   // dialog lists them descending; Medium is the default.
   function imgSizeOptions() {
-    var names = { S: 'Small', M: 'Medium', L: 'Large' };
+    var names = { XS: 'Icon', S: 'Small', M: 'Medium', L: 'Large' };
     var rows = window.DocWizEditor2.presets.figure.slice().reverse();
     return '<option value="">Original size</option>' + rows.map(function (p) {
       return '<option value="' + p[1] + '"' + (p[0] === 'M' ? ' selected' : '') + '>' +
@@ -1316,10 +2334,11 @@
               setStatus('Element inserted — replace the placeholder text.', 'ok');
             };
           });
-        });
+        },
+        { hideOk: true }); // a row click inserts and closes; an OK button would do nothing
     },
 
-    image: function () {
+    image: function (picked) {
       api.json('/api/assets').then(function (res) {
         var files = res.files || [];
         var fileList = null;
@@ -1367,7 +2386,7 @@
             var listEl = root.querySelector('#mImgList');
             if (files.length === 0)
               listEl.innerHTML = '<p class="mhelp warn">No images in this project yet — upload one below.</p>';
-            fileList = createFileList(listEl, files, '/assets/', autoAlt);
+            fileList = createFileList(listEl, files, '/assets/', autoAlt, picked);
             root.querySelector('#mImgUpload').onchange = function (e) {
               var file = e.target.files[0];
               if (!file) return;
@@ -1383,27 +2402,6 @@
             };
           });
       });
-    },
-
-    audience: function () {
-      var checks = state.project.audiences.map(function (a) {
-        return '<label style="margin-right:10px"><input type="checkbox" value="' + esc(a.id) + '"> ' + esc(a.title) + '</label>';
-      }).join('');
-      openModal('Insert audience block',
-        '<p class="mhelp">An audience block is a piece of the chapter that only some readers need. ' +
-        'Check who it is for: the generated views of the <b>other</b> audiences will hide it. ' +
-        'The full manual always shows it, marked with a small tag.</p>' +
-        '<p class="mhelp">Typical uses: a user-only warning, support-only steps, ' +
-        'admin-only technical details.</p>' +
-        '<div class="row">' + checks + '</div>',
-        function (root) {
-          var ids = Array.prototype.slice.call(root.querySelectorAll('input:checked'))
-            .map(function (cb) { return cb.value; });
-          if (ids.length === 0) return modalWarn(root, 'Check at least one audience.');
-          window.DocWizEditor2.insert({ type: 'audience', audiences: ids });
-          state.dirty = true;
-          setStatus('Audience block inserted — replace the placeholder text.', 'ok');
-        });
     },
 
     dwlink: function () {
@@ -1448,7 +2446,7 @@
     // (No add-anchor dialog: anchors are automatic on save; the toolbar's anchor
     // button copies a heading's section link.)
 
-    attachment: function () {
+    attachment: function (picked) {
       api.json('/api/attachments').then(function (res) {
         var files = res.files || [];
         var fileList = null;
@@ -1483,7 +2481,7 @@
             var listEl = root.querySelector('#mAttList');
             if (files.length === 0)
               listEl.innerHTML = '<p class="mhelp warn">No attachments in this project yet — upload one below, or copy files into the attachments folder.</p>';
-            fileList = createFileList(listEl, files, null, autoText);
+            fileList = createFileList(listEl, files, null, autoText, picked);
             root.querySelector('#mAttUpload').onchange = function (e) {
               var file = e.target.files[0];
               if (!file) return;
@@ -1562,7 +2560,7 @@
     image: inserters.image,
     dwlink: inserters.dwlink,
     attachment: inserters.attachment,
-    audience: inserters.audience,
+    blockReaders: blockReadersMenu, // the toolbar's Readers button + a tagged block's tools
     pasteImage: pasteImageDialog,
     pickAsset: pickAssetDialog,
     weblink: webLinkDialog,
@@ -1578,19 +2576,19 @@
         window.DocWizEditor2.patchActiveGroup({ label: name || null, desc: desc || null });
     }); },
     groupEdit: groupDialog,   // (current, onOk) — used by the group node's right-click Edit
-    toast: setStatus,
+    toast: editorStatus,
     saveChapter: function () { return saveChapter(); }, // Reading view saves first
     openChapterById: function (id) {
       var file = chapterFileFor(id);
       if (file) openChapter(file);
-      else setStatus('No chapter with id "' + id + '" in this project.', 'err');
+      else editorStatus('No chapter with id "' + id + '" in this project.', 'err');
     },
   };
 
   /* ---------- yaml editing ---------- */
 
   function openYaml(path) {
-    if (!confirmDiscard()) return;
+    if (!confirmDiscard(openYaml, arguments)) return;
     api.json('/api/yaml?path=' + encodeURIComponent(path)).then(function (res) {
       state.currentYaml = path;
       state.currentFile = null;
@@ -1708,70 +2706,164 @@
   // scrolled to in the canvas. Kept in range across deletes/reorders.
   var activeSlideIndex = 0;
 
-  // Rebuild the slide panel from state.viewSlides. Document mode hides the whole panel
-  // (the document preview is a single filtered page, not a slide deck). Called from
-  // refreshEditSurface after the canvas is (re)injected so the two stay in sync.
-  function renderSlidePanel() {
-    var panel = $('vPanel');
-    var list = $('vPanelList');
-    if (!panel || !list) return;
-    var slidesMode = $('vMode').value === 'slides';
-    panel.hidden = !slidesMode;
-    if (!slidesMode) return;
+  function viewIsSlides() { return state.viewMode === 'slides'; }
 
+  // The number people see for working-model slide i: a deck counts its title slide as 1, as
+  // the presentation does ("2 of 12"); a document numbers its sections from 1.
+  function slideNo(i) { return viewIsSlides() ? i + 2 : i + 1; }
+
+  /* The rail (Stage 6). A deck shows real miniatures of its slides, a document the list of its
+     sections. Click goes there; drag moves; the + between two adds one right there; ⋯ moves,
+     changes a slide's layout, or deletes. Rebuilt with every canvas render so the two stay in
+     lock-step; miniatures refresh shortly after a zone edit. */
+  var draggedSlide = null;
+  function renderSlidePanel() {
+    var list = $('vPanelList');
+    if (!list) return;
+    var deck = viewIsSlides(), noun = deck ? 'slide' : 'section';
     var slides = state.viewSlides || [];
     if (activeSlideIndex >= slides.length) activeSlideIndex = Math.max(0, slides.length - 1);
     list.innerHTML = '';
-    if (slides.length === 0) {
-      list.appendChild(el('div', 'vpanel-empty', 'No slides yet — use “+ Add slide”.'));
-      return;
+    list.classList.toggle('is-deck', deck);
+    // A deck opens with a title slide made from the output's title — shown first, as on the
+    // canvas and in the presentation, but not editable here.
+    var titleSlide = deck && $('vEditSurface').querySelector('.slide[data-layout="title-slide"]');
+    if (titleSlide) {
+      var auto = el('div', 'vpanel-item is-auto');
+      auto.setAttribute('role', 'listitem');
+      auto.setAttribute('data-tip', 'The title slide — made from the output’s title, always first.');
+      auto.appendChild(el('span', 'vpanel-num', '1'));
+      var autoThumb = el('div', 'vthumb dw-live-surface');
+      autoThumb.inert = true;
+      autoThumb.setAttribute('aria-hidden', 'true');
+      autoThumb.appendChild(titleSlide.cloneNode(true));
+      auto.appendChild(autoThumb);
+      auto.onclick = function () { titleSlide.scrollIntoView({ behavior: 'smooth', block: 'center' }); };
+      list.appendChild(auto);
     }
+    if (slides.length === 0) list.appendChild(el('div', 'vpanel-empty', 'No ' + noun + 's yet — add the first one below.'));
     slides.forEach(function (slide, i) {
+      list.appendChild(railGap(i, noun));
       var item = el('div', 'vpanel-item' + (i === activeSlideIndex ? ' active' : ''));
       item.setAttribute('role', 'listitem');
       item.setAttribute('tabindex', '0');
+      item.draggable = true;
       item.dataset.i = i;
-      item.setAttribute('data-tip', 'Slide ' + (i + 1) + '. Click to jump to it on the canvas.');
-
-      item.appendChild(el('span', 'vpanel-num', String(i + 1)));
-      item.appendChild(el('span', 'vpanel-badge', layoutLabel(slide.layout)));
-      item.appendChild(el('span', 'vpanel-label', slideLabelFor(slide)));
-
-      var tools = el('div', 'vpanel-tools');
-      var up = el('button', 'vpanel-tbtn', '▲');
-      up.type = 'button';
-      up.disabled = i === 0;
-      up.setAttribute('data-tip', 'Move this slide one position up.');
-      up.onclick = function (e) { e.stopPropagation(); moveSlide(i, -1); };
-      tools.appendChild(up);
-      var down = el('button', 'vpanel-tbtn', '▼');
-      down.type = 'button';
-      down.disabled = i === slides.length - 1;
-      down.setAttribute('data-tip', 'Move this slide one position down.');
-      down.onclick = function (e) { e.stopPropagation(); moveSlide(i, 1); };
-      tools.appendChild(down);
-      var del = el('button', 'vpanel-tbtn vpanel-tbtn-danger', 'Delete');
-      del.type = 'button';
-      del.setAttribute('data-tip', 'Delete this slide. You will be asked to confirm if it has content.');
-      del.onclick = function (e) { e.stopPropagation(); deleteSlide(i); };
-      tools.appendChild(del);
-      item.appendChild(tools);
-
+      item.setAttribute('aria-label', (deck ? 'Slide ' : 'Section ') + slideNo(i) + ': ' + slideLabelFor(slide));
+      item.appendChild(el('span', 'vpanel-num', String(slideNo(i))));
+      if (deck) item.appendChild(thumbFor(i));
+      else {
+        var label = el('span', 'vpanel-label', slideLabelFor(slide));
+        label.title = slideLabelFor(slide);
+        item.appendChild(label);
+      }
+      var more = el('button', 'vpanel-more');
+      more.type = 'button';
+      more.innerHTML = TREE_ICONS.more;
+      more.setAttribute('aria-label', (deck ? 'Slide ' : 'Section ') + slideNo(i) + ' actions');
+      more.setAttribute('aria-haspopup', 'menu');
+      more.setAttribute('data-tip', deck ? 'Move this slide, change its layout, or delete it.' : 'Move or delete this section.');
+      more.onclick = function (e) { e.stopPropagation(); slideMenu(more, i); };
+      item.appendChild(more);
       item.onclick = function () { gotoSlide(i); };
       item.onkeydown = function (e) {
+        if (e.target !== item) return;
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); gotoSlide(i); }
       };
+      item.addEventListener('dragstart', function (e) {
+        draggedSlide = i;
+        item.classList.add('dragging');
+        try { e.dataTransfer.setData('text/plain', slideLabelFor(slide)); } catch (x) { /* some hosts refuse */ }
+      });
+      item.addEventListener('dragend', function () { draggedSlide = null; item.classList.remove('dragging'); });
       list.appendChild(item);
     });
+    if (slides.length) list.appendChild(railGap(slides.length, noun));
   }
 
-  // The canvas renders slides as [auto title slide, slides[0], slides[1], …] in slides
-  // mode, so working-model slide i is the (i+1)-th .slide element.
+  // The space between two rail items: a + that adds a slide (section) there, and the drop
+  // target while one is dragged.
+  function railGap(at, noun) {
+    var gap = el('div', 'vrail-gap');
+    var add = el('button', 'vrail-insert');
+    add.type = 'button';
+    add.setAttribute('aria-label', 'Add a ' + noun + ' here');
+    add.setAttribute('data-tip', 'Add a ' + noun + ' here.');
+    add.innerHTML = TREE_ICONS.plus;
+    add.onclick = function () { if (viewIsSlides()) addSlide(at); else addSection(at); };
+    gap.appendChild(add);
+    gap.addEventListener('dragover', function (e) { if (draggedSlide !== null) { e.preventDefault(); gap.classList.add('drop'); } });
+    gap.addEventListener('dragleave', function () { gap.classList.remove('drop'); });
+    gap.addEventListener('drop', function (e) {
+      e.preventDefault();
+      gap.classList.remove('drop');
+      if (draggedSlide === null) return;
+      moveSlideTo(draggedSlide, draggedSlide < at ? at - 1 : at);
+    });
+    return gap;
+  }
+
+  // A miniature of canvas slide i: the rendered slide cloned into a 192×108 box — the same
+  // 1920×1080 frame at zoom .1 inside the .dw-live-surface scope, so site.css draws it exactly
+  // like the canvas. Display only (inert, nothing editable or focusable inside).
+  function thumbFor(i) {
+    var box = el('div', 'vthumb dw-live-surface');
+    box.setAttribute('aria-hidden', 'true');
+    box.inert = true;
+    var src = canvasSlideEl(i);
+    if (!src) { box.appendChild(el('span', 'vthumb-label', slideLabelFor(state.viewSlides[i]))); return box; }
+    var clone = src.cloneNode(true);
+    clone.removeAttribute('id');
+    Array.prototype.forEach.call(clone.querySelectorAll('[contenteditable], [id], [tabindex]'), function (n) {
+      n.removeAttribute('contenteditable');
+      n.removeAttribute('id');
+      n.removeAttribute('tabindex');
+    });
+    box.appendChild(clone);
+    return box;
+  }
+
+  // Zone edits show in the miniatures a moment after typing stops.
+  var thumbTimer = null;
+  function scheduleThumbs() {
+    if (!viewIsSlides()) return;
+    clearTimeout(thumbTimer);
+    thumbTimer = setTimeout(function () {
+      // [data-i]: the deck's slides — the title slide shown first is not one of them.
+      Array.prototype.forEach.call(document.querySelectorAll('#vPanelList .vpanel-item[data-i]'), function (item) {
+        var old = item.querySelector('.vthumb');
+        if (old) old.replaceWith(thumbFor(parseInt(item.dataset.i, 10)));
+      });
+    }, 800);
+  }
+
+  function slideMenu(anchor, i) {
+    var deck = viewIsSlides(), noun = deck ? 'slide' : 'section';
+    var items = [];
+    if (i > 0) items.push({ text: 'Move up', run: function () { moveSlide(i, -1); } });
+    if (i < state.viewSlides.length - 1) items.push({ text: 'Move down', run: function () { moveSlide(i, 1); } });
+    if (deck) {
+      if (items.length) items.push('-');
+      items.push({ text: 'Layout' });
+      LAYOUT_ORDER.forEach(function (name) {
+        items.push({
+          text: LAYOUT_INFO[name].label,
+          hint: LAYOUT_INFO[name].desc,
+          checked: function () { return !!state.viewSlides[i] && state.viewSlides[i].layout === name; },
+          run: function () { closeActionMenu(); changeLayout(i, name); },
+        });
+      });
+    }
+    if (items.length) items.push('-');
+    items.push({ text: 'Delete ' + noun + '…', danger: true, run: function () { deleteSlide(i); } });
+    actionMenu(anchor, items);
+  }
+
+  // The canvas card of working-model slide i — each carries data-slide-index (RenderSlides /
+  // RenderDocument); a deck's automatic title slide has none.
   function canvasSlideEl(i) {
     var surface = $('vEditSurface');
-    if (!surface) return null;
-    var all = surface.querySelectorAll('.slide');
-    return all[i + 1] || null;
+    return surface ? surface.querySelector('[data-slide-index="' + i + '"]') : null;
   }
 
   // Navigate: scroll the canvas to slide i and highlight its panel item.
@@ -1800,17 +2892,16 @@
       scrollSyncQueued = false;
       var surface = $('vEditSurface');
       if (!surface || surface.hidden) return;
-      var all = surface.querySelectorAll('.slide');
+      var all = surface.querySelectorAll('[data-slide-index]');
       if (!all.length) return;
       var mid = surface.parentNode.getBoundingClientRect();
       var center = mid.top + mid.height / 2;
-      var best = -1, bestDist = Infinity;
-      Array.prototype.forEach.call(all, function (el, domIdx) {
-        var r = el.getBoundingClientRect();
+      var idx = -1, bestDist = Infinity;
+      Array.prototype.forEach.call(all, function (card) {
+        var r = card.getBoundingClientRect();
         var d = Math.abs((r.top + r.height / 2) - center);
-        if (d < bestDist) { bestDist = d; best = domIdx; }
+        if (d < bestDist) { bestDist = d; idx = parseInt(card.getAttribute('data-slide-index'), 10); }
       });
-      var idx = best - 1; // subtract the auto title slide at DOM index 0
       if (idx >= 0 && idx !== activeSlideIndex) { activeSlideIndex = idx; highlightPanel(idx); }
     });
   }
@@ -1818,17 +2909,55 @@
   // Reorder: move slide i by dir (-1 up / +1 down). Collect any in-flight zone edit
   // BEFORE re-rendering (else unmountAll drops it), reorder the working model, keep the
   // moved slide active, mark dirty, re-render (which rebuilds the panel + remounts zones).
-  function moveSlide(i, dir) {
+  function moveSlide(i, dir) { moveSlideTo(i, i + dir); }
+
+  // Move slide `from` to position `to` (a drag in the rail, or Move up / down).
+  function moveSlideTo(from, to) {
     var slides = state.viewSlides;
-    var j = i + dir;
-    if (j < 0 || j >= slides.length) return;
+    if (to < 0 || to >= slides.length || to === from) return;
     collectZoneEdits();
-    var moved = slides.splice(i, 1)[0];
-    slides.splice(j, 0, moved);
-    activeSlideIndex = j;
+    var moved = slides.splice(from, 1)[0];
+    slides.splice(to, 0, moved);
+    activeSlideIndex = to;
     state.dirty = true;
     scrollActiveOnRender = true;
     renderViewEditor();
+  }
+
+  /* Change a slide's layout after the fact (Stage 6). Regions the new layout has keep their
+     content; content from regions it lacks moves into its first free region, so nothing is
+     lost — except into a section header, which has no content area: that asks first (History
+     keeps the earlier version either way). */
+  function changeLayout(i, layout) {
+    collectZoneEdits();
+    var slide = state.viewSlides[i];
+    if (!slide || slide.layout === layout) return;
+    var to = SLIDE_REGIONS[layout] || [];
+    var regions = {}, leftover = [];
+    (SLIDE_REGIONS[slide.layout] || []).forEach(function (name) {
+      var md = slide.regions[name];
+      if (typeof md !== 'string' || !md.trim()) return;
+      if (to.indexOf(name) >= 0) regions[name] = md; else leftover.push(md);
+    });
+    var apply = function () {
+      if (leftover.length && to.length) {
+        var target = to.filter(function (n) { return !regions[n]; })[0] || to[0];
+        regions[target] = [regions[target]].concat(leftover).filter(Boolean).join('\n\n');
+      }
+      slide.layout = layout;
+      slide.regions = regions;
+      activeSlideIndex = i;
+      state.dirty = true;
+      scrollActiveOnRender = true;
+      renderViewEditor();
+    };
+    if (leftover.length && !to.length) {
+      confirmDialog('Make slide ' + slideNo(i) + ' a section header?',
+        'A section header has only a title and a subtitle, so this slide’s content is removed. History keeps the version before the change.',
+        'Change layout', apply, true);
+      return;
+    }
+    apply();
   }
 
   // Delete slide i. Confirm only when it has authored/linked content (an empty slide is a
@@ -1846,6 +2975,7 @@
     var slides = state.viewSlides;
     var slide = slides[i];
     if (!slide) return;
+    var noun = viewIsSlides() ? 'slide' : 'section';
     var proceed = function () {
       collectZoneEdits();
       slides.splice(i, 1);
@@ -1855,11 +2985,11 @@
       renderViewEditor();
     };
     if (!slideHasContent(slide)) { proceed(); return; }
-    openModal('Delete slide',
-      '<p class="mhelp">Delete slide <b>' + (i + 1) + '</b> (' + esc(slideLabelFor(slide)) + ')? ' +
-      'Its content is removed from this view. Linked blocks just stop being shown here — ' +
-      'the source chapter is not touched.</p>',
-      function () { proceed(); });
+    openModal('Delete ' + noun,
+      '<p class="mhelp">Delete ' + noun + ' <b>' + slideNo(i) + '</b> (' + esc(slideLabelFor(slide)) + ')? ' +
+      'Its content is removed from this output. Linked blocks just stop being shown here — ' +
+      'the chapter they come from is not touched.</p>',
+      function () { proceed(); }, null, { okLabel: 'Delete ' + noun, danger: true });
   }
 
 
@@ -1919,13 +3049,14 @@
   }
 
   function openView(file) {
-    if (!confirmDiscard()) return;
+    if (!confirmDiscard(openView, arguments)) return;
     api.json('/api/view?file=' + encodeURIComponent(file)).then(function (v) {
       state.currentView = file;
       state.currentFile = null;
       state.currentYaml = null;
       state.dirty = false;
       show('viewEditor');
+      setSideTab('outputs');
       $('vTitle').value = v.title || '';
       // While zone editors are mounted, a debounced full re-render would clobber the
       // editor the author is typing in (Task 7b). The title shows on the auto title
@@ -1936,22 +3067,90 @@
         state.dirty = true;
         if (!zoneEditorsLive()) schedulePreview(PREVIEW_DEBOUNCE_TITLE);
       };
-      $('vAudience').innerHTML = state.project.audiences.map(function (a) {
-        return '<option value="' + esc(a.id) + '"' + (a.id === v.audience ? ' selected' : '') + '>' + esc(a.title) + '</option>';
-      }).join('');
-      // Audience changes how embeds filter, so a re-render IS wanted — re-render and
-      // re-mount the zones cleanly (refreshEditSurface unmounts first).
-      $('vAudience').onchange = function () { state.dirty = true; schedulePreview(0); };
-      $('vMode').value = v.mode === 'slides' ? 'slides' : 'document';
-      $('vMode').onchange = function () { state.dirty = true; renderViewEditor(); };
+      state.viewAudience = v.audience;
+      state.viewMode = v.mode === 'slides' ? 'slides' : 'document';
+      syncOutputBar();
       // Working copy of the slides, normalized to the structured layout+regions
       // model (legacy include/markdown slides become title-content body regions).
       state.viewSlides = (v.slides || []).map(normalizeSlide);
       activeSlideIndex = 0;
-      $('vStatus').textContent = '';
+      setViewStatus('');
       renderViewEditor();
       renderTree(state.project);
     });
+  }
+
+  /* ---------- the output bar (Stage 6) — the chapter's document-bar pattern ---------- */
+
+  var PLAY_ICON = '<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M5 3.5v9l7-4.5z"/></svg>';
+  var READ_ICON = '<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/></svg>';
+
+  // Kind, audience, Slides / Document and the rail's words follow the output's kind.
+  function syncOutputBar() {
+    var deck = viewIsSlides();
+    $('vKind').textContent = deck ? 'Slide deck' : 'Document';
+    $('vForLabel').textContent = audienceTitle(state.viewAudience);
+    Array.prototype.forEach.call(document.querySelectorAll('#vModeSeg [data-vmode]'), function (b) {
+      b.setAttribute('aria-pressed', String(b.getAttribute('data-vmode') === state.viewMode));
+    });
+    var read = $('vReadBtn');
+    read.innerHTML = (deck ? PLAY_ICON : READ_ICON) + '<span>' + (deck ? 'Present' : 'Read') + '</span>';
+    read.setAttribute('data-tip', deck
+      ? 'Present the deck the way your audience sees it — full-screen-ready slides, one at a time.'
+      : 'Read this document the way your audience sees it — one tidy page, exactly like the handover.');
+    $('vPanel').setAttribute('aria-label', deck ? 'Slides' : 'Sections');
+    $('vPanelHead').textContent = deck ? 'Slides' : 'Sections';
+    $('vPanelAdd').textContent = deck ? '+ Add slide' : '+ Add section';
+    $('vPanelAdd').setAttribute('data-tip', deck
+      ? 'Add a slide at the end — pick a layout, then fill it in on the slide itself.'
+      : 'Add a section at the end, then fill it in on the page.');
+  }
+
+  // Who the output is for: one audience (its chapters and blocks are filtered to it).
+  function forMenu(anchor) {
+    var items = [{ text: 'Who is this output for?' }];
+    state.project.audiences.forEach(function (a) {
+      items.push({
+        text: a.title, hint: a.description || '',
+        checked: function () { return state.viewAudience === a.id; },
+        run: function () {
+          closeActionMenu();
+          if (state.viewAudience === a.id) return;
+          state.viewAudience = a.id;
+          state.dirty = true;
+          syncOutputBar();
+          schedulePreview(0); // embeds re-filter for the new audience
+        },
+      });
+    });
+    items.push('-', { text: 'Manage audiences…', run: function () { openSettings('audiences'); } });
+    actionMenu(anchor, items, state.project.audiences.length >= READERS_FILTER_FROM ? { filter: 'Find an audience' } : null);
+  }
+
+  function setViewMode(mode) {
+    if (mode === state.viewMode) return;
+    state.viewMode = mode;
+    state.dirty = true;
+    syncOutputBar();
+    renderViewEditor();
+  }
+
+  function outputMenu(anchor) {
+    var deck = viewIsSlides();
+    actionMenu(anchor, [
+      { text: 'Duplicate…', hint: 'A copy with all its ' + (deck ? 'slides' : 'sections') + ' — the start of the next one', run: duplicateView },
+      { text: 'Export as one HTML file', hint: 'Self-contained — e-mail it or open it in any browser', run: exportView },
+      '-',
+      { text: 'Delete output…', danger: true, run: deleteView },
+    ]);
+  }
+
+  function exportView() {
+    var go = function () {
+      window.location = '/api/export-view?file=' + encodeURIComponent(state.currentView);
+    };
+    if (state.dirty) saveView().then(go).catch(quiet); // failed save = no export
+    else go();
   }
 
   function chapterTitleFor(id) {
@@ -1990,8 +3189,8 @@
     return {
       id: viewIdFromFile(state.currentView),
       title: $('vTitle').value,
-      audience: $('vAudience').value,
-      mode: $('vMode').value,
+      audience: state.viewAudience,
+      mode: state.viewMode,
       slides: state.viewSlides.map(slidePayload),
     };
   }
@@ -2058,7 +3257,7 @@
   // "Read / present" view.
   function refreshEditSurface() {
     if (!state.currentView) return;
-    var slides = $('vMode').value === 'slides';
+    var slides = viewIsSlides();
     var surface = $('vEditSurface');
     var docFrame = $('vDocSurface');
     // Pull any live zone edits back into state.viewSlides BEFORE tearing the editors
@@ -2110,23 +3309,12 @@
           // Scale every 1920×1080 frame to the column (WYSIWYG with Read) before mounting
           // zones, so the zones mount inside an already-zoomed frame and carets are correct.
           fitSlideZoom();
-          // Rebuild the slide panel from the (possibly mutated) working model so it stays
-          // in lock-step with the canvas, and keep the canvas scroll → active-item sync.
+          // Rebuild the rail from the (possibly mutated) working model so it stays in
+          // lock-step with the canvas — its miniatures are cloned from the canvas now, before
+          // the zones mount — and keep the canvas scroll → active-item sync.
           renderSlidePanel();
           surface.parentNode.onscroll = onCanvasScroll;
-          if (scrollLastOnRender) {
-            scrollLastOnRender = false;
-            var allLast = surface.querySelectorAll('.slide');
-            if (allLast.length) {
-              activeSlideIndex = Math.max(0, state.viewSlides.length - 1);
-              highlightPanel(activeSlideIndex);
-              allLast[allLast.length - 1].scrollIntoView({ block: 'center' });
-            }
-          } else if (scrollActiveOnRender) {
-            scrollActiveOnRender = false;
-            var elActive = canvasSlideEl(activeSlideIndex);
-            if (elActive) elActive.scrollIntoView({ block: 'center' });
-          }
+          revealActiveOnRender();
           // Task 7b: mount a live ProseMirror editor on every .slide-region zone and let
           // the shared chapter toolbar follow whichever zone has focus. Per-zone save is
           // Task 7c — here editing is live but only marks the view dirty.
@@ -2134,24 +3322,26 @@
             window.DocWizSlideEdit.mountAll({
               surface: surface,
               slides: state.viewSlides,
-              audience: $('vAudience').value,
-              onZoneDirty: function () { state.dirty = true; },
+              audience: state.viewAudience,
+              onZoneDirty: function () { state.dirty = true; scheduleThumbs(); },
             });
           }
         } else {
           // Document mode is now a LIVE surface (parent document), like slides — natural
-          // reading width (no slide frame/zoom). The iframe is only used by "Read / present".
+          // reading width (no slide frame/zoom). The iframe is only used by "Read".
           docFrame.hidden = true;
           surface.hidden = false;
           surface.innerHTML = html; // surface look already set synchronously above
-          renderSlidePanel(); // document mode → keeps the slide panel hidden
+          renderSlidePanel(); // the section list
+          surface.onscroll = onCanvasScroll;
+          revealActiveOnRender();
           // Mount a ProseMirror editor on every .view-sec card's zones; the shared chapter
           // toolbar follows the focused zone. Embeds resolve read-only; save is unchanged.
           if (window.DocWizSlideEdit) {
             window.DocWizSlideEdit.mountAll({
               surface: surface,
               slides: state.viewSlides,
-              audience: $('vAudience').value,
+              audience: state.viewAudience,
               cardSelector: '.view-sec',
               onZoneDirty: function () { state.dirty = true; },
             });
@@ -2182,10 +3372,11 @@
   }
 
   // Add slide → layout gallery: pick one of the four structured layouts. The new
-  // slide is empty ({ layout, title:'', subtitle:'', regions:{} }) and is appended
-  // to the end of the deck; the author fills it in live on the canvas (Task 7b
-  // mounts a per-zone editor on each region). Default highlight is title-content.
-  function addSlide() {
+  // slide is empty ({ layout, title:'', subtitle:'', regions:{} }) and lands at `at` (the +
+  // between two slides in the rail) or at the end; the author fills it in live on the canvas
+  // (Task 7b mounts a per-zone editor on each region).
+  function addSlide(at) {
+    if (typeof at !== 'number') at = null; // a click event from "+ Add slide" = the end
     var cards = LAYOUT_ORDER.map(function (name) {
       var info = LAYOUT_INFO[name];
       return '<button type="button" class="vlay-gallery-card" data-layout="' + esc(name) + '" ' +
@@ -2196,14 +3387,14 @@
         '</button>';
     }).join('');
     openModal('Add a slide',
-      '<p class="mhelp">Pick a layout for the new slide. You can change it later, ' +
-      'and fill in its content directly on the slide canvas.</p>' +
+      '<p class="mhelp">Pick a layout for the new slide, then fill in its content ' +
+      'directly on the slide. You can change the layout later from the slide’s ⋯ in the rail.</p>' +
       '<div class="vlay-gallery">' + cards + '</div>',
       null,
       function (root) {
         Array.prototype.forEach.call(root.querySelectorAll('.vlay-gallery-card'), function (btn) {
           btn.onclick = function () {
-            insertSlide(btn.dataset.layout);
+            insertSlide(btn.dataset.layout, at);
             $('modal').close();
           };
         });
@@ -2211,39 +3402,78 @@
       { hideOk: true });
   }
 
-  // Set when a structural change should reveal the last slide once the canvas
-  // re-renders (the canvas lives in this document now, so we scroll it directly
+  // Set when an add / move / delete / layout change should reveal the (clamped) active slide
+  // once the canvas re-renders (the canvas lives in this document, so it scrolls directly
   // after the fragment is injected — no iframe onload).
-  var scrollLastOnRender = false;
-  // Set when a reorder/delete should re-reveal the (clamped) active slide after re-render.
   var scrollActiveOnRender = false;
+  function revealActiveOnRender() {
+    if (!scrollActiveOnRender) return;
+    scrollActiveOnRender = false;
+    highlightPanel(activeSlideIndex);
+    var elActive = canvasSlideEl(activeSlideIndex);
+    if (elActive) elActive.scrollIntoView({ block: 'center' });
+    var item = document.querySelector('#vPanelList .vpanel-item[data-i="' + activeSlideIndex + '"]');
+    if (item) item.scrollIntoView({ block: 'nearest' });
+  }
 
-  function insertSlide(layout) {
-    state.viewSlides.push({ layout: layout, title: '', subtitle: '', regions: {} });
+  // A new, empty slide (section) at position `at` (default: the end), filled in on the canvas.
+  function insertSlide(layout, at) {
+    var slides = state.viewSlides;
+    var i = at == null ? slides.length : Math.max(0, Math.min(at, slides.length));
+    collectZoneEdits();
+    slides.splice(i, 0, { layout: layout, title: '', subtitle: '', regions: {} });
+    activeSlideIndex = i;
     state.dirty = true;
-    scrollLastOnRender = true;
+    scrollActiveOnRender = true;
     renderViewEditor();
   }
 
-  function saveView() {
+  // A document's sections have one content area each — no layout to pick.
+  function addSection(at) { insertSlide(DEFAULT_LAYOUT, at); }
+
+  // Saves of the open view queue behind each other (autosave, Ctrl+S, Build) — see autosave.
+  var viewSaving = Promise.resolve();
+  function saveView(opts) {
+    var run = function () { return saveViewNow(opts); };
+    var p = viewSaving.then(run, run);
+    viewSaving = p.catch(function () {});
+    return p;
+  }
+
+  // opts.auto: an autosave — skips the Check run (a manual save, Build and Export keep it).
+  function saveViewNow(opts) {
     if (!state.currentView) return Promise.resolve();
     // currentViewPayload() first pulls any edited slide zones back into state.viewSlides
     // (Task 7c) — the one place zone edits enter the save path.
     var payload = currentViewPayload();
+    var gen = editGen;
+    var savedView = state.currentView;
+    setViewStatus('Saving…');
     return api.send('PUT', '/api/view?file=' + encodeURIComponent(state.currentView), payload)
       .then(function () {
-        state.dirty = false;
-        // Reset the per-zone + module dirty flags so DocWizSlideEdit.isDirty() reads
-        // false after a save (Task 7c review I1). The zones stay mounted (save does not
-        // re-render), so without this they would report dirty forever post-save.
-        if (window.DocWizSlideEdit && window.DocWizSlideEdit.markClean) window.DocWizSlideEdit.markClean();
-        $('vStatus').textContent = 'Saved ✓';
-        $('vStatus').className = 'ok';
-        return loadProject().then(runCheck);
+        if (state.currentView !== savedView) return loadProject(); // another screen is open now
+        if (editGen === gen) {
+          state.dirty = false;
+          // Reset the per-zone + module dirty flags so DocWizSlideEdit.isDirty() reads
+          // false after a save (Task 7c review I1). The zones stay mounted (save does not
+          // re-render), so without this they would report dirty forever post-save. Skipped
+          // when something was edited during the save: those zones still need saving.
+          if (window.DocWizSlideEdit && window.DocWizSlideEdit.markClean) window.DocWizSlideEdit.markClean();
+        } else {
+          scheduleAutosave();
+        }
+        setViewStatus('Saved ' + clockTime(new Date()), 'ok');
+        if (opts && opts.auto) return loadProject();
+        // Re-check after a save, but only interrupt with the panel when something is broken
+        // (the Check button shows the full list, warnings included, any time).
+        return loadProject()
+          .then(function () { return api.json('/api/check'); })
+          .then(function (issues) {
+            if (issues.some(function (i) { return i.severity === 'Error'; })) showIssues('Check results', issues);
+          });
       })
       .catch(function (e) {
-        $('vStatus').textContent = e.message;
-        $('vStatus').className = 'err';
+        setViewStatus(e.message, 'err');
         throw e; // callers chaining Build/Export must not proceed on stale content
       });
   }
@@ -2253,25 +3483,35 @@
     return v ? v.id : baseName(file).replace(/\.yaml$/, '');
   }
 
-  function deleteChapter() {
-    if (!state.currentFile) return;
-    var title = $('fmTitle').value || state.currentFile;
+  // Deletes the given chapter (from the tree's ⋯ menu) or, when called from the chapter
+  // bar's menu (an event argument), the open one.
+  function deleteChapter(file) {
+    if (typeof file !== 'string') file = state.currentFile;
+    if (!file) return;
+    var where = findChapterByFile(file);
+    var title = where ? where.chapter.title : file;
     openModal('Delete chapter',
-      '<p class="mhelp">This permanently deletes "<b>' + esc(title) + '</b>" (' +
-      esc(state.currentFile) + '). If other chapters or views still link to it, the ' +
-      'delete is refused so nothing ends up broken.</p>',
+      '<p class="mhelp">“<b>' + esc(title) + '</b>” moves to Recently deleted in History, and ' +
+      'Ctrl+Z brings it back. If other chapters or outputs still link to it, the delete is ' +
+      'refused so nothing ends up broken.</p>',
       function (root) {
-        api.send('DELETE', '/api/chapter?file=' + encodeURIComponent(state.currentFile))
+        var wasOpen = file === state.currentFile;
+        api.send('DELETE', '/api/chapter?file=' + encodeURIComponent(file))
           .then(function () {
             $('modal').close();
-            state.currentFile = null;
-            state.dirty = false;
-            show('welcome');
-            return loadProject();
+            if (wasOpen) {
+              state.currentFile = null;
+              state.currentId = null;
+              state.dirty = false;
+              show('welcome');
+            }
+            return loadProject().then(function () {
+              if (where) chapterDeleted(where.chapter.id, title, file, wasOpen);
+            });
           })
           .catch(function (e) { modalWarn(root, e.message); });
         return false; // async: the dialog closes itself on success, warns on refusal
-      });
+      }, null, { okLabel: 'Delete chapter', danger: true });
   }
 
   // Duplicate = the template workflow: build one proven view structure, stamp out a
@@ -2281,19 +3521,19 @@
     if (!state.currentView) return;
     saveView().then(function () {
       var srcTitle = $('vTitle').value;
-      openModal('Duplicate view',
-        '<p class="mhelp">Creates a copy of "<b>' + esc(srcTitle) + '</b>" with all its ' +
-        'slides — start a new training or handover from a structure that already works.</p>' +
+      openModal('Duplicate output',
+        '<p class="mhelp">Creates a copy of “<b>' + esc(srcTitle) + '</b>” with all its ' +
+        (viewIsSlides() ? 'slides' : 'sections') + ' — start the next training or reference from a structure that already works.</p>' +
         '<div class="row"><label>Title</label><input id="dvTitle"></div>',
         function (root) {
           var title = root.querySelector('#dvTitle').value.trim();
           var id = slugify(title);
           if (!title || !id) return modalWarn(root, 'Give the copy a title.');
           api.send('POST', '/api/view', {
-            id: id, title: title, audience: $('vAudience').value, mode: $('vMode').value,
+            id: id, title: title, audience: state.viewAudience, mode: state.viewMode,
           }).then(function (res) {
             return api.send('PUT', '/api/view?file=' + encodeURIComponent(res.file), {
-              id: id, title: title, audience: $('vAudience').value, mode: $('vMode').value,
+              id: id, title: title, audience: state.viewAudience, mode: state.viewMode,
               // saveView() above already pulled edited zones into state.viewSlides (7c).
               slides: state.viewSlides.map(slidePayload),
             }).then(function () { return res.file; });
@@ -2311,7 +3551,13 @@
   }
 
   function deleteView() {
-    if (!window.confirm('Delete this view? Its file will be removed.')) return;
+    confirmDialog('Delete this output?',
+      '“' + ($('vTitle').value || 'This output') + '” and all its ' + (viewIsSlides() ? 'slides' : 'sections') +
+      ' are removed (Recently deleted in History can bring it back). The chapters it shows are not affected.',
+      'Delete output', deleteViewConfirmed, true);
+  }
+
+  function deleteViewConfirmed() {
     api.send('DELETE', '/api/view?file=' + encodeURIComponent(state.currentView))
       .then(function () {
         state.currentView = null;
@@ -2319,43 +3565,37 @@
         show('welcome');
         return loadProject();
       })
-      .catch(function (e) {
-        $('vStatus').textContent = 'Delete failed: ' + e.message;
-        $('vStatus').className = 'err';
-      });
+      .catch(function (e) { setViewStatus('Delete failed: ' + e.message, 'err'); });
   }
 
   function newView() {
-    if (!confirmDiscard()) return;
+    if (!confirmDiscard(newView, arguments)) return;
     var audiences = state.project.audiences.map(function (a) {
       return '<option value="' + esc(a.id) + '">' + esc(a.title) + '</option>';
     }).join('');
-    openModal('New view',
-      '<p class="mhelp">A view is an audience-specific output assembled from chapter sections — ' +
-      'a user training deck, a support quick reference, an administrator guide.</p>' +
+    openModal('New output',
+      '<p class="mhelp">An output is made from the manual for one audience — a slide deck for a ' +
+      'training, or a document such as a quick reference or a guide. It shows the manual’s ' +
+      'current content, so it never goes out of date.</p>' +
       '<div class="row"><label>Title</label><input id="nvTitle" placeholder="User Training"></div>' +
-      '<div class="row"><label>ID</label><input id="nvId" placeholder="user-training"></div>' +
-      '<div class="row"><label>Audience</label><select id="nvAud">' + audiences + '</select></div>' +
-      '<div class="row"><label>Mode</label><select id="nvMode">' +
-      '<option value="slides">Slides (presentation)</option>' +
-      '<option value="document">Document (page)</option></select></div>',
+      '<div class="row"><label>For</label><select id="nvAud">' + audiences + '</select></div>' +
+      '<div class="row"><label>Kind</label><select id="nvMode">' +
+      '<option value="slides">Slide deck (a presentation)</option>' +
+      '<option value="document">Document (one page of sections)</option></select></div>',
       function (root) {
         var title = root.querySelector('#nvTitle').value.trim();
-        var id = slugify(root.querySelector('#nvId').value || title);
-        if (!title || !id) return modalWarn(root, 'Give the view a title.');
+        var id = slugify(title);
+        if (!title || !id) return modalWarn(root, 'Give the output a title.');
         api.send('POST', '/api/view', {
           id: id, title: title,
           audience: root.querySelector('#nvAud').value,
           mode: root.querySelector('#nvMode').value,
         }).then(function (res) {
+          root.close();
           return loadProject().then(function () { openView(res.file); });
-        }).catch(function (e) { window.alert(e.message); });
-      },
-      function (root) {
-        var t = root.querySelector('#nvTitle');
-        var idEl = root.querySelector('#nvId');
-        t.oninput = function () { idEl.value = slugify(t.value); };
-      });
+        }).catch(function (e) { modalWarn(root, e.message); });
+        return false; // async: closes on success, keeps the input and warns on failure
+      }, null, { okLabel: 'Create output' });
   }
 
   // Draft-deck-from-manual (Slides v2, Task 10): pick a chapter, POST /api/draft-view,
@@ -2364,7 +3604,7 @@
   // the `docwiz draft-view` CLI verb uses. Audience defaults to the chapter's first
   // tagged audience so the embeds stay clean; the author can override it here.
   function draftFromManual() {
-    if (!confirmDiscard()) return;
+    if (!confirmDiscard(draftFromManual, arguments)) return;
     var picker = chapterOptgroups();
     var chapters = picker.chapters;
     var groups = picker.html;
@@ -2384,8 +3624,10 @@
           chapter: id,
           audience: root.querySelector('#dvAud').value,
         }).then(function (res) {
+          root.close();
           return loadProject().then(function () { openView(res.file); });
-        }).catch(function (e) { window.alert(e.message); });
+        }).catch(function (e) { modalWarn(root, e.message); });
+        return false; // async: closes on success, keeps the input and warns on failure
       },
       function (root) {
         // Default the audience to the chosen chapter's first tagged audience (keeps the
@@ -2434,6 +3676,12 @@
         showIssues(res.ok ? 'Build OK' : 'Build failed — fix the errors', res.issues);
         $('handoverLink').hidden = !res.ok;
         $('packageLink').hidden = !res.ok;
+        if (res.ok) {
+          // A finished handover is a natural moment to keep a named version.
+          var t = showToast('Handover built', 'Click here to keep this state as a named version.', 'success');
+          t.style.cursor = 'pointer';
+          t.onclick = function () { t.classList.remove('show'); markVersion(); };
+        }
       })
       .catch(function (e) {
         // Save failed (build skipped — never build stale content) or build request failed.
@@ -2441,40 +3689,59 @@
       });
   }
 
-  function newChapter() {
+  // "Start from": the chapter skeletons by what they are for. The key is stored as the
+  // chapter's `discipline` (it records where the chapter started; the build ignores it).
+  var START_FROM = [
+    ['blank', 'Blank page', 'just the title'],
+    ['overview', 'Overview', 'purpose and scope'],
+    ['setup', 'Installation', 'requirements, steps, configuration'],
+    ['operations', 'Procedure', 'daily tasks and a procedures table'],
+    ['troubleshooting', 'Troubleshooting', 'symptoms, causes, actions'],
+    ['reference', 'Reference', 'an overview and a details table'],
+    ['integration', 'Integration', 'endpoints and data exchange'],
+  ];
+
+  // New chapter: section (preselected when started from a section's +), title, and what to
+  // start from. The id is derived from the title on the server; the file is named after it.
+  function newChapter(folder) {
+    var preset = typeof folder === 'string' ? folder : null;
     var sections = state.project.sections.map(function (s) {
-      return '<option value="' + s.folder + '">' + s.title + '</option>';
+      return '<option value="' + esc(s.folder) + '"' + (s.folder === preset ? ' selected' : '') + '>' + esc(s.title) + '</option>';
+    }).join('');
+    var starts = START_FROM.map(function (t) {
+      return '<option value="' + t[0] + '">' + esc(t[1]) + ' — ' + esc(t[2]) + '</option>';
     }).join('');
     openModal('New chapter',
       '<div class="row"><label>Section</label><select id="mSection">' + sections +
       '<option value="__new">— new section —</option></select></div>' +
-      '<div class="row" id="mNewSecRow" style="display:none"><label>New section</label><input id="mNewSec" placeholder="integrations"></div>' +
-      '<div class="row"><label>Title</label><input id="mTitle" placeholder="Integration Guide"></div>' +
-      '<div class="row"><label>ID</label><input id="mId" placeholder="integration-guide"></div>' +
-      '<div class="row"><label>Discipline</label><select id="mDisc"><option>overview</option><option>setup</option>' +
-      '<option>operations</option><option>troubleshooting</option><option>reference</option>' +
-      '<option>integration</option></select></div>',
+      '<div class="row" id="mNewSecRow" style="display:none"><label>New section</label><input id="mNewSec" placeholder="e.g. Údržba"></div>' +
+      '<div class="row"><label>Title</label><input id="mTitle" placeholder="e.g. Cleaning the scanner"></div>' +
+      '<div class="row"><label>Start from</label><select id="mStart">' + starts + '</select></div>',
       function (root) {
         var secSel = root.querySelector('#mSection').value;
-        var section = secSel === '__new' ? root.querySelector('#mNewSec').value : secSel;
+        var section = secSel === '__new' ? root.querySelector('#mNewSec').value.trim() : secSel;
         var title = root.querySelector('#mTitle').value.trim();
-        var id = root.querySelector('#mId').value.trim();
-        if (!section || !title || !id)
-          return modalWarn(root, 'Section, title, and ID are all required.');
+        if (!section) return modalWarn(root, 'Name the new section.');
+        if (!title) return modalWarn(root, 'Give the chapter a title.');
         api.send('POST', '/api/chapter', {
           section: section,
-          slug: id,
-          id: id,
+          slug: '',
+          id: '',
           title: title,
-          discipline: root.querySelector('#mDisc').value,
+          discipline: root.querySelector('#mStart').value,
           audiences: [],
-        }).then(function (res) { return loadProject().then(function () { openChapter(res.file); }); })
-          .catch(function (e) { window.alert(e.message); });
+        }).then(function (res) {
+          root.close();
+          return loadProject().then(function () {
+            var where = findChapterByFile(res.file);
+            if (where) chapterAdded(where.chapter, state.project.sections.indexOf(where.section), secSel === '__new');
+            openChapter(res.file);
+          });
+        }).catch(function (e) { modalWarn(root, e.message); });
+        return false; // async: closes on success, keeps the input and warns on failure
       },
       function (root) {
         var sel = root.querySelector('#mSection');
-        var titleInput = root.querySelector('#mTitle');
-        var idInput = root.querySelector('#mId');
         sel.onchange = function () {
           root.querySelector('#mNewSecRow').style.display = sel.value === '__new' ? '' : 'none';
         };
@@ -2482,10 +3749,9 @@
         // preselected and no change event ever fires — the name input must show
         // immediately or the dialog is a dead end (stakeholder bug, 2026-06-12).
         sel.onchange();
-        titleInput.oninput = function () {
-          idInput.value = slugify(titleInput.value);
-        };
-      });
+        setTimeout(function () { root.querySelector('#mTitle').focus(); }, 0);
+      },
+      { okLabel: 'Create chapter' });
   }
 
   /* ---------- Word import (two-phase: preview → cherry-pick → commit) ---------- */
@@ -2502,26 +3768,32 @@
     }).catch(showWelcomeError);
   }
 
-  // Header Convert EMF…: one-shot EMF/WMF → PNG for the open project. A multi-second
-  // synchronous request (up to 162 metafiles), so disable + show a busy label, then reload
-  // so every surface re-renders with the now-PNG links (and the button hides — emfCount 0).
+  // Project menu › Convert Word images: one-shot EMF/WMF → PNG for the open project. A
+  // multi-second synchronous request (up to 162 metafiles), so say it is running, then reload
+  // so every surface re-renders with the now-PNG links (and the item goes — emfCount 0).
+  var convertingEmf = false;
   function convertEmf() {
     var n = state.project && state.project.emfCount;
-    if (!n) return;
-    if (!window.confirm('Convert ' + n + ' EMF/WMF image(s) to PNG?\n\n' +
-        'Originals are moved to _emf-originals/ (kept, not shipped).')) return;
-    var btn = $('convertEmfBtn');
-    btn.disabled = true;
-    $('convertEmfLabel').textContent = 'Converting…';
-    api.send('POST', '/api/convert-emf', {}).then(function (r) {
-      window.alert('Converted ' + r.converted + ' image(s) to PNG; rewrote ' + r.linksRewritten + ' link(s).' +
-        (r.failed ? '\n' + r.failed + ' could not be converted and were left in place.' : ''));
-      location.reload();
-    }).catch(function (e) {
-      btn.disabled = false;
-      $('convertEmfLabel').textContent = 'Convert ' + n + ' EMF/WMF…';
-      window.alert('Conversion failed: ' + e.message);
-    });
+    if (!n || convertingEmf) return;
+    confirmDialog('Convert ' + n + ' Word image' + (n === 1 ? '' : 's') + ' to PNG?',
+      'Browsers can’t show EMF/WMF images. The originals are moved to _emf-originals/ (kept, not shipped).',
+      'Convert images', function () {
+        convertingEmf = true;
+        showToast('Converting images…', 'The editor reloads when the conversion is done.', 'success');
+        api.send('POST', '/api/convert-emf', {}).then(function (r) {
+          flashAfterReload('Images converted', 'Converted ' + r.converted + ' image(s) to PNG and updated ' +
+            r.linksRewritten + ' link(s).' + (r.failed ? ' ' + r.failed + ' could not be converted and were left in place.' : ''));
+          location.reload();
+        }).catch(function (e) {
+          convertingEmf = false;
+          showToast('Conversion failed', e.message, 'error');
+        });
+      });
+  }
+
+  // A success message that must survive a page reload (shown by init()).
+  function flashAfterReload(title, message) {
+    try { sessionStorage.setItem('dwFlash', JSON.stringify({ title: title, message: message })); } catch (e) { /* storage off */ }
   }
 
   /* ---------- Export PDF (background job) ----------
@@ -2616,7 +3888,7 @@
 
   // Header Import…: the cherry-pick dialog for the mounted project.
   function importDocx() {
-    if (!confirmDiscard()) return;
+    if (!confirmDiscard(importDocx, arguments)) return;
     var sections = state.project.sections.map(function (s) {
       return '<option value="' + esc(s.folder) + '">' + esc(s.title) + '</option>';
     }).join('');
@@ -2728,9 +4000,9 @@
       discipline: '', audiences: allAudiences, // None + all by default; the walkthrough refines
     }).then(function (outcome) {
       state.importToken = null;
-      if (outcome.error) { window.alert(outcome.error); return; }
+      if (outcome.error) { noticeDialog('Import didn’t finish', outcome.error); return; }
       loadProject().then(function () { afterImport(outcome); });
-    }).catch(function (e) { window.alert(e.message); });
+    }).catch(function (e) { noticeDialog('Import didn’t finish', e.message); });
   }
 
   function afterImport(outcome) {
@@ -2745,7 +4017,7 @@
   function offerWalkthrough(created, done) {
     var n = created.length;
     openModal('Imported ' + n + ' chapter' + (n === 1 ? '' : 's'),
-      '<p class="mhelp">They were added with <b>all audiences</b> and no discipline. Want to set ' +
+      '<p class="mhelp">They were added for <b>all audiences</b>. Want to set ' +
       'who each chapter is for now? You can also change it later per chapter.</p>',
       null,
       function (root) {
@@ -2759,23 +4031,15 @@
       { hideOk: true });
   }
 
-  var WALK_DISCIPLINES = ['', 'overview', 'setup', 'operations', 'troubleshooting', 'reference', 'integration'];
-
   function runWalkthrough(chapters, i, done) {
     if (i >= chapters.length) { if (done) done(); return; }
     var ch = chapters[i];
     var auds = state.project.audiences.map(function (a) {
       return '<label class="wt-aud"><input type="checkbox" class="wt-aud-cb" value="' + esc(a.id) + '" checked> ' + esc(a.title) + '</label>';
     }).join('');
-    var guess = guessDiscipline(ch.title);
-    var discOpts = WALK_DISCIPLINES.map(function (d) {
-      return '<option value="' + d + '"' + (d === guess ? ' selected' : '') + '>' + (d === '' ? 'None' : d) + '</option>';
-    }).join('');
     openModal('Chapter ' + (i + 1) + ' of ' + chapters.length + ': ' + esc(ch.title),
-      '<p class="mhelp">Who is this chapter for? Audiences decide which views it can appear in. ' +
-      'Discipline is just a label — leave it as None if unsure.</p>' +
-      '<div class="row"><label>Audiences</label><div class="wt-auds">' + auds + '</div></div>' +
-      '<div class="row"><label>Discipline</label><select id="wtDisc">' + discOpts + '</select></div>',
+      '<p class="mhelp">Who is this chapter for? Audiences decide which views it can appear in.</p>' +
+      '<div class="row"><label>Audiences</label><div class="wt-auds">' + auds + '</div></div>',
       null,
       function (root) {
         var bar = root.querySelector('.buttons');
@@ -2787,30 +4051,11 @@
         root.querySelector('#wtNext').onclick = function () {
           var picked = Array.prototype.slice.call(root.querySelectorAll('.wt-aud-cb'))
             .filter(function (c) { return c.checked; }).map(function (c) { return c.value; });
-          api.send('POST', '/api/chapter-frontmatter', {
-            file: ch.file, discipline: root.querySelector('#wtDisc').value, audiences: picked,
-          }).then(function () { root.close(); runWalkthrough(chapters, i + 1, done); })
-            .catch(function (e) { window.alert(e.message); });
+          api.send('POST', '/api/chapter-frontmatter', { file: ch.file, audiences: picked }).then(function () { root.close(); runWalkthrough(chapters, i + 1, done); })
+            .catch(function (e) { modalWarn(root, e.message); });
         };
       },
       { hideOk: true });
-  }
-
-  // Keyword guess for the discipline label — a suggestion the human confirms in the
-  // walkthrough, never a silent default (discipline is inert in the build).
-  function guessDiscipline(title) {
-    var t = (title || '').toLowerCase();
-    var map = [
-      ['install', 'setup'], ['setup', 'setup'], ['configur', 'setup'], ['requirement', 'setup'],
-      ['procedure', 'operations'], ['daily', 'operations'], ['how to', 'operations'], ['operation', 'operations'],
-      ['troubleshoot', 'troubleshooting'], ['error', 'troubleshooting'], ['faq', 'troubleshooting'], ['problem', 'troubleshooting'],
-      ['api', 'integration'], ['integration', 'integration'], ['import', 'integration'], ['export', 'integration'],
-      ['reference', 'reference'], ['schema', 'reference'], ['glossary', 'reference'],
-      ['overview', 'overview'], ['introduction', 'overview'],
-    ];
-    for (var k = 0; k < map.length; k++)
-      if (t.indexOf(map[k][0]) >= 0) return map[k][1];
-    return '';
   }
 
   // Review worklist after an import: the converter's review items (deep-linked to the
@@ -2855,16 +4100,22 @@
 
   /* ---------- modal ---------- */
 
-  // opts: { hideOk: true } — suppresses the primary OK button for click-to-pick
-  // galleries where the card click both acts and closes. All other callers omit opts
-  // and get the original two-button footer unchanged.
+  // opts (all optional; callers that omit opts get the original Cancel / OK footer):
+  //   hideOk     — no primary button, for click-to-pick galleries where the card click acts and closes;
+  //   okLabel    — name the action ("Delete chapter"), never a bare OK on a step that changes things;
+  //   danger     — the action destroys something: danger outline, never a primary (DESIGN_SYSTEM rule 8);
+  //   hideCancel — a notice with a single button.
   function openModal(title, bodyHtml, onOk, onMounted, opts) {
-    var hideOk = opts && opts.hideOk;
+    opts = opts || {};
+    var hideOk = opts.hideOk;
     var modal = $('modal');
     modal.innerHTML = '<h3>' + title + '</h3>' + bodyHtml +
-      '<div class="buttons"><button type="button" id="mCancel">Cancel</button>' +
-      (hideOk ? '' : '<button type="button" id="mOk" class="primary">OK</button>') + '</div>';
-    modal.querySelector('#mCancel').onclick = function () { modal.close(); };
+      '<div class="buttons">' +
+      (opts.hideCancel ? '' : '<button type="button" id="mCancel">Cancel</button>') +
+      (hideOk ? '' : '<button type="button" id="mOk" class="' + (opts.danger ? 'danger' : 'primary') + '">' +
+        esc(opts.okLabel || 'OK') + '</button>') + '</div>';
+    var cancel = modal.querySelector('#mCancel');
+    if (cancel) cancel.onclick = function () { modal.close(); };
     if (!hideOk) {
       modal.querySelector('#mOk').onclick = function () {
         // onOk returning false = validation failed: keep the dialog open (it shows
@@ -2875,6 +4126,34 @@
     }
     if (onMounted) onMounted(modal);
     modal.showModal();
+  }
+
+  // In-app replacements for the browser's confirm() / alert() / prompt(): same dialog, same
+  // look, and the button names the action. onConfirm / onValue run after the dialog has
+  // closed, so they may open the next dialog (the one #modal element is reused).
+  function confirmDialog(title, message, actionLabel, onConfirm, danger) {
+    openModal(esc(title), '<p class="mhelp">' + esc(message) + '</p>',
+      function () { setTimeout(onConfirm, 0); },
+      null, { okLabel: actionLabel, danger: !!danger });
+  }
+  function noticeDialog(title, message) {
+    openModal(esc(title), '<p class="mhelp">' + esc(message) + '</p>',
+      function () {}, null, { okLabel: 'OK', hideCancel: true });
+  }
+  function promptDialog(title, label, placeholder, actionLabel, onValue) {
+    openModal(esc(title),
+      '<div class="row"><label>' + esc(label) + '</label><input id="mPrompt" placeholder="' + esc(placeholder) + '"></div>',
+      function (root) {
+        var v = root.querySelector('#mPrompt').value.trim();
+        if (!v) return modalWarn(root, 'Type a ' + label.toLowerCase() + ' first.');
+        setTimeout(function () { onValue(v); }, 0);
+      },
+      function (root) {
+        var input = root.querySelector('#mPrompt');
+        input.onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); root.querySelector('#mOk').click(); } };
+        setTimeout(function () { input.focus(); }, 0);
+      },
+      { okLabel: actionLabel });
   }
 
   /// Shows an inline warning at the top of an open dialog and returns false
@@ -2911,10 +4190,11 @@
   }
 
   function openDocs() {
-    if (!confirmDiscard()) return;
-    state.currentArtifact = 'docs';
+    if (!confirmDiscard(openDocs, arguments)) return;
     state.currentFile = null; state.currentView = null; state.currentYaml = null;
     show('viewDocs');
+    state.currentArtifact = 'docs';
+    setSideTab('outputs');
     renderTree(state.project);
     loadPkgList();
   }
@@ -2924,6 +4204,7 @@
   }
 
   function renderPkgList(pkgs) {
+    state.packages = pkgs; // addPackage warns before replacing one of these
     var list = $('pkgList'), empty = $('pkgEmpty');
     list.innerHTML = '';
     empty.hidden = pkgs.length > 0;
@@ -2967,9 +4248,14 @@
   }
 
   function removePackage(p) {
-    if (!window.confirm('Remove the "' + p.title + '" documentation package from the handover?')) return;
-    api.send('DELETE', '/api/external-docs?key=' + encodeURIComponent(p.key))
-      .then(loadPkgList).catch(function (e) { reportError(e.message || String(e)); });
+    confirmDialog('Remove “' + p.title + '” from the handover?',
+      p.source === 'embedded'
+        ? 'Its copy inside the project is deleted. The folder you originally added it from is not touched.'
+        : 'The handover stops including it. The referenced folder is left in place.',
+      'Remove package', function () {
+        api.send('DELETE', '/api/external-docs?key=' + encodeURIComponent(p.key))
+          .then(loadPkgList).catch(function (e) { reportError(e.message || String(e)); });
+      }, true);
   }
 
   function addPackage() {
@@ -2982,6 +4268,7 @@
         'It must contain an <span class="mono">index.html</span> or <span class="mono">handover.html</span> entry point.</p>' +
         '<label class="mlbl">Type (becomes the handover tab)</label>' +
         '<select id="pkgTypeSel" style="width:100%">' + opts + '</select>' +
+        '<p class="mhelp warn" id="pkgReplaceNote" hidden></p>' +
         '<label class="mlbl">How to bundle it</label>' +
         '<label class="mradio"><input type="radio" name="pkgCopy" value="copy" checked> ' +
         'Copy into the project (self-contained — recommended)</label>' +
@@ -2994,6 +4281,20 @@
           .then(loadPkgList)
           .catch(function (e) { reportError(e.message || String(e)); });
         return true;
+      }, function (modal) {
+        // Adding a type that already exists replaces it (and deletes its embedded copy) —
+        // say so before it happens, and name the button for what it does.
+        var sel = modal.querySelector('#pkgTypeSel'), note = modal.querySelector('#pkgReplaceNote');
+        var ok = modal.querySelector('#mOk');
+        var sync = function () {
+          var existing = (state.packages || []).filter(function (p) { return p.key === sel.value; })[0];
+          note.hidden = !existing;
+          if (existing) note.textContent = 'This project already has an “' + existing.title + '” package. Adding this folder replaces it' +
+            (existing.source === 'embedded' ? ' and deletes the current copy inside the project.' : '.');
+          ok.textContent = existing ? 'Replace package' : 'Add package';
+        };
+        sel.onchange = sync;
+        sync();
       });
     }).catch(function (e) { reportError(e.message || String(e)); });
   }
@@ -3002,17 +4303,20 @@
   var ATTACH_ICON = '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h11l3 3v13H5z"/><path d="M8 12h8M8 15.5h5"/></svg>';
 
   function openAttach() {
-    if (!confirmDiscard()) return;
+    if (!confirmDiscard(openAttach, arguments)) return;
     state.currentFile = null; state.currentView = null; state.currentYaml = null;
     show('viewAttach');
     state.currentArtifact = 'attach';
+    setSideTab('files');
     renderTree(state.project);
     loadAttachList();
   }
 
   function loadAttachList() {
-    api.json('/api/attachments').then(function (r) { renderAttach(r.files || []); })
-      .catch(function (e) { reportError(e.message || String(e)); });
+    api.json('/api/attachments').then(function (r) {
+      renderAttach(r.files || []);
+      if (!$('filesPane').hidden) renderFiles(); // the sidebar lists them too
+    }).catch(function (e) { reportError(e.message || String(e)); });
   }
 
   function renderAttach(files) {
@@ -3035,9 +4339,12 @@
   }
 
   function deleteAttach(name) {
-    if (!window.confirm('Delete attachment "' + name + '"?')) return;
-    api.send('DELETE', '/api/attachment?name=' + encodeURIComponent(name))
-      .then(loadAttachList).catch(function (e) { reportError(e.message || String(e)); });
+    confirmDialog('Delete “' + name + '”?',
+      'The file is removed from the project’s attachments folder. Links to it in chapters will stop working.',
+      'Delete attachment', function () {
+        api.send('DELETE', '/api/attachment?name=' + encodeURIComponent(name))
+          .then(loadAttachList).catch(function (e) { reportError(e.message || String(e)); });
+      }, true);
   }
 
   function uploadAttach(file) {
@@ -3053,15 +4360,61 @@
     ['pl', 'Polish'], ['sk', 'Slovak'], ['pt', 'Portuguese'], ['nl', 'Dutch'],
   ];
 
-  function openSettings(section) {
-    if (!confirmDiscard()) return;
-    state.currentFile = null; state.currentView = null; state.currentYaml = null;
-    show('setPane');
-    state.currentArtifact = 'settings';
-    renderTree(state.project);
-    loadSettings();
-    selectSettingsSection(section || 'general');
+  // Settings is a sheet over the editor (Stage 6): what was open stays open underneath (and
+  // keeps autosaving), so closing the sheet is going back. While it is open the rest of the
+  // window is inert — except the native window's own controls.
+  function setBehindSheet(inert) {
+    ['editorShell', 'projBlock'].forEach(function (id) { $(id).inert = inert; });
+    document.querySelector('.hd-right').inert = inert;
   }
+  var sheetOpener = null;
+  function openSettings(section) {
+    closeActionMenu();
+    var sheet = $('setSheet');
+    if (sheet.hidden) {
+      sheetOpener = document.activeElement;
+      sheet.hidden = false;
+      setBehindSheet(true);
+      loadSettings();
+    }
+    selectSettingsSection(typeof section === 'string' ? section : 'general');
+    applyTheme(); // marks the current Appearance choice
+    $('setPane').focus();
+  }
+
+  function closeSettings() {
+    if (settingsDirty()) {
+      confirmDialog('Discard unsaved changes?', 'Your Project settings changes haven’t been saved yet.',
+        'Discard changes', function () { setDirty(false); closeSettings(); }, true);
+      return;
+    }
+    $('setSheet').hidden = true;
+    setBehindSheet(false);
+    if (sheetOpener && document.contains(sheetOpener)) sheetOpener.focus();
+    sheetOpener = null;
+  }
+
+  // Appearance: follow Windows (no saved choice — the no-flash script in index.html reads the
+  // OS), or always light / always dark.
+  var darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
+  function themeChoice() {
+    try { return localStorage.getItem('dw-theme') || 'system'; } catch (e) { return 'system'; }
+  }
+  function applyTheme() {
+    var c = themeChoice();
+    document.documentElement.setAttribute('data-theme', c === 'system' ? (darkQuery.matches ? 'dark' : 'light') : c);
+    Array.prototype.forEach.call(document.querySelectorAll('#themeMode button'), function (b) {
+      b.setAttribute('aria-pressed', String(b.getAttribute('data-theme-mode') === c));
+    });
+  }
+  function setTheme(choice) {
+    try {
+      if (choice === 'system') localStorage.removeItem('dw-theme');
+      else localStorage.setItem('dw-theme', choice);
+    } catch (e) { /* storage off: applies for this session only */ }
+    applyTheme();
+  }
+  darkQuery.addEventListener('change', function () { if (themeChoice() === 'system') applyTheme(); });
 
   function setDirty(on) { $('setPane').classList.toggle('dirty', !!on); }
 
@@ -3075,6 +4428,7 @@
     var crumb = $('crumbSec');
     var active = document.querySelector('#setRail .set-item[data-sec="' + sec + '"]');
     if (crumb && active) crumb.textContent = active.textContent;
+    if (sec === 'history') loadHistoryStats();
   }
 
   function loadSettings() {
@@ -3099,7 +4453,7 @@
     // App prefs (window mode) — separate store, applies immediately.
     api.json('/api/settings').then(function (s) {
       Array.prototype.forEach.call(document.querySelectorAll('#winMode button'), function (b) {
-        b.classList.toggle('active', b.getAttribute('data-mode') === (s.windowMode === 'browser' ? 'browser' : 'native'));
+        b.setAttribute('aria-pressed', String(b.getAttribute('data-mode') === (s.windowMode === 'browser' ? 'browser' : 'native')));
       });
     }).catch(quiet);
     // Raw YAML (the whole file)
@@ -3113,30 +4467,79 @@
     $('numExample').classList.toggle('nonum', !on);
   }
 
+  /* Audiences (Stage 6): one row each — the name, a line saying who they are, and what uses
+     them, so the weight of a delete shows before anyone asks for one. Drag the grip (or focus
+     it and press ↑ / ↓) to reorder; the order is the order everywhere audiences are listed.
+     Ids stay stable and out of sight — renaming never breaks a tag or an output. */
+  var GRIP_ICON = '<svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><circle cx="6" cy="4" r="1.1"/><circle cx="10" cy="4" r="1.1"/><circle cx="6" cy="8" r="1.1"/><circle cx="10" cy="8" r="1.1"/><circle cx="6" cy="12" r="1.1"/><circle cx="10" cy="12" r="1.1"/></svg>';
+
   function renderAudiences(auds) {
     var list = $('audList');
     list.innerHTML = '';
-    auds.forEach(function (a, i) { list.appendChild(audienceRow(a, i, auds.length)); });
+    auds.forEach(function (a, i) { list.appendChild(audienceRow(a, i)); });
   }
 
-  function audienceRow(a, i, total) {
+  function usageText(a) {
+    var parts = [];
+    if (a.chapters) parts.push(a.chapters + ' chapter' + (a.chapters === 1 ? '' : 's'));
+    if (a.blocks) parts.push(a.blocks + ' tagged block' + (a.blocks === 1 ? '' : 's'));
+    if (a.outputs) parts.push(a.outputs + ' output' + (a.outputs === 1 ? '' : 's'));
+    return parts.length ? 'Used by ' + parts.join(' · ') : 'Not used yet';
+  }
+
+  var draggedAudience = null;
+  function audienceRow(a, i) {
     var row = el('div', 'audrow');
-    var title = el('input', 'audtitle');
+    row.audience = a; // id + usage counts travel with the row
+    var grip = el('button', 'aud-grip');
+    grip.type = 'button';
+    grip.innerHTML = GRIP_ICON;
+    grip.setAttribute('aria-label', 'Move ' + (a.title || 'audience'));
+    grip.setAttribute('data-tip', 'Drag to change the order — or focus here and press the up / down arrow keys.');
+    grip.onkeydown = function (e) {
+      if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+      e.preventDefault();
+      moveAudience(i, e.key === 'ArrowUp' ? -1 : 1);
+    };
+    grip.onmousedown = function () { row.draggable = true; };
+    row.addEventListener('dragstart', function (e) {
+      draggedAudience = i;
+      row.classList.add('dragging');
+      try { e.dataTransfer.setData('text/plain', a.title || ''); } catch (x) { /* some hosts refuse */ }
+    });
+    row.addEventListener('dragend', function () { row.draggable = false; row.classList.remove('dragging'); draggedAudience = null; });
+    row.addEventListener('dragover', function (e) { if (draggedAudience !== null) e.preventDefault(); });
+    row.addEventListener('drop', function (e) {
+      e.preventDefault();
+      if (draggedAudience === null || draggedAudience === i) return;
+      var auds = collectAudiences();
+      var moved = auds.splice(draggedAudience, 1)[0];
+      auds.splice(i, 0, moved);
+      renderAudiences(auds);
+      setDirty(true);
+    });
+    row.appendChild(grip);
+
+    var main = el('div', 'aud-main');
+    var title = el('input', 'finput audtitle');
     title.value = a.title || '';
-    title.setAttribute('data-id', a.id);
+    title.placeholder = 'Name';
+    title.setAttribute('aria-label', 'Audience name');
     title.oninput = function () { setDirty(true); };
-    row.appendChild(title);
-    var id = el('span', 'audid', a.id);
-    row.appendChild(id);
-    var reorder = el('div', 'reorder');
-    var up = el('button', 'mini', '▲'); up.type = 'button'; up.disabled = i === 0;
-    up.onclick = function () { moveAudience(i, -1); };
-    var down = el('button', 'mini', '▼'); down.type = 'button'; down.disabled = i === total - 1;
-    down.onclick = function () { moveAudience(i, 1); };
-    reorder.appendChild(up); reorder.appendChild(down);
-    row.appendChild(reorder);
-    var del = el('button', 'auddel', '✕'); del.type = 'button';
-    del.setAttribute('data-tip', 'Remove this audience. Warns if chapters or views still reference it.');
+    var desc = el('input', 'finput auddesc');
+    desc.value = a.description || '';
+    desc.placeholder = 'Who is this? — e.g. Operators on the warehouse floor';
+    desc.setAttribute('aria-label', 'Who this audience is');
+    desc.setAttribute('data-tip', 'One line for authors — shown where readers are picked, never in the handover.');
+    desc.oninput = function () { setDirty(true); };
+    main.appendChild(title);
+    main.appendChild(desc);
+    main.appendChild(el('div', 'aud-use', usageText(a)));
+    row.appendChild(main);
+
+    var del = el('button', 'dwa-btn dwa-btn-danger dwa-btn-sm auddel', 'Delete');
+    del.type = 'button';
+    del.setAttribute('data-tip', 'Delete this audience. Its chapter tags go with it; an output made for it has to get another audience first.');
     del.onclick = function () { deleteAudience(a.id); };
     row.appendChild(del);
     return row;
@@ -3144,8 +4547,10 @@
 
   function collectAudiences() {
     return Array.prototype.map.call(document.querySelectorAll('#audList .audrow'), function (row) {
-      return { id: row.querySelector('.audtitle').getAttribute('data-id'),
-               title: row.querySelector('.audtitle').value.trim() };
+      var a = row.audience;
+      return { id: a.id, title: row.querySelector('.audtitle').value.trim(),
+               description: row.querySelector('.auddesc').value.trim(),
+               chapters: a.chapters || 0, blocks: a.blocks || 0, outputs: a.outputs || 0 };
     });
   }
 
@@ -3156,38 +4561,49 @@
     var t = auds[i]; auds[i] = auds[j]; auds[j] = t;
     renderAudiences(auds);
     setDirty(true);
+    var grips = document.querySelectorAll('#audList .aud-grip');
+    if (grips[j]) grips[j].focus();
   }
 
-  function audienceRefs(id) {
-    var n = 0;
-    (state.project.sections || []).forEach(function (s) {
-      (s.chapters || []).forEach(function (c) { if ((c.audiences || []).indexOf(id) >= 0) n++; });
-    });
-    (state.project.views || []).forEach(function (v) { if (v.audience === id) n++; });
-    return n;
-  }
-
+  // Deleting an audience: the server reports what it touches (GET /api/audience-usage). A view
+  // filtered by it blocks the delete; chapter tags are removed on Save; `::: audience` blocks
+  // naming it are left for the author (Check lists them).
   function deleteAudience(id) {
-    var refs = audienceRefs(id);
-    var msg = refs > 0
-      ? 'Audience "' + id + '" is referenced by ' + refs + ' chapter(s)/view(s). Removing it will untag that content. Continue?'
-      : 'Remove audience "' + id + '"?';
-    if (!window.confirm(msg)) return;
-    renderAudiences(collectAudiences().filter(function (a) { return a.id !== id; }));
-    setDirty(true);
+    var aud = collectAudiences().filter(function (a) { return a.id === id; })[0];
+    var name = (aud && aud.title) || id;
+    api.json('/api/audience-usage?id=' + encodeURIComponent(id)).then(function (u) {
+      if (u.views.length) {
+        noticeDialog('“' + name + '” is still in use',
+          'The output “' + u.views[0].title + '” is for ' + name + '. Pick another audience for it first, then delete ' + name + '.');
+        return;
+      }
+      var nCh = u.chapters.length;
+      var nBl = u.blocks.reduce(function (n, b) { return n + b.count; }, 0);
+      var msg = nCh
+        ? nCh + ' chapter' + (nCh === 1 ? '' : 's') + ' will lose this tag when you save.'
+        : 'No chapter is tagged with it.';
+      if (nBl) msg += ' ' + nBl + ' tagged block' + (nBl === 1 ? '' : 's') + ' in ' +
+        u.blocks.map(function (b) { return '“' + b.title + '”'; }).join(', ') +
+        ' still name' + (nBl === 1 ? 's' : '') + ' it; Check will list ' + (nBl === 1 ? 'it' : 'them') + ' so you can decide what to keep.';
+      confirmDialog('Delete “' + name + '”?', msg, 'Delete audience', function () {
+        renderAudiences(collectAudiences().filter(function (a) { return a.id !== id; }));
+        setDirty(true);
+      }, true);
+    }).catch(function (e) { reportError(e.message || String(e)); });
   }
 
   function addAudience() {
-    var auds = collectAudiences();
-    var title = window.prompt('New audience name:', '');
-    if (title === null) return;
-    title = title.trim(); if (!title) return;
-    var base = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'audience';
-    var id = base, n = 2;
-    while (auds.some(function (a) { return a.id === id; })) { id = base + '-' + (n++); }
-    auds.push({ id: id, title: title });
-    renderAudiences(auds);
-    setDirty(true);
+    promptDialog('Add audience', 'Name', 'e.g. Trainer', 'Add audience', function (title) {
+      var auds = collectAudiences();
+      var base = slugify(title) || 'audience';
+      var id = base, n = 2;
+      while (auds.some(function (a) { return a.id === id; })) { id = base + '-' + (n++); }
+      auds.push({ id: id, title: title, description: '' });
+      renderAudiences(auds);
+      setDirty(true);
+      var descs = document.querySelectorAll('#audList .auddesc');
+      if (descs.length) descs[descs.length - 1].focus(); // say who they are next
+    });
   }
 
   function validateVersion() {
@@ -3213,20 +4629,36 @@
       // Refresh the project model + chrome (name/code may have changed) and the raw view.
       return api.json('/api/project');
     }).then(function (p) {
-      state.project = p; setProjectHeader(p); renderTree(p);
-      return api.json('/api/yaml?path=docwiz.yaml');
-    }).then(function (r) { $('setRawText').value = r.text || ''; })
-      .catch(function (e) { reportError(e.message || String(e)); });
+      var redraw = state.project && (state.project.numbering !== p.numbering ||
+        JSON.stringify(state.project.audiences) !== JSON.stringify(p.audiences));
+      state.project = p; setProjectHeader(p);
+      // A preview of an audience that is gone ends; the tree redraws either way.
+      if (state.previewAudience && !p.audiences.some(function (a) { return a.id === state.previewAudience; })) setPreview(null);
+      else { renderTree(p); if (state.previewAudience) $('previewLabel').textContent = audienceTitle(state.previewAudience); }
+      // The open chapter stays open under the sheet: a deleted audience was stripped from its
+      // file on the server, so drop it here too (a renamed one just shows its new name); new
+      // numbering or audience names redraw the page (after saving what is pending).
+      if (state.currentFile) {
+        setReaders(state.chapterAudiences);
+        if (redraw) flushUntilSaved(3).then(mountLiveEditor).catch(quiet);
+      }
+      loadSettings(); // fresh usage counts and raw YAML
+    }).catch(function (e) { showToast('Settings not saved', e.message || String(e), 'error'); });
   }
 
   function setWindowMode(mode) {
     Array.prototype.forEach.call(document.querySelectorAll('#winMode button'), function (b) {
-      b.classList.toggle('active', b.getAttribute('data-mode') === mode);
+      b.setAttribute('aria-pressed', String(b.getAttribute('data-mode') === mode));
     });
     api.send('POST', '/api/settings', { windowMode: mode }).catch(function (e) { reportError(e.message || String(e)); });
   }
 
   function show(sectionId) {
+    // Pending edits were saved before any screen change (confirmDiscard); a timer left over
+    // must not fire against the next screen.
+    clearTimeout(autosaveTimer);
+    // Leaving the chapter editor ends a history comparison (the live surface comes back).
+    if (sectionId !== 'chapterEditor' && hist.comparing) endCompare();
     // Leaving the view editor: tear down any mounted slide-zone editors (Task 7b) so
     // their ProseMirror views don't leak and the shared toolbar's active view resets.
     if (sectionId !== 'viewEditor' && window.DocWizSlideEdit) window.DocWizSlideEdit.unmountAll();
@@ -3237,8 +4669,8 @@
     // never bypassed; re-entering a chapter re-opens cleanly (DocWizEditor2.open calls
     // close() itself), so we never close the view we're about to mount.
     if (sectionId !== 'chapterEditor' && window.DocWizEditor2) window.DocWizEditor2.close();
-    if (sectionId !== 'viewDocs' && sectionId !== 'viewAttach' && sectionId !== 'setPane') state.currentArtifact = null;
-    ['welcome', 'chapterEditor', 'yamlEditor', 'viewEditor', 'viewDocs', 'viewAttach', 'setPane'].forEach(function (id) {
+    if (sectionId !== 'viewDocs' && sectionId !== 'viewAttach') state.currentArtifact = null;
+    ['welcome', 'chapterEditor', 'yamlEditor', 'viewEditor', 'viewDocs', 'viewAttach'].forEach(function (id) {
       $(id).hidden = id !== sectionId;
     });
   }
@@ -3278,17 +4710,26 @@
       current = null;
     }
 
+    // The element just clicked gets no tip until the pointer leaves it: a click opens menus
+    // and dialogs, and a late tip would land on top of them.
+    var clicked = null;
     document.addEventListener('mouseover', function (e) {
       var target = e.target.closest && e.target.closest('[data-tip]');
+      if (target && target === clicked) return;
+      clicked = null;
       if (target) show(target, TIP_HOVER_DELAY); // see the constant for the rationale
       else if (current) hide();
     });
     document.addEventListener('focusin', function (e) {
       var target = e.target.closest && e.target.closest('[data-tip]');
-      if (target) show(target, TIP_FOCUS_DELAY);
+      // Keyboard focus only — a mouse click also focuses, and that is not a request for help.
+      if (target && target !== clicked && target.matches(':focus-visible')) show(target, TIP_FOCUS_DELAY);
     });
     document.addEventListener('focusout', hide);
-    document.addEventListener('mousedown', hide);
+    document.addEventListener('mousedown', function (e) {
+      hide();
+      clicked = e.target.closest ? e.target.closest('[data-tip]') : null;
+    });
     window.addEventListener('scroll', hide, true);
   })();
 
@@ -3301,12 +4742,12 @@
   // Copy the whole project to a folder you pick, then switch to the copy (the original
   // is left as it is). Server runs the native folder picker.
   function saveAs() {
-    if (!confirmDiscard()) return;
+    if (!confirmDiscard(saveAs, arguments)) return;
     api.send('POST', '/api/save-as', { path: null }).then(function (res) {
       if (res.cancelled) return;
       if (res.ok) { location.reload(); return; }
-      window.alert(res.error || 'Could not save a copy.');
-    }).catch(function (e) { window.alert(e.message); });
+      noticeDialog('Copy not saved', res.error || 'Could not save a copy.');
+    }).catch(function (e) { noticeDialog('Copy not saved', e.message); });
   }
 
   // Copy the current project into the Templates library + a template.yaml wrapper.
@@ -3327,8 +4768,9 @@
           name: name,
           description: root.querySelector('#stDesc').value.trim(),
         }).then(function (res) {
-          if (!res.ok) return window.alert(res.error || 'Could not save the template.');
-        }).catch(function (e) { window.alert(e.message); });
+          if (!res.ok) noticeDialog('Template not saved', res.error || 'Could not save the template.');
+          else showToast('Template saved', '“' + name + '” is now in your Templates folder.', 'success');
+        }).catch(function (e) { noticeDialog('Template not saved', e.message); });
       },
       function (root) { root.querySelector('#stName').value = defName; });
   }
@@ -3338,11 +4780,11 @@
     if (elm) elm.onclick = handler;
   }
 
-  on('homeBtn', function () {
-    if (!confirmDiscard()) return;
+  function closeProject() {
+    if (!confirmDiscard(closeProject, arguments)) return;
     api.send('POST', '/api/close-project', {}).then(function () { location.reload(); });
-  });
-  on('openFolderBtn', function () { api.send('POST', '/api/open-folder', {}).catch(quiet); });
+  }
+  on('projMenuBtn', function () { projectMenu($('projMenuBtn')); });
   on('wOpenBtn', function () { openProject(null); });
   on('wNewBtn', function () { newProject('blank'); });
   // Saves rethrow on failure (so chained Build/Export stop); for direct button
@@ -3356,8 +4798,14 @@
       if (f.files && f.files[0]) { uploadAttach(f.files[0]); f.value = ''; }
     });
   })();
-  // Settings surface wiring (static elements in index.html).
-  on('setBack', function () { show('welcome'); });
+  // Settings sheet wiring (static elements in index.html).
+  on('settingsBtn', function () { openSettings(); });
+  on('setClose', closeSettings);
+  (function wireSettingsSheet() {
+    var sheet = $('setSheet');
+    // A click on the dimmed area around the sheet closes it (same guard as the × button).
+    if (sheet) sheet.addEventListener('mousedown', function (e) { if (e.target === sheet) closeSettings(); });
+  })();
   on('setOpenFolder', function () { api.send('POST', '/api/open-folder', {}).catch(quiet); });
   on('setSave', saveSettings);
   on('addAud', addAudience);
@@ -3366,7 +4814,7 @@
   });
   on('setRawSave', function () {
     api.send('PUT', '/api/yaml?path=docwiz.yaml', { text: $('setRawText').value })
-      .then(function () { reportError('Raw YAML saved.'); loadSettings(); })
+      .then(function () { showToast('Saved', 'docwiz.yaml was saved.', 'success'); loadSettings(); })
       .catch(function (e) { reportError(e.message || String(e)); });
   });
   (function wireSettingsStatic() {
@@ -3380,6 +4828,11 @@
       var b = e.target.closest('button[data-mode]');
       if (b) setWindowMode(b.getAttribute('data-mode'));
     });
+    var tm = $('themeMode');
+    if (tm) tm.addEventListener('click', function (e) {
+      var b = e.target.closest('button[data-theme-mode]');
+      if (b) setTheme(b.getAttribute('data-theme-mode'));
+    });
     ['setProject', 'setCode', 'setCustomer', 'setLanguage'].forEach(function (id) {
       var elx = $(id);
       if (elx) elx.addEventListener('input', function () { setDirty(true); });
@@ -3387,78 +4840,54 @@
     var ver = $('setVersion');
     if (ver) ver.addEventListener('input', function () { setDirty(true); validateVersion(); });
   })();
-  on('saveBtn', function () { saveChapter().catch(quiet); });
   on('yamlSaveBtn', function () { saveYaml().catch(quiet); });
-  on('vSaveBtn', function () { saveView().catch(quiet); });
+  // The output bar: For, Slides / Document, Present (Read), ⋯.
   on('vReadBtn', presentDeck);
-  on('vExportBtn', function () {
-    var go = function () {
-      window.location = '/api/export-view?file=' + encodeURIComponent(state.currentView);
-    };
-    if (state.dirty) saveView().then(go).catch(quiet); // failed save = no export
-    else go();
+  on('vFor', function () { forMenu($('vFor')); });
+  on('vMoreBtn', function () { outputMenu($('vMoreBtn')); });
+  (function wireOutputBar() {
+    var seg = $('vModeSeg');
+    if (seg) seg.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-vmode]');
+      if (b) setViewMode(b.getAttribute('data-vmode'));
+    });
+  })();
+  // The document bar: Readers, Edit · Source · Read, Properties, ⋯ (History is wired below).
+  on('cbReaders', function () { readersMenu($('cbReaders')); });
+  on('previewBtn', function () { previewMenu($('previewBtn')); });
+  on('previewStop', function () { setPreview(null); });
+  on('cbPropsBtn', function () { toggleProps(); });
+  on('cbKebabBtn', function () { docBarMenu($('cbKebabBtn')); });
+  (function wireDocBar() {
+    var modes = document.querySelector('.cb-mode');
+    if (modes) modes.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-mode]');
+      if (b) setChapterMode(b.getAttribute('data-mode'));
+    });
+    // Restore a Properties panel left open last time (closed by default).
+    $('propsPanel').hidden = !props.open;
+    $('cbPropsBtn').setAttribute('aria-pressed', String(props.open));
+  })();
+  (function wireSideTabs() {
+    var tabs = document.querySelector('.side-tabs');
+    if (tabs) tabs.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-side]');
+      if (b) setSideTab(b.getAttribute('data-side'));
+    });
+  })();
+  // Esc closes the open menu first (focus back on what opened it), else the Settings sheet —
+  // unless a DocWiz dialog is open on top, which handles its own Esc.
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    if (openMenu) { var anchor = openMenu.anchor; closeActionMenu(); anchor.focus(); return; }
+    if (!$('setSheet').hidden && !$('modal').open) { e.preventDefault(); closeSettings(); }
   });
-  on('vDeleteBtn', deleteView);
-  on('vDuplicateBtn', duplicateView);
-  on('chDeleteBtn', deleteChapter);
-  // Kebab popup: toggle on button click, close on outside click.
-  on('cbKebabBtn', function (e) {
-    var menu = $('cbKebabMenu');
-    var btn = $('cbKebabBtn');
-    if (!menu) return;
-    var open = menu.classList.toggle('cb-open');
-    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-    e.stopPropagation();
-  });
-  document.addEventListener('click', function (e) {
-    var menu = $('cbKebabMenu');
-    var btn = $('cbKebabBtn');
-    if (menu && menu.classList.contains('cb-open')) {
-      if (!menu.contains(e.target) && e.target !== btn) {
-        menu.classList.remove('cb-open');
-        if (btn) btn.setAttribute('aria-expanded', 'false');
-      }
-    }
-  });
-  // Header "More" overflow menu: on a narrow window the nav cluster collapses into a dropdown
-  // (CSS @media). Toggle open; close on outside click, after choosing an item, or on Escape.
-  // Same pattern as the chapter-bar kebab above.
-  var closeMore = function () {
-    var menu = $('navCluster');
-    if (!menu || !menu.classList.contains('hd-open')) return;
-    menu.classList.remove('hd-open');
-    var btn = $('moreBtn');
-    if (btn) btn.setAttribute('aria-expanded', 'false');
-  };
-  on('moreBtn', function (e) {
-    var menu = $('navCluster');
-    var btn = $('moreBtn');
-    if (!menu) return;
-    var open = menu.classList.toggle('hd-open');
-    if (btn) btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-    e.stopPropagation();
-  });
-  document.addEventListener('click', function (e) {
-    var menu = $('navCluster');
-    if (!menu || !menu.classList.contains('hd-open')) return;
-    // A click on a nav button inside runs its action AND dismisses the menu; an outside click
-    // just dismisses. (The toggle handler above stops its own click from reaching here.)
-    if (!menu.contains(e.target) || e.target.closest('.hd-cbtn')) closeMore();
-  });
-  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeMore(); });
-  on('vAddSlide', addSlide);
-  on('vPanelAdd', addSlide);
+  on('vPanelAdd', function () { if (viewIsSlides()) addSlide(); else addSection(); });
   on('checkBtn', runCheck);
   on('buildBtn', runBuild);
-  on('newChapterBtn', newChapter);
-  on('saveAsBtn', saveAs);
-  on('saveAsTemplateBtn', saveAsTemplate);
-  on('importDocxBtn', importDocx);
-  on('convertEmfBtn', convertEmf);
-  on('exportPdfBtn', openExportPdf);
   on('wImportBtn', newProjectFromWord);
   function requestQuit() {
-    if (!confirmDiscard()) return;
+    if (!confirmDiscard(requestQuit, arguments)) return;
     fetch('/api/shutdown', { method: 'POST' }).finally(function () {
       document.body.innerHTML =
         '<div style="max-width:520px;margin:80px auto;font:15px/1.6 \'Segoe UI\',sans-serif">' +
@@ -3497,6 +4926,20 @@
     });
   })();
   on('issuesClose', function () { $('issuesPanel').hidden = true; });
+  // History (Stage 6 step 3): the chapter bar's toggle, the panel's scope tabs, Settings › History.
+  on('cbHistoryBtn', function () { toggleHistory(); });
+  (function wireHistoryScope() {
+    var panel = $('histPanel');
+    if (panel) panel.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-hscope]');
+      if (!b) return;
+      hist.scope = b.getAttribute('data-hscope');
+      if (hist.scope === 'project') endCompare(); // the two timelines keep a comparison open
+      refreshHistory();
+    });
+  })();
+  on('histCleanBtn', cleanUpHistory);
+  on('histOpenBtn', function () { api.send('POST', '/api/history/open-folder', {}).catch(quiet); });
   document.addEventListener('keydown', function (e) {
     if ((e.ctrlKey || e.metaKey) && e.key === 's') {
       e.preventDefault();
@@ -3506,7 +4949,12 @@
     }
   });
   window.addEventListener('beforeunload', function (e) {
-    if (state.dirty) e.preventDefault();
+    if (state.dirty || slideZonesDirty() || settingsDirty()) e.preventDefault();
+  });
+  // Autosave also when the window loses focus or is hidden (switching apps, minimizing).
+  window.addEventListener('blur', function () { if (state.dirty || slideZonesDirty()) flushEdits().catch(quiet); });
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden && (state.dirty || slideZonesDirty())) flushEdits().catch(quiet);
   });
 
   init();

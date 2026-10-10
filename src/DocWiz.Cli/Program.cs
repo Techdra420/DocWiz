@@ -288,7 +288,7 @@ static int NewProject(string path, string? templateId)
 static (DocProject Project, Markdig.MarkdownPipeline Pipeline, List<ValidationIssue> Issues) LoadAndValidate(string path)
 {
     var project = ProjectLoader.Load(path);
-    var pipeline = DocWizMarkdown.CreatePipeline();
+    var pipeline = DocWizMarkdown.CreatePipeline(project.Manifest.Audiences);
     DocWizMarkdown.ParseAll(project, pipeline);
     return (project, pipeline, ProjectValidator.Validate(project));
 }

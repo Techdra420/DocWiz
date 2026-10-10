@@ -24,7 +24,7 @@ $server = Start-EditorServer $repo $Project $Port $StartupRetries
 try {
     $edge = Get-Edge
     $domFile = Join-Path $outDir 'l2-dom.html'
-    cmd /c "`"$edge`" --headless=new --disable-gpu --virtual-time-budget=$TimeBudgetMs --dump-dom `"http://127.0.0.1:$Port/app/editor2/fidelity.html`" > `"$domFile`" 2>nul"
+    cmd /c "`"$edge`" --headless=new --disable-gpu --user-data-dir=`"$HeadlessProfile`" --virtual-time-budget=$TimeBudgetMs --dump-dom `"http://127.0.0.1:$Port/app/editor2/fidelity.html`" > `"$domFile`" 2>nul"
     Wait-FileReady $domFile 180
 
     $dom = [IO.File]::ReadAllText($domFile)

@@ -31,4 +31,8 @@ public sealed class AudienceDef
 {
     public string Id { get; set; } = "";
     public string Title { get; set; } = "";
+
+    /// <summary>Optional one line saying who this is ("Operators on the warehouse floor") —
+    /// shown to authors where they pick readers; never rendered for readers.</summary>
+    public string? Description { get; set; }
 }

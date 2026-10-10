@@ -25,12 +25,36 @@ my-product-docs/
 │   ├── support-quickref.yaml
 │   └── admin-guide.yaml
 ├── assets/                  # images, diagrams, screenshots (referenced from Markdown)
-└── attachments/             # PDFs and other binary documents (data sheets, release notes)
+├── attachments/             # PDFs and other binary documents (data sheets, release notes)
+└── .docwiz/                 # the editor's change history (git-ignored, see below)
 ```
 
 - **Numeric prefixes** (`010-`, `020-`) define order. Gaps of 10 leave room for
   insertions. The editor manages renumbering.
 - Folder = section, file = chapter. One `H1` per chapter.
+- **The folder name is the section name** (Stage 6). A section folder is named
+  `NNN-<exact section name>` — e.g. `020-Instalace a síť` — and everything after the prefix is
+  shown verbatim (accents, spaces, capitals). Renaming, moving, or deleting a section in the
+  editor acts on the folder itself; names containing `\ / : * ? " < > |` are refused, and a
+  section that still holds chapters can't be deleted. Legacy slug folders (`020-setup`,
+  `050-api-reference`) keep their derived titles ("Setup", "API Reference"). Empty sections
+  are kept (and shown in the editor) until deleted.
+- **A chapter file follows its title**: `NNN-<title>.md`, with characters Windows forbids
+  turned into spaces (the title itself keeps them). Renaming a chapter — or changing its H1 —
+  renames the file. Links never depend on file or folder names; they use the chapter `id`.
+- **`.docwiz/history/`** holds the editor's change history (Stage 6) — complete copies of
+  earlier file versions, kept until cleaned up. Nothing reads it except the History panel and
+  Settings › History, so deleting any part of it is safe. It ignores itself
+  (`.docwiz/.gitignore` holds `*`), is left behind by Save as and templates, and is never
+  shipped. Inside:
+  - `files/<timeline>/<yyyyMMddTHHmmssfffZ>__<kind>.<ext>` — one complete copy per entry. A
+    timeline follows identity, not the path: `chapters/<id>`, `views/<name>`, or `project`
+    (the manifest), so renames and moves keep one timeline. Kinds: `original` (the file as it
+    was before its first editor save), `save`, `rename`, `restore-<stamp>`. Saves within ten
+    minutes of each other share one entry; an unchanged save adds none.
+  - `deleted/<stamp>/<project-relative path>` — files the editor deleted (Recently deleted).
+  - `versions/<stamp>__<name>/` — named project versions: copies of `docwiz.yaml`, `content/`
+    and `views/`. Restoring one first saves the current state as "Before restoring …".
 
 ## Manifest — `docwiz.yaml`
 
@@ -44,6 +68,7 @@ language: en
 audiences:
   - id: user
     title: User
+    description: Warehouse staff at the scanner stations   # optional
   - id: support
     title: Support
   - id: admin
@@ -57,7 +82,11 @@ external:
 ```
 
 `audiences` is project-configurable, not hardcoded — a project can add `trainer`
-or a customer-specific audience without engine changes.
+or a customer-specific audience without engine changes. The list's order is the order the
+editor shows audiences in. `id` is stable (tags and outputs point at it; the editor derives
+it from the first title and never shows it), so `title` can be renamed freely.
+`description` (Stage 6, optional) is one line for authors — "who is this?" — shown where
+readers are picked; it never appears in the handover.
 
 ## Chapter frontmatter
 
@@ -65,7 +94,7 @@ or a customer-specific audience without engine changes.
 ---
 id: system-overview          # stable ID — never changes after creation; used by links/views
 title: System Overview
-discipline: overview         # which kind of chapter it is (drives editor templates and grouping)
+discipline: overview         # optional: the skeleton the chapter started from; not used by the build
 audiences: [user, support, admin]   # who sees this chapter at all
 ---
 
@@ -76,7 +105,14 @@ audiences: [user, support, admin]   # who sees this chapter at all
 
 **`id` is the stability anchor.** Links and view transclusions reference `id`, not file
 paths or heading text, so renaming files, retitling headings, or reordering never breaks
-references. The editor generates IDs and keeps them immutable.
+references. The editor generates IDs from the title (accented letters keep their base
+letter: "Čištění skeneru" → `cisteni-skeneru`) and keeps them immutable.
+
+**The title is the H1.** `title` and the chapter's `# heading` are one thing: the editor's
+save sets `title` from the H1, and renaming a chapter rewrites both. `discipline` records
+the skeleton a chapter started from ("Start from" in the New chapter dialog: `blank`,
+`overview`, `setup`, `operations`, `troubleshooting`, `reference`, `integration`); the
+editor no longer changes it after creation.
 
 ## Block-level audience filtering
 
@@ -95,7 +131,26 @@ Receiving posts to the ledger through the `movements` endpoint; retries are logg
 ```
 
 Unfenced content is visible to **all** audiences listed in the chapter frontmatter.
-The full manual always shows everything (it is the source of truth).
+The full manual always shows everything (it is the source of truth), each tagged block with a
+quiet marker in the margin labelled "Only for User, Support" (audience titles; the ids when
+rendered without a project).
+
+**A single step can be tagged** (Stage 6): put the container inside the list item. A filtered
+output drops a step whose only content is for other readers — no empty number is left, and
+the remaining steps renumber:
+
+```markdown
+1. Switch the scanner station on.
+2. ::: audience admin
+   Check that the overnight sync finished.
+   :::
+3. Open the task list.
+```
+
+A chapter with an empty `audiences:` list appears only in the full manual (Check warns);
+every audience ticked is "everyone". In the editor the Readers control sets both: the
+chapter's pill in the document bar, and the toolbar's Readers button for the paragraph, step or
+element at the cursor (it wraps, retags, or — "Everyone" — unwraps the container).
 
 ## Stable section anchors
 
@@ -322,6 +377,10 @@ API site goes); any key works — the tab title derives from the key.
 
 A view is an ordered composition of transcluded source sections plus minimal glue.
 Views contain **no duplicated content** — only references and small connective text.
+The editor calls them **outputs** (Stage 6): a *slide deck* (`mode: slides`) or a *document*
+(`mode: document`, whose slides are shown as sections); the file format is unchanged. A
+slide's `layout` can be changed at any time — regions the new layout has keep their markdown,
+the rest moves into its first free region.
 
 ```yaml
 id: user-training

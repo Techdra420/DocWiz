@@ -57,7 +57,7 @@ try {
     $url = "http://127.0.0.1:$Port/app/editor2/scenario.html?file=" + [uri]::EscapeDataString($Chapter) +
         "&mode=$Mode&row=$Row&col=$Col"
     $edge = Get-Edge
-    cmd /c "`"$edge`" --headless=new --disable-gpu --virtual-time-budget=$VtBudgetMs --dump-dom `"$url`" > `"$domFile`" 2>nul"
+    cmd /c "`"$edge`" --headless=new --disable-gpu --user-data-dir=`"$HeadlessProfile`" --virtual-time-budget=$VtBudgetMs --dump-dom `"$url`" > `"$domFile`" 2>nul"
     Wait-FileReady $domFile
 
     $dom = [IO.File]::ReadAllText($domFile)

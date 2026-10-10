@@ -7,7 +7,7 @@
 import { EditorState, TextSelection, NodeSelection, Selection, Plugin } from 'prosemirror-state';
 import { EditorView } from 'prosemirror-view';
 import { keymap } from 'prosemirror-keymap';
-import { history, undo, redo } from 'prosemirror-history';
+import { history, undo, redo, undoDepth, redoDepth } from 'prosemirror-history';
 import { baseKeymap, toggleMark, setBlockType, wrapIn, lift } from 'prosemirror-commands';
 import { findWrapping } from 'prosemirror-transform';
 import { inputRules, wrappingInputRule, textblockTypeInputRule, InputRule } from 'prosemirror-inputrules';
@@ -203,9 +203,9 @@ function plugins() {
     // in an empty trailing container paragraph; falls through otherwise.
     keymap({ Enter: exitContainerOnEnter }),
     keymap({
-      'Mod-z': undo,
-      'Mod-y': redo,
-      'Shift-Mod-z': redo,
+      'Mod-z': (_s, _d, view) => undoAny(false, view),
+      'Mod-y': (_s, _d, view) => undoAny(true, view),
+      'Shift-Mod-z': (_s, _d, view) => undoAny(true, view),
       'Mod-b': toggleMark(schema.marks.strong),
       'Mod-i': toggleMark(schema.marks.em),
       Enter: splitListItem(schema.nodes.list_item),
@@ -304,6 +304,13 @@ const contextBar = {
   },
 };
 
+// The chapter's number in front of its title (CSS reads --dwch), as the handover shows it.
+function numberArticle(article, dto) {
+  const on = !!dto.numbering && dto.chapterNumber > 0;
+  article.toggleAttribute('data-num', on);
+  if (on) article.style.setProperty('--dwch', "'" + dto.chapterNumber + "'");
+}
+
 async function open(file, opts) {
   const res = await fetch('/api/editor-doc?file=' + encodeURIComponent(file));
   if (!res.ok) throw new Error((await res.text()) || res.statusText);
@@ -336,10 +343,7 @@ async function open(file, opts) {
   mount.appendChild(top);
 
   const article = document.createElement('article');
-  if (dto.numbering && dto.chapterNumber > 0) {
-    article.setAttribute('data-num', '');
-    article.style.setProperty('--dwch', "'" + dto.chapterNumber + "'");
-  }
+  numberArticle(article, dto);
   mount.appendChild(article);
 
   current = { file, dto, originals: new Map(), opts: opts || {}, view: null, sourceArea: null };
@@ -351,12 +355,13 @@ async function open(file, opts) {
   current.view = new EditorView(article, {
     state: EditorState.create({ schema, doc, plugins: plugins() }),
     nodeViews: nodeViews(schema, contextBar),
+    editable: () => !previewAudience, // Preview as pauses editing (setPreview)
     dispatchTransaction(tr) {
       const view = current.view;
       view.updateState(view.state.apply(tr));
       // The chapter editor is the active view whenever it is being driven.
       setActiveView(view);
-      if (tr.docChanged && current.opts.onDirty) current.opts.onDirty();
+      if (tr.docChanged && current.opts.onDirty && !tr.getMeta(SOFT_REBUILD)) current.opts.onDirty();
       updateAnchorInfo();
       updateToolbarState();
     },
@@ -1076,16 +1081,14 @@ function showTableGridPicker(anchorEl, onPick) {
 
 let toolbarButtons = [];
 
-/* withViewSwitch=false (the slide canvas) omits the chapter-only Edit/Source/Read
-   view-switch — a deck has no single chapter to switch modes on. Default true keeps
-   the chapter toolbar identical. opts.linkTool (slide canvas only) adds the "Link…"
-   relink button — turn the selected block into a live-linked embed (Task 9). */
+/* opts.linkTool (slide canvas only) adds the "Link…" relink button — turn the selected
+   block into a live-linked embed (Task 9). Edit · Source · Read lives in the document bar
+   (app.js, Stage 6) and calls setMode() below. */
 function buildMainToolbar(opts) {
-  const withViewSwitch = !opts || opts.withViewSwitch !== false;
   const withLinkTool = !!(opts && opts.linkTool);
   toolbarButtons = [];
   // The shell: one 48px bar that contains two tracks.
-  // .e2-tb-main  — horizontally scrollable formatting groups + right-pinned view switch
+  // .e2-tb-main  — the formatting groups (they wrap on narrow windows)
   // .e2-tb-ctx   — contextual format bar (IMAGE / TABLE) — badge + node tools (hidden initially)
   const bar = document.createElement('div');
   bar.className = 'e2-maintoolbar';
@@ -1297,8 +1300,8 @@ function buildMainToolbar(opts) {
   });
 
   // Convention (Word Quick Access Toolbar, Google Docs, CKEditor): undo/redo at far LEFT.
-  add('undo', null, 'Undo (Ctrl+Z).', () => runEitherCmd(undo));
-  add('redo', null, 'Redo (Ctrl+Y).', () => runEitherCmd(redo));
+  add('undo', null, 'Undo (Ctrl+Z).', () => undoAny(false, null));
+  add('redo', null, 'Redo (Ctrl+Y).', () => undoAny(true, null));
   addSep();
   scroll.appendChild(blockDropdown.wrap);
   addSep();
@@ -1375,9 +1378,11 @@ function buildMainToolbar(opts) {
     if (!blockedInCell()) insertBlockAfterSelection(schema.nodes.horizontal_rule.create());
   });
   addSep();
-  add('audience', null, 'Insert content only selected audiences will see.', () => {
-    if (!blockedInCell() && bridge().audience) bridge().audience();
-  });
+  // Readers of the block at the cursor (Stage 6): tag a paragraph, a step, a table … for some
+  // audiences, change who, or give it back to everyone — the same picker as the chapter's.
+  const readersBtn = add('audience', null, 'Who reads this block — tag the paragraph, step or element you are in for some audiences only.', () => {
+    if (!blockedInCell() && bridge().blockReaders) bridge().blockReaders(readersBtn);
+  }, () => { const v = getActiveView(); return !!(v && audienceBlockAt(v.state)); });
   // Slide canvas only: turn the selected block into a live-linked chapter section.
   if (withLinkTool) {
     add('chapterLink', 'Link…', 'Replace the selected block with a live link to a chapter section (it stays in sync).', () => relinkSelection());
@@ -1404,64 +1409,6 @@ function buildMainToolbar(opts) {
   anchorInfo.className = 'e2-ctx-hint';
   anchorInfo.id = 'e2AnchorInfo';
   scroll.appendChild(anchorInfo);
-
-  // ── View switch (right-pinned) ─────────────────────────────────────────────
-  // Three flat buttons: Edit (pencil, active by default) / Source (code) / Read (eye).
-  // Separated from the scroll track by a .e2-sep. IDs kept for backward compat.
-  // Chapter-only (withViewSwitch): the slide canvas has no single chapter to switch.
-  if (withViewSwitch) {
-    const vsep = document.createElement('span');
-    vsep.className = 'e2-sep';
-    mainTrack.appendChild(vsep);
-
-    const vs = document.createElement('div');
-    vs.className = 'e2-view-switch';
-
-    const vsBtn = (id, iconName, label, tip) => {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.id = id;
-      b.className = 'ib';
-      b.appendChild(icon(iconName));
-      b.appendChild(document.createTextNode(label));
-      b.setAttribute('data-tip', tip);
-      b.onmousedown = (e) => e.preventDefault();
-      vs.appendChild(b);
-      return b;
-    };
-
-    const editBtn = vsBtn('e2EditBtn', 'pencil', 'Edit',
-      'Edit this chapter in the live surface (what you see is what you ship).');
-    editBtn.classList.add('active');
-
-    const srcBtn = vsBtn('e2SourceBtn', 'code', 'Source',
-      'Shows the exact markdown this chapter will save as. For fixing import artifacts the visual surface cannot express. Apply replaces the whole chapter body.');
-
-    const readBtn = vsBtn('e2ReadingBtn', 'eye', 'Read',
-      'Opens this chapter exactly as the built handover will render it (saves your changes first).');
-
-    mainTrack.appendChild(vs);
-
-    // Wire view-switch handlers after bar is in the DOM tree (open() calls us).
-    srcBtn.onclick = () => {
-      const active = !current || !!current.sourceArea;
-      toggleSource(!active);
-      editBtn.classList.toggle('active', active);
-      srcBtn.classList.toggle('active', !active);
-      readBtn.classList.remove('active');
-    };
-    readBtn.onclick = () => {
-      const url = '/preview-root/chapter?file=' + encodeURIComponent(current.file);
-      const save = window.DocWizBridge && window.DocWizBridge.saveChapter;
-      (save ? save() : Promise.resolve()).then(() => window.open(url, '_blank'));
-    };
-    editBtn.onclick = () => {
-      if (current && current.sourceArea) toggleSource(false);
-      editBtn.classList.add('active');
-      srcBtn.classList.remove('active');
-      readBtn.classList.remove('active');
-    };
-  }
 
   bar.appendChild(mainTrack);
 
@@ -1528,6 +1475,87 @@ function updateToolbarState() {
   }
 }
 
+/* Preview as (Stage 6): the open chapter as one audience's outputs show it — blocks for other
+   readers hidden, the rest without their tags, and editing paused so nothing hidden can change
+   unseen. The hiding is a stylesheet keyed on the blocks' data-aud lists, so it also holds for
+   blocks drawn later. null ends the preview. */
+let previewAudience = null;
+function setPreview(id) {
+  previewAudience = id || null;
+  let style = document.getElementById('e2PreviewStyle');
+  if (!style) {
+    style = document.createElement('style');
+    style.id = 'e2PreviewStyle';
+    document.head.appendChild(style);
+  }
+  // A step whose only content is a hidden block goes too, as in the filtered output.
+  const other = '.aud:not([data-aud~=' + JSON.stringify(previewAudience) + '])';
+  style.textContent = previewAudience
+    ? '#editor2 ' + other + ' { display: none; }\n' +
+      '#editor2 li:has(> ' + other + '):not(:has(> :not(' + other + '))) { display: none; }'
+    : '';
+  document.getElementById('editor2').classList.toggle('e2-previewing', !!previewAudience);
+  if (current && current.view) {
+    current.view.setProps({ editable: () => !previewAudience });
+    if (previewAudience) contextBar.set(null);
+  }
+}
+
+/* Block readers (Stage 6). A block is "for some audiences" by sitting in a `::: audience`
+   container; the Readers control acts on the one the selection is in, else on the blocks the
+   selection covers — inside a list that is the item's content, so one step can be tagged
+   (filtered outputs drop a step left empty). No audiences = everyone = no container. */
+function audienceBlockAt(state) {
+  const sel = state.selection;
+  if (sel instanceof NodeSelection && sel.node.type.name === 'container' && sel.node.attrs.type === 'audience')
+    return { node: sel.node, pos: sel.from };
+  const { $from } = sel;
+  for (let d = $from.depth; d >= 1; d--) {
+    const n = $from.node(d);
+    if (n.type.name === 'container' && n.attrs.type === 'audience') return { node: n, pos: $from.before(d) };
+  }
+  return null;
+}
+
+function readersRange(state) {
+  const sel = state.selection;
+  if (sel instanceof NodeSelection) return state.doc.resolve(sel.from).blockRange(state.doc.resolve(sel.to));
+  return sel.$from.blockRange(sel.$to);
+}
+
+// What the Readers picker shows: the block's audiences ([] = everyone) and what it is.
+function blockReaders() {
+  const view = getActiveView();
+  if (!view) return null;
+  const hit = audienceBlockAt(view.state);
+  const parent = hit ? view.state.doc.resolve(hit.pos).parent : (readersRange(view.state) || {}).parent;
+  return {
+    ids: hit ? hit.node.attrs.args.split(/\s+/).filter(Boolean) : [],
+    kind: parent && parent.type.name === 'list_item' ? 'step' : 'block',
+  };
+}
+
+function setBlockReaders(ids) {
+  const view = getActiveView();
+  if (!view) return;
+  const state = view.state;
+  const hit = audienceBlockAt(state);
+  if (hit) {
+    view.dispatch(ids.length
+      ? state.tr.setNodeMarkup(hit.pos, null, { ...hit.node.attrs, args: ids.join(' ') })
+      : state.tr.replaceWith(hit.pos, hit.pos + hit.node.nodeSize, hit.node.content)); // back to everyone: the tag goes, the content stays
+    return;
+  }
+  if (!ids.length) return;
+  const range = readersRange(state);
+  const wrapping = range && findWrapping(range, schema.nodes.container, { type: 'audience', args: ids.join(' '), label: null });
+  if (!wrapping) {
+    contextBar.flash('This can’t be tagged on its own — click into a paragraph, a step or an element.');
+    return;
+  }
+  view.dispatch(state.tr.wrap(range, wrapping).scrollIntoView());
+}
+
 /* Word-style alignment: a PROPERTY of the selected block, not an insert. The
    markdown has exactly two alignment wrappers (::: center / ::: right); left is
    the default = no wrapper. So the buttons toggle/switch the wrapper in place —
@@ -1590,7 +1618,8 @@ function updateAnchorInfo() {
     el.appendChild(code);
     const copy = document.createElement('button');
     copy.type = 'button';
-    copy.textContent = '⧉ copy link';
+    copy.appendChild(icon('link'));
+    copy.appendChild(document.createTextNode('Copy link'));
     copy.setAttribute('data-tip', 'Copy ' + ref + ' — paste it anywhere a chapter link is asked for.');
     copy.onclick = () => navigator.clipboard && navigator.clipboard.writeText(ref);
     el.appendChild(copy);
@@ -1687,6 +1716,8 @@ function flushActiveCell() {
 async function save(frontmatter) {
   if (!current) throw new Error('no chapter open in the live editor');
   flushActiveCell();
+  const saved = current;
+  const sentDoc = current.view.state.doc;
   const ops = current.sourceArea
     ? [{ text: current.sourceArea.value }]
     : buildSavePayload();
@@ -1703,13 +1734,49 @@ async function save(frontmatter) {
   });
   if (!res.ok) throw new Error((await res.text()) || res.statusText);
   const dto = await res.json();
-  rebuild(dto);
+  // Another chapter was opened while this one saved: the screen is no longer this chapter's.
+  if (current !== saved) return dto;
+  current.file = dto.file; // a changed H1 renames the chapter file (Stage 6)
+  if (current.view.state.doc === sentDoc) {
+    rebuild(dto);
+  } else {
+    // Typed while the save was in flight (autosave makes this common): never rebuild over
+    // the newer text. Adopt the saved document's bookkeeping (hash + segments) for the next
+    // save and leave the screen alone; the caller keeps the chapter dirty.
+    current.dto = dto;
+    rememberOriginals(buildDoc(schema, dto));
+    dto.editedDuringSave = true;
+  }
   return dto;
 }
 
+/* Transaction meta of the post-save bookkeeping refresh: not an edit (no dirty flag) and
+   not undoable (no history entry). */
+const SOFT_REBUILD = 'dwSoftRebuild';
+
+/* Does the freshly built document hold the same blocks as the one on screen — same type
+   and content block by block — so only block attributes (srcId, a newly stamped heading
+   anchor, a figure number) can differ? */
+function sameBlocks(onScreen, built) {
+  if (onScreen.childCount !== built.childCount) return false;
+  for (let i = 0; i < built.childCount; i++) {
+    const a = onScreen.child(i);
+    const b = built.child(i);
+    if (a.type !== b.type || !a.content.eq(b.content)) return false;
+  }
+  return true;
+}
+
 /* After every save the surface rebuilds from pipeline truth (fresh anchors, figure
-   numbers, hash). Best-effort restore of scroll + selection position. */
-function rebuild(dto) {
+   numbers, hash). When the saved document holds the same blocks as the screen (the usual
+   case), only block attributes are refreshed in place — the editor state, and with it the
+   undo history and the selection, stays, so autosave never takes Ctrl+Z away. Old srcIds
+   that an undo brings back are safe: buildSavePayload copies original bytes only for a
+   node nodeClean() finds equal to its original. `swap` (follow()) also keeps the state when
+   only the block count matches: blocks that differ are swapped in, outside the undo history.
+   Anything else gets the full rebuild, with a best-effort restore of scroll + selection
+   position. */
+function rebuild(dto, swap) {
   const mount = document.getElementById('editor2');
   const scrollTop = mount.scrollTop;
   const selPos = current.view ? current.view.state.selection.from : 0;
@@ -1717,6 +1784,28 @@ function rebuild(dto) {
 
   current.dto = dto;
   const doc = buildDoc(schema, dto);
+  const shownDoc = current.view.state.doc;
+  if (!wasSource && (sameBlocks(shownDoc, doc) || (swap && shownDoc.childCount === doc.childCount))) {
+    const tr = current.view.state.tr;
+    // Last block first, so a swapped block's new size never shifts one still to visit.
+    let pos = shownDoc.content.size;
+    for (let index = doc.childCount - 1; index >= 0; index--) {
+      const node = doc.child(index);
+      const shown = shownDoc.child(index);
+      pos -= shown.nodeSize;
+      if (shown.type !== node.type || !shown.content.eq(node.content))
+        tr.replaceWith(pos, pos + shown.nodeSize, node);
+      else if (JSON.stringify(shown.attrs) !== JSON.stringify(node.attrs))
+        tr.setNodeMarkup(pos, null, node.attrs);
+    }
+    if (tr.docChanged) {
+      tr.setMeta('addToHistory', false);
+      tr.setMeta(SOFT_REBUILD, true);
+      current.view.dispatch(tr);
+    }
+    rememberOriginals(current.view.state.doc);
+    return;
+  }
   rememberOriginals(doc);
   current.view.updateState(EditorState.create({ schema, doc, plugins: plugins() }));
   if (wasSource) toggleSource(false);
@@ -1725,6 +1814,21 @@ function rebuild(dto) {
   const sel = TextSelection.near(current.view.state.doc.resolve(Math.min(selPos, max)));
   current.view.dispatch(current.view.state.tr.setSelection(sel));
   mount.scrollTop = scrollTop;
+}
+
+/* The open chapter was renamed or moved from the sidebar (app.js structureChange): its file
+   is now `file`, and a rename rewrote its title. Take both into the open editor rather than
+   opening the chapter afresh, which would lose Ctrl+Z for the edits made before. */
+async function follow(was, file) {
+  if (!current || current.file !== was) return;
+  const opened = current;
+  const res = await fetch('/api/editor-doc?file=' + encodeURIComponent(file));
+  if (!res.ok) throw new Error((await res.text()) || res.statusText);
+  const dto = await res.json();
+  if (current !== opened) return;
+  current.file = dto.file;
+  numberArticle(current.view.dom.parentElement, dto); // a move can change its number
+  rebuild(dto, true);
 }
 
 /* ---------- Source (advanced): the exact text Save would write ---------- */
@@ -1747,12 +1851,38 @@ function toggleSource(show) {
   area.className = 'e2-source';
   area.spellcheck = false;
   area.value = resolveOps(buildSavePayload());
+  area.dataset.initial = area.value; // leaving Source applies the text only if it changed
   area.addEventListener('input', () => {
     if (current.opts.onDirty) current.opts.onDirty();
   });
   article.hidden = true;
   mount.appendChild(area);
   current.sourceArea = area;
+}
+
+/* Edit · Source · Read for the open chapter — the document bar's switch (app.js). Leaving
+   Source keeps what was typed there: changed text goes through the normal save (the server
+   writes it and the surface rebuilds from it — see rebuild()); unchanged text just closes; a
+   failed save rejects and Source stays open (the status line says why). Read saves, then
+   opens the chapter as the built handover renders it. Resolves to the mode now shown. */
+async function setMode(mode) {
+  if (!current) return 'edit';
+  const save = window.DocWizBridge && window.DocWizBridge.saveChapter;
+  if (mode === 'source') {
+    if (!current.sourceArea) toggleSource(true);
+    return 'source';
+  }
+  if (mode === 'read') {
+    if (save) await save();
+    // After the save: a changed H1 renames the file.
+    window.open('/preview-root/chapter?file=' + encodeURIComponent(current.file), '_blank');
+    return current.sourceArea ? 'source' : 'edit';
+  }
+  const area = current.sourceArea;
+  if (!area) return 'edit';
+  if (area.value === area.dataset.initial) { toggleSource(false); return 'edit'; }
+  if (save) await save();
+  return current && current.sourceArea ? 'source' : 'edit';
 }
 
 function close() {
@@ -1813,19 +1943,90 @@ document.addEventListener('keydown', (event) => {
 document.addEventListener('keydown', (event) => {
   if (event.altKey || !(event.ctrlKey || event.metaKey)) return;
   const key = (event.key || '').toLowerCase();
-  let cmd = null;
-  if (key === 'z') cmd = event.shiftKey ? redo : undo;
-  else if (key === 'y' && !event.shiftKey) cmd = redo;
-  if (!cmd || !getActiveView()) return;
+  let redoing = null;
+  if (key === 'z') redoing = event.shiftKey;
+  else if (key === 'y' && !event.shiftKey) redoing = true;
+  if (redoing === null) return;
   // A focused editable owns its own undo (see comment above) — only step in once focus
   // has drifted off every editable, which is the case the per-view keymap cannot reach.
   const t = event.target;
   if (t && t.closest && (
       /^(input|textarea|select)$/i.test(t.tagName || '') ||
       t.closest('[contenteditable=""], [contenteditable="true"]'))) return;
+  // Nothing behind an open dialog or sheet changes under it.
+  if (document.querySelector('dialog[open]') || (t && t.closest && t.closest('[role="dialog"]'))) return;
   event.preventDefault();
-  runEitherCmd(cmd);
+  undoAny(redoing, null);
 }, true);
+
+/* One Ctrl+Z order for the page and the sidebar (Stage 6). A sidebar change — rename, move,
+   add, delete — records a step here (recordStep, from app.js) that knows how to take itself
+   back and how to do itself again; Ctrl+Z / Ctrl+Y, the toolbar's Undo / Redo and the
+   change's toast then take whichever came last, the step or the page's own edits. "Came
+   last" compares the page's undo depth now with the depth noted on the step, so it holds
+   however ProseMirror groups the typing. Slide zones and table cells keep their own undo. */
+const steps = { done: [], undone: [] };
+let stepRun = Promise.resolve();
+
+function noteDepth(step) {
+  const v = current && current.view;
+  step.view = v;
+  step.depth = v ? undoDepth(v.state) : 0;
+  step.rdepth = v ? redoDepth(v.state) : 0;
+}
+
+// What the page did after the step was noted: new edits (its undo depth grew) or undos (its
+// redo depth grew). A chapter opened since holds only later work.
+function pageSince(step) {
+  const v = current && current.view;
+  const same = !!v && v === step.view;
+  return {
+    edited: !!v && undoDepth(v.state) > (same ? step.depth : 0),
+    undone: !!v && redoDepth(v.state) > (same ? step.rdepth : 0),
+  };
+}
+
+function recordStep(step) {
+  noteDepth(step);
+  steps.done.push(step);
+  steps.undone.length = 0;
+}
+
+function runStep(step, redoing) {
+  (redoing ? steps.undone : steps.done).pop();
+  noteDepth(step);
+  (redoing ? steps.done : steps.undone).push(step);
+  // One at a time, in order: a quick second Ctrl+Z waits for the first to land.
+  stepRun = stepRun.then(() => (redoing ? step.redo() : step.undo())).catch(() => {
+    // app.js has shown why it failed; the files no longer match the steps, so drop them.
+    steps.done.length = 0;
+    steps.undone.length = 0;
+  });
+}
+
+// The toast's Undo: this change, if nothing in the sidebar came after it.
+function undoStep(step) {
+  if (steps.done[steps.done.length - 1] === step) runStep(step, false);
+}
+
+/* view: the editor whose key it was (null for the toolbar or a key outside every editor).
+   Sidebar steps belong to the chapter page — never to a slide zone's own undo. */
+function undoAny(redoing, view) {
+  const chapter = current && current.view;
+  const zone = activeView && activeView !== chapter && !activeView.isDestroyed && activeView.dom.offsetParent;
+  const page = view ? view === chapter : !zone && !cellView();
+  const list = redoing ? steps.undone : steps.done;
+  const step = list[list.length - 1];
+  if (page && step) {
+    const since = pageSince(step);
+    if (redoing && since.edited) steps.undone.length = 0; // a new edit since the undo: no redo
+    else if (!(redoing ? since.undone : since.edited)) { runStep(step, redoing); return true; }
+  }
+  const cmd = redoing ? redo : undo;
+  if (view) return cmd(view.state, view.dispatch, view);
+  if (getActiveView()) runEitherCmd(cmd);
+  return true;
+}
 
 /* Refresh the shared toolbar against the active view. slideedit.js calls this when a
    zone gains focus or changes selection so the one toolbar tracks the focused zone. */
@@ -1834,10 +2035,29 @@ function notifyToolbar() {
   updateAnchorInfo();
 }
 
+/* Autosave waits while saving would interrupt the author: typing in Source (a save closes
+   it), a table cell being edited (a save commits and closes the cell editor), or an IME
+   composition in progress. */
+function isBusy() {
+  if (!current) return false;
+  return !!current.sourceArea || !!window.__dwActiveCell || !!(current.view && current.view.composing);
+}
+
 window.DocWizEditor2 = {
   open,
   close,
   save,
+  setMode,
+  setPreview,
+  blockReaders,
+  setBlockReaders,
+  isBusy,
+  // The chapter file the surface holds (null when closed) — app.js saves only when it is
+  // still the chapter it shows (opening another chapter is asynchronous).
+  openFile: () => (current ? current.file : null),
+  follow,
+  recordStep,
+  undoStep,
   insert,
   // Image width presets (constants.js) — app.js dialogs build their size options
   // from here so the numbers exist in exactly one place.

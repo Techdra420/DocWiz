@@ -149,7 +149,7 @@ if ($Chapter) {
         $chapterEnc = [uri]::EscapeDataString($Chapter)
         $url = "http://127.0.0.1:$Port/?probe=1#chapter=$chapterEnc"
         Write-Host "Probing chapter editor: $url"
-        cmd /c "`"$edge`" --headless=new --disable-gpu --virtual-time-budget=$VtBudgetMs --dump-dom `"$url`" > `"$domFile`" 2>nul"
+        cmd /c "`"$edge`" --headless=new --disable-gpu --user-data-dir=`"$HeadlessProfile`" --virtual-time-budget=$VtBudgetMs --dump-dom `"$url`" > `"$domFile`" 2>nul"
         Wait-FileReady $domFile 60
 
         $dom = [IO.File]::ReadAllText($domFile)
@@ -196,7 +196,7 @@ if ($Handover) {
     Write-Host "Probing handover page: $pageFile"
 
     $domFile = Join-Path $outDir 'probe-handover-dom.html'
-    cmd /c "`"$edge`" --headless=new --disable-gpu --allow-file-access-from-files --virtual-time-budget=$VtBudgetMs --dump-dom `"$fileUrl`" > `"$domFile`" 2>nul"
+    cmd /c "`"$edge`" --headless=new --disable-gpu --user-data-dir=`"$HeadlessProfile`" --allow-file-access-from-files --virtual-time-budget=$VtBudgetMs --dump-dom `"$fileUrl`" > `"$domFile`" 2>nul"
     Wait-FileReady $domFile 60
 
     $dom = [IO.File]::ReadAllText($domFile)

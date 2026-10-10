@@ -7,10 +7,13 @@ language: en
 audiences:
   - id: user
     title: User
+    description: Warehouse staff at the scanner stations
   - id: support
     title: Support
+    description: First-line support at the help desk
   - id: admin
     title: Administrator
+    description: IT staff who run the server and the integrations
 
 external:
   # Paths to self-contained HTML documentation folders (each needs an index.html).

@@ -22,13 +22,16 @@ The home screen shows the station state, the current task, and the last 5 moveme
 
 ## Daily startup {#daily-startup}
 
-::: steps
+:::: steps
 
 1. Switch the scanner station on; wait for the sign-in screen (about 30 s).
 2. Sign in with your badge — the banner turns green.
-3. Open the task list and start the first task.
+3. ::: audience admin
+   On the first start of the day, check that the overnight sync finished (Admin console → Sync log).
+   :::
+4. Open the task list and start the first task.
 
-:::
+::::
 
 ::: audience support
 If the sign-in screen does not appear within 2 minutes, check the station's network

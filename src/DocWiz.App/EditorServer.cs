@@ -3,6 +3,7 @@ using System.Reflection;
 using DocWiz.App.Import;
 using DocWiz.Build;
 using DocWiz.Build.Pdf;
+using DocWiz.Core.History;
 using DocWiz.Core.Loading;
 using DocWiz.Core.Markdown;
 using DocWiz.Core.Models;
@@ -22,6 +23,15 @@ namespace DocWiz.App;
 public sealed record NewChapterDto(string Section, string Slug, string Id, string Title, string Discipline, List<string> Audiences);
 public sealed record MoveChapterDto(string File, int Direction);
 public sealed record MoveSectionDto(string Folder, int Direction);
+public sealed record MoveChapterToDto(string File, string Folder, int Index);
+public sealed record RenameChapterDto(string File, string Title);
+public sealed record SectionNameDto(string? Folder, string Name);
+public sealed record HistoryRestoreDto(string File, string Entry);
+public sealed record HistoryEntryDto(string Id, DateTime Utc, string Kind, DateTime? RestoredFrom, bool Current);
+public sealed record HistoryNameDto(string Name);
+public sealed record HistoryIdDto(string Id);
+public sealed record DeletedRestoreDto(string Stamp, string Path);
+public sealed record HistoryCleanupDto(int Days);
 public sealed record TextDto(string Text);
 public sealed record PreviewDto(string Markdown);
 public sealed record OpenProjectDto(string? Path);
@@ -31,8 +41,8 @@ public sealed record ImportCommitDto(string Token, List<string>? Selected, strin
 public sealed record ImportTokenDto(string Token);
 public sealed record AddExternalDto(string Key, string Folder, bool CopyIn);
 public sealed record ProjectSettingsDto(string? Project, string? Code, string? Customer, string? Version, string? Language, bool Numbering, List<AudienceDto>? Audiences);
-public sealed record AudienceDto(string Id, string Title);
-public sealed record ChapterFrontmatterDto(string File, string Discipline, List<string> Audiences);
+public sealed record AudienceDto(string Id, string Title, string? Description = null);
+public sealed record ChapterFrontmatterDto(string File, string? Discipline, List<string> Audiences);
 public sealed record ViewSlideDto(string? Layout, string? Include, string? Title, string? Subtitle, string? Markdown,
     Dictionary<string, string>? Regions);
 public sealed record ViewDto(string Id, string Title, string Audience, string Mode, List<ViewSlideDto> Slides);
@@ -325,14 +335,16 @@ public static class EditorServer
                 emfCount = EmfRetrofit.CountConvertible(project.Root),
                 isTemplate,
                 numbering = project.Manifest.Numbering,
-                audiences = project.Manifest.Audiences.Select(a => new { a.Id, a.Title }),
-                sections = project.Chapters
-                    .GroupBy(c => Path.GetFileName(Path.GetDirectoryName(c.FilePath))!)
-                    .Select(g => new
+                audiences = project.Manifest.Audiences.Select(a => new { a.Id, a.Title, description = a.Description ?? "" }),
+                // Every section folder, empty ones too — an empty section is a place to add
+                // the first chapter, not something to hide.
+                sections = SectionFolders(project.Root)
+                    .Select(dir => new
                     {
-                        folder = g.Key,
-                        title = g.First().SectionTitle,
-                        chapters = g.Select(c => new
+                        folder = Path.GetFileName(dir),
+                        title = ContentNames.SectionTitle(Path.GetFileName(dir)),
+                        chapters = project.Chapters.Where(c => string.Equals(
+                            Path.GetDirectoryName(Path.GetFullPath(c.FilePath)), dir, StringComparison.OrdinalIgnoreCase)).Select(c => new
                         {
                             c.Id,
                             c.Title,
@@ -384,14 +396,246 @@ public static class EditorServer
             if (NoProject() is { } guard)
                 return guard;
             var dto = await request.ReadFromJsonAsync<NewChapterDto>();
-            if (dto is null || dto.Slug.Length == 0 || dto.Id.Length == 0)
-                return Results.BadRequest("section, slug, id, and title are required.");
+            if (dto is null || string.IsNullOrWhiteSpace(dto.Title) || string.IsNullOrWhiteSpace(dto.Section))
+                return Results.BadRequest("Give the chapter a title and a section.");
             var (project, _) = LoadParsed(holder.Root!);
-            if (project.FindChapter(dto.Id) is not null)
-                return Results.BadRequest($"Chapter id '{dto.Id}' already exists.");
+            // The id is derived from the title when the request has none (authors never type it).
+            var id = string.IsNullOrWhiteSpace(dto.Id) ? ChapterFactory.UniqueId(project, dto.Title) : dto.Id.Trim();
+            if (project.FindChapter(id) is not null)
+                return Results.BadRequest($"Chapter id '{id}' already exists.");
 
-            var path = ChapterFactory.Create(holder.Root!, dto);
-            return Results.Json(new { file = RelPath(holder.Root!, path) });
+            return StructureChange(() => new
+            {
+                file = RelPath(holder.Root!, ChapterFactory.Create(holder.Root!, dto with { Id = id, Title = dto.Title.Trim() },
+                    project.Manifest.Audiences.Select(a => a.Id))),
+            });
+        });
+
+        // Structure editing (Stage 6 step 2): sections and chapters are renamed, created, moved and
+        // deleted where the author sees them. The folder name IS the section name and a chapter
+        // file follows its title (ContentNames); links use ids, so none of this breaks them.
+        app.MapPost("/api/chapter-rename", async (HttpRequest request) =>
+        {
+            if (NoProject() is { } guard)
+                return guard;
+            var dto = await request.ReadFromJsonAsync<RenameChapterDto>();
+            if (dto is null || string.IsNullOrWhiteSpace(dto.Title))
+                return Results.BadRequest("Give the chapter a title.");
+            var path = ResolveChapterPath(holder.Root!, dto.File);
+            if (path is null)
+                return Results.BadRequest("Not a chapter file inside this project.");
+            var title = dto.Title.Trim();
+            return StructureChange(() =>
+            {
+                // The title IS the H1: rewrite both, then let the file follow.
+                var (yaml, rawBody) = FrontmatterParser.Split(File.ReadAllText(path));
+                var fm = ChapterYaml.Parse(yaml);
+                fm["title"] = title;
+                ProjectWrites.Write(holder.Root!, path, ChapterYaml.Compose(fm, ChapterTitle.SetH1(rawBody.TrimStart('\n'), title)), ProjectHistory.Rename);
+                return new { file = RelPath(holder.Root!, ContentOrganizer.RenameChapterFile(path, title)) };
+            });
+        });
+
+        app.MapPost("/api/chapter-move-to", async (HttpRequest request) =>
+        {
+            if (NoProject() is { } guard)
+                return guard;
+            var dto = await request.ReadFromJsonAsync<MoveChapterToDto>();
+            var path = dto is null ? null : ResolveChapterPath(holder.Root!, dto.File);
+            if (dto is null || path is null)
+                return Results.BadRequest("Not a chapter file inside this project.");
+            return StructureChange(() =>
+            {
+                var target = SectionFolders(holder.Root!).FirstOrDefault(d => Path.GetFileName(d) == dto.Folder)
+                    ?? throw new DocWizLoadException($"No section folder '{dto.Folder}' in this project.");
+                return new { file = RelPath(holder.Root!, ContentOrganizer.MoveChapterTo(path, target, dto.Index)) };
+            });
+        });
+
+        app.MapPost("/api/section", async (HttpRequest request) =>
+        {
+            if (NoProject() is { } guard)
+                return guard;
+            var dto = await request.ReadFromJsonAsync<SectionNameDto>();
+            return dto is null
+                ? Results.BadRequest("Give the section a name.")
+                : StructureChange(() => new { folder = ContentOrganizer.CreateSection(holder.Root!, dto.Name) });
+        });
+
+        app.MapPost("/api/section-rename", async (HttpRequest request) =>
+        {
+            if (NoProject() is { } guard)
+                return guard;
+            var dto = await request.ReadFromJsonAsync<SectionNameDto>();
+            return dto?.Folder is null
+                ? Results.BadRequest("folder and name are required.")
+                : StructureChange(() => new { folder = ContentOrganizer.RenameSection(holder.Root!, dto.Folder, dto.Name) });
+        });
+
+        app.MapDelete("/api/section", (string folder) =>
+        {
+            if (NoProject() is { } guard)
+                return guard;
+            return StructureChange(() =>
+            {
+                ContentOrganizer.DeleteSection(holder.Root!, folder);
+                return new { ok = true };
+            });
+        });
+
+        // ---- change history (Stage 6 step 3): a chapter's timeline, compare with now, restore,
+        // named project versions, recently deleted files, size and clean-up. Everything lives in
+        // .docwiz/history (ProjectHistory); the project's own files stay the truth.
+        // One chapter's timeline, newest first; `current` marks the entry that matches the file.
+        IEnumerable<HistoryEntryDto> Timeline(string path)
+        {
+            var now = File.ReadAllText(path);
+            var entries = ProjectHistory.List(holder.Root!, path);
+            var currentId = entries.FirstOrDefault(e => File.ReadAllText(e.FullPath) == now)?.Id;
+            return entries.Select(e => new HistoryEntryDto(e.Id, e.Utc, e.Kind, e.RestoredFromUtc, e.Id == currentId));
+        }
+
+        app.MapGet("/api/history", (string file) =>
+        {
+            if (NoProject() is { } guard)
+                return guard;
+            var path = ResolveChapterPath(holder.Root!, file);
+            if (path is null)
+                return Results.BadRequest("Not a chapter file inside this project.");
+            return Results.Json(new { entries = Timeline(path) });
+        });
+
+        // Every chapter's timeline in one list, newest first (History › All chapters). The
+        // "as it was before history started" entries stay out: they mark where a timeline
+        // begins, not a change.
+        app.MapGet("/api/history/all", () =>
+        {
+            if (NoProject() is { } guard)
+                return guard;
+            var project = ProjectLoader.Load(holder.Root!);
+            return Results.Json(new
+            {
+                entries = project.Chapters
+                    .SelectMany(c => Timeline(c.FilePath)
+                        .Where(e => e.Kind != ProjectHistory.Original)
+                        .Select(e => new { file = RelPath(project.Root, c.FilePath), title = c.Title, e.Id, e.Utc, e.Kind, e.RestoredFrom, e.Current }))
+                    .OrderByDescending(e => e.Utc),
+            });
+        });
+
+        app.MapGet("/api/history/compare", (string file, string entry) =>
+        {
+            if (NoProject() is { } guard)
+                return guard;
+            var path = ResolveChapterPath(holder.Root!, file);
+            if (path is null)
+                return Results.BadRequest("Not a chapter file inside this project.");
+            return StructureChange(() =>
+            {
+                var older = ProjectHistory.Read(holder.Root!, path, entry);
+                var now = File.ReadAllText(path);
+                var (project, _) = LoadParsed(holder.Root!);
+                var (oldFm, nowFm) = (FrontmatterOf(older), FrontmatterOf(now));
+                return new
+                {
+                    blocks = HistoryDiff.Compare(project, older, now),
+                    titleBefore = oldFm.GetValueOrDefault("title") as string ?? "",
+                    titleNow = nowFm.GetValueOrDefault("title") as string ?? "",
+                    audiencesBefore = ChapterYaml.AudienceList(oldFm),
+                    audiencesNow = ChapterYaml.AudienceList(nowFm),
+                };
+            });
+        });
+
+        app.MapPost("/api/history/restore", async (HttpRequest request) =>
+        {
+            if (NoProject() is { } guard)
+                return guard;
+            var dto = await request.ReadFromJsonAsync<HistoryRestoreDto>();
+            var path = dto is null ? null : ResolveChapterPath(holder.Root!, dto.File);
+            if (dto is null || path is null)
+                return Results.BadRequest("Not a chapter file inside this project.");
+            return StructureChange(() =>
+            {
+                var titleBefore = FrontmatterOf(File.ReadAllText(path)).GetValueOrDefault("title") as string;
+                var text = ProjectHistory.RestoreEntry(holder.Root!, path, dto.Entry);
+                // The file follows the title (Stage 6) — a restored older title renames it back.
+                var title = FrontmatterOf(text).GetValueOrDefault("title") as string;
+                var final = title is not null && title != titleBefore ? ContentOrganizer.RenameChapterFile(path, title) : path;
+                return new { file = RelPath(holder.Root!, final) };
+            });
+        });
+
+        app.MapGet("/api/history/project", () =>
+        {
+            if (NoProject() is { } guard)
+                return guard;
+            var stats = ProjectHistory.GetStats(holder.Root!);
+            return Results.Json(new
+            {
+                versions = ProjectHistory.ListVersions(holder.Root!).Select(v => new { v.Id, v.Utc, v.Name }),
+                deleted = ProjectHistory.ListDeleted(holder.Root!).Select(d => new { d.Stamp, d.Utc, path = d.RelPath, d.Kind, d.Title }),
+                stats = new { stats.Bytes, stats.Snapshots, stats.Deleted, stats.Versions },
+            });
+        });
+
+        app.MapPost("/api/history/version", async (HttpRequest request) =>
+        {
+            if (NoProject() is { } guard)
+                return guard;
+            var dto = await request.ReadFromJsonAsync<HistoryNameDto>();
+            return dto is null || string.IsNullOrWhiteSpace(dto.Name)
+                ? Results.BadRequest("Give the version a name.")
+                : StructureChange(() => new { id = ProjectHistory.MarkVersion(holder.Root!, dto.Name) });
+        });
+
+        app.MapPost("/api/history/version-restore", async (HttpRequest request) =>
+        {
+            if (NoProject() is { } guard)
+                return guard;
+            var dto = await request.ReadFromJsonAsync<HistoryIdDto>();
+            return dto is null
+                ? Results.BadRequest("Which version?")
+                : StructureChange(() => new { backup = ProjectHistory.RestoreVersion(holder.Root!, dto.Id) });
+        });
+
+        app.MapDelete("/api/history/version", (string id) =>
+        {
+            if (NoProject() is { } guard)
+                return guard;
+            return StructureChange(() => { ProjectHistory.DeleteVersion(holder.Root!, id); return new { ok = true }; });
+        });
+
+        app.MapPost("/api/history/deleted-restore", async (HttpRequest request) =>
+        {
+            if (NoProject() is { } guard)
+                return guard;
+            var dto = await request.ReadFromJsonAsync<DeletedRestoreDto>();
+            return dto is null
+                ? Results.BadRequest("Which file?")
+                : StructureChange(() => new { path = ProjectHistory.RestoreDeleted(holder.Root!, dto.Stamp, dto.Path) });
+        });
+
+        app.MapPost("/api/history/cleanup", async (HttpRequest request) =>
+        {
+            if (NoProject() is { } guard)
+                return guard;
+            var dto = await request.ReadFromJsonAsync<HistoryCleanupDto>();
+            if (dto is null || dto.Days < 1)
+                return Results.BadRequest("Pick how old an entry must be to go.");
+            return StructureChange(() => new { removed = ProjectHistory.CleanUp(holder.Root!, DateTime.UtcNow.AddDays(-dto.Days)) });
+        });
+
+        app.MapPost("/api/history/open-folder", () =>
+        {
+            if (NoProject() is { } guard)
+                return guard;
+            var dir = ProjectHistory.HistoryRoot(holder.Root!);
+            Directory.CreateDirectory(dir);
+            var psi = new ProcessStartInfo("explorer.exe") { UseShellExecute = true };
+            psi.ArgumentList.Add(dir);
+            using (Process.Start(psi)) { }
+            return Results.Ok();
         });
 
         // Reordering renames filename/folder prefixes only — ids are stable (ADR-005),
@@ -425,6 +669,34 @@ public static class EditorServer
             return Results.Json(new { folder = newName });
         });
 
+        // Where a chapter is used (the properties panel's "Used in"): outputs with the slide
+        // numbers that include it, and chapters that link to it — the delete guard's finder.
+        app.MapGet("/api/chapter-usage", (string file) =>
+        {
+            if (NoProject() is { } guard)
+                return guard;
+            var path = ResolveChapterPath(holder.Root!, file);
+            if (path is null)
+                return Results.BadRequest("Not a chapter file inside this project.");
+            var (project, _) = LoadParsed(holder.Root!);
+            var chapter = project.Chapters.FirstOrDefault(c =>
+                string.Equals(Path.GetFullPath(c.FilePath), Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase));
+            if (chapter is null)
+                return Results.BadRequest("Chapter not found in the loaded project.");
+            var usage = ContentOrganizer.FindUsage(project, chapter.Id);
+            return Results.Json(new
+            {
+                outputs = usage.Views.Select(v => new
+                {
+                    title = v.View.Title,
+                    file = RelPath(project.Root, v.View.FilePath),
+                    mode = v.View.Mode,
+                    slides = v.Slides,
+                }),
+                linkedFrom = usage.LinkedFrom.Select(c => new { title = c.Title, file = RelPath(project.Root, c.FilePath) }),
+            });
+        });
+
         // Deleting is refused while anything still references the chapter — the
         // validator would flag the dangling links anyway; failing early is kinder.
         app.MapDelete("/api/chapter", (string file) =>
@@ -444,7 +716,7 @@ public static class EditorServer
                 return Results.Text(
                     $"Cannot delete: {string.Join("; ", references)}. Remove those references first.",
                     "text/plain", statusCode: 409);
-            File.Delete(path);
+            ProjectWrites.Delete(holder.Root!, path); // to Recently deleted
             return Results.Ok();
         });
 
@@ -498,7 +770,7 @@ public static class EditorServer
                 return Results.BadRequest("Not saved — invalid YAML: " + ex.Message);
             }
 
-            File.WriteAllText(full, dto.Text);
+            ProjectWrites.Write(holder.Root!, full, dto.Text);
             return Results.Ok();
         });
 
@@ -539,7 +811,7 @@ public static class EditorServer
             // Decode any inline base64 data: image a slide-zone paste inlined (see the
             // chapter save) into an asset before the view yaml is written.
             var yaml = DataImageRescue.Rewrite(YamlOut.Serialize(ToView(dto)), holder.Root!);
-            File.WriteAllText(full, yaml);
+            ProjectWrites.Write(holder.Root!, full, yaml);
             return Results.Ok();
         });
 
@@ -558,7 +830,7 @@ public static class EditorServer
                 return Results.BadRequest($"A view file '{dto.Id}.yaml' already exists.");
 
             var view = ToView(new ViewDto(dto.Id, dto.Title, dto.Audience, dto.Mode, []));
-            File.WriteAllText(full, YamlOut.Serialize(view));
+            ProjectWrites.Write(holder.Root!, full, YamlOut.Serialize(view));
             return Results.Json(new { file = RelPath(holder.Root!, full) });
         });
 
@@ -588,7 +860,7 @@ public static class EditorServer
             if (File.Exists(full))
                 return Results.BadRequest($"A view file '{view.Id}.yaml' already exists.");
 
-            File.WriteAllText(full, YamlOut.Serialize(view));
+            ProjectWrites.Write(holder.Root!, full, YamlOut.Serialize(view));
             return Results.Json(new { file = RelPath(holder.Root!, full) });
         });
 
@@ -599,7 +871,7 @@ public static class EditorServer
             var full = ResolveViewPath(holder.Root!, file, mustExist: true);
             if (full is null)
                 return Results.BadRequest("Not a view file inside this project.");
-            File.Delete(full);
+            ProjectWrites.Delete(holder.Root!, full); // to Recently deleted
             return Results.Ok();
         });
 
@@ -756,7 +1028,7 @@ public static class EditorServer
 
             var lines = body.Replace("\r\n", "\n").Split('\n').ToList();
             lines[target.Line] = lines[target.Line].TrimEnd() + " {#" + anchor + "}";
-            File.WriteAllText(ch.FilePath, ChapterYaml.Compose(ChapterYaml.Parse(yaml), string.Join('\n', lines)));
+            ProjectWrites.Write(holder.Root!, ch.FilePath, ChapterYaml.Compose(ChapterYaml.Parse(yaml), string.Join('\n', lines)));
             return Results.Json(new { anchor });
         });
 
@@ -795,7 +1067,7 @@ public static class EditorServer
             var full = Path.GetFullPath(Path.Combine(dir, name));
             if (!full.StartsWith(Path.GetFullPath(dir) + Path.DirectorySeparatorChar, StringComparison.Ordinal))
                 return Results.BadRequest("Invalid path.");
-            if (File.Exists(full)) File.Delete(full);
+            if (File.Exists(full)) ProjectWrites.Delete(holder.Root!, full); // to Recently deleted
             return Results.Ok();
         });
 
@@ -840,12 +1112,25 @@ public static class EditorServer
         {
             if (NoProject() is { } guard)
                 return guard;
-            var m = LoadParsed(holder.Root!).Project.Manifest;
+            var project = LoadParsed(holder.Root!).Project;
+            var m = project.Manifest;
             return Results.Json(new
             {
                 project = m.Project, code = m.Code, customer = m.Customer, version = m.Version,
                 language = m.Language, numbering = m.Numbering,
-                audiences = m.Audiences.Select(a => new { id = a.Id, title = a.Title }),
+                // Each audience with what uses it, so the list shows the weight of a delete
+                // before anyone asks for one.
+                audiences = m.Audiences.Select(a =>
+                {
+                    var usage = AudienceUsage.Find(project, a.Id);
+                    return new
+                    {
+                        id = a.Id, title = a.Title, description = a.Description ?? "",
+                        chapters = usage.TaggedChapters.Count,
+                        blocks = usage.BlockChapters.Sum(b => b.Count),
+                        outputs = usage.Views.Count,
+                    };
+                }),
             });
         });
 
@@ -870,6 +1155,21 @@ public static class EditorServer
                     System.Text.RegularExpressions.Regex.IsMatch(v, @"^[+-]?(\d+\.?\d*|\.\d+)$");  // looks numeric
                 return needs ? ChapterTemplates.YamlQuote(v) : v;
             }
+            // Audiences dropped from the list: a view filtered by one blocks the save (it needs
+            // another audience first); chapter tags are stripped after the manifest is written.
+            var current = ProjectLoader.Load(holder.Root!);
+            var keep = (dto.Audiences ?? []).Select(a => a.Id).ToHashSet(StringComparer.Ordinal);
+            var removed = current.Manifest.Audiences.Where(a => !keep.Contains(a.Id)).ToList();
+            var blocking = current.Views.Where(v => removed.Any(a => a.Id == v.Audience)).ToList();
+            if (blocking.Count > 0)
+            {
+                var v = blocking[0];
+                var title = removed.First(a => a.Id == v.Audience).Title;
+                return Results.Text(
+                    $"Not saved: the output “{v.Title}” is for {title}. Pick another audience for it first, then delete {title}.",
+                    "text/plain", statusCode: 409);
+            }
+
             var path = Path.Combine(holder.Root!, "docwiz.yaml");
             var yaml = File.ReadAllText(path);
             yaml = ManifestWriter.SetScalar(yaml, "project", Q(dto.Project));
@@ -879,9 +1179,28 @@ public static class EditorServer
             yaml = ManifestWriter.SetScalar(yaml, "language", Q(dto.Language));
             yaml = ManifestWriter.SetScalar(yaml, "numbering", dto.Numbering ? "true" : "false");
             yaml = ManifestWriter.SetAudiences(yaml,
-                (dto.Audiences ?? []).Select(a => (a.Id, (string)Q(a.Title))));
-            File.WriteAllText(path, yaml);
+                (dto.Audiences ?? []).Select(a => (a.Id, Q(a.Title),
+                    string.IsNullOrWhiteSpace(a.Description) ? null : (string?)Q(a.Description.Trim()))));
+            ProjectWrites.Write(holder.Root!, path, yaml);
+            AudienceRemoval.StripFromChapters(current, removed.Select(a => a.Id).ToList());
             return Results.Ok();
+        });
+
+        // What deleting an audience would affect, for the confirmation: chapter tags (removed on
+        // save), `::: audience` blocks naming it (kept — Check lists them), views filtered by it
+        // (they block the delete).
+        app.MapGet("/api/audience-usage", (string id) =>
+        {
+            if (NoProject() is { } guard)
+                return guard;
+            var (project, _) = LoadParsed(holder.Root!);
+            var usage = AudienceUsage.Find(project, id);
+            return Results.Json(new
+            {
+                chapters = usage.TaggedChapters.Select(c => new { c.Title, file = RelPath(project.Root, c.FilePath) }),
+                blocks = usage.BlockChapters.Select(b => new { b.Chapter.Title, file = RelPath(project.Root, b.Chapter.FilePath), count = b.Count }),
+                views = usage.Views.Select(v => new { v.Title }),
+            });
         });
 
         app.MapPost("/api/asset", async (string name, string? folder, HttpRequest request) =>
@@ -973,9 +1292,10 @@ public static class EditorServer
                 return Results.BadRequest("Not a chapter file inside this project.");
             var (yaml, rawBody) = FrontmatterParser.Split(File.ReadAllText(path));
             var fm = ChapterYaml.Parse(yaml);
-            fm["discipline"] = dto.Discipline;
+            if (dto.Discipline is not null) // the editor no longer asks for it (Stage 6)
+                fm["discipline"] = dto.Discipline;
             fm["audiences"] = dto.Audiences;
-            File.WriteAllText(path, ChapterYaml.Compose(fm, rawBody.TrimStart('\n')));
+            ProjectWrites.Write(holder.Root!, path, ChapterYaml.Compose(fm, rawBody.TrimStart('\n')));
             return Results.Json(new { ok = true });
         });
 
@@ -1033,10 +1353,28 @@ public static class EditorServer
             newBody = DataImageRescue.Rewrite(newBody, holder.Root!);
 
             var fm = ChapterYaml.Parse(yaml);
-            fm["title"] = dto.Title;
-            fm["discipline"] = dto.Discipline;
+            var oldTitle = fm.GetValueOrDefault("title") as string ?? "";
+            // The title IS the H1 (Stage 6): the heading on the page wins. A body without an H1
+            // keeps the title it has (or one an older client sent). `discipline` is left as it
+            // is — it only records the skeleton a chapter started from.
+            var title = ChapterTitle.FromBody(newBody)
+                        ?? (string.IsNullOrWhiteSpace(dto.Title) ? oldTitle : dto.Title);
+            fm["title"] = title;
             fm["audiences"] = dto.Audiences;
-            File.WriteAllText(path, ChapterYaml.Compose(fm, newBody));
+            ProjectWrites.Write(holder.Root!, path, ChapterYaml.Compose(fm, newBody));
+
+            // Chapter files follow their title; only an actual title change renames the file, so
+            // ordinary saves never touch the name (and legacy slug names stay until a rename).
+            if (title != oldTitle)
+            {
+                try { path = ContentOrganizer.RenameChapterFile(path, title); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // The content IS saved, so the save must not report failure; the file keeps its
+                    // old name (renamed again on the next title change). Logged, not swallowed.
+                    Console.Error.WriteLine($"WARN chapter saved but its file was not renamed to follow the title ({path}): {ex}");
+                }
+            }
 
             var project = ProjectLoader.Load(holder.Root!);
             return Results.Json(EditorDoc.Build(project, RelPath(holder.Root!, path)));
@@ -1153,7 +1491,7 @@ public static class EditorServer
             // paths — neither needs every chapter's parsed AST, so skip ParseAll. The single
             // target chapter is parsed once below.
             var project = ProjectLoader.Load(holder.Root!);
-            var pipeline = DocWizMarkdown.CreatePipeline();
+            var pipeline = DocWizMarkdown.CreatePipeline(project.Manifest.Audiences);
             var (_, body) = FrontmatterParser.Split(File.ReadAllText(path));
             var doc = Markdig.Markdown.Parse(body, pipeline);
             LinkRewriter.Rewrite(doc, project, id => $"{id}.html");
@@ -1386,10 +1724,46 @@ public static class EditorServer
         }
     }
 
+    /// <summary>The project's section folders in order (full paths), the same order the loader
+    /// numbers chapters in.</summary>
+    private static IEnumerable<string> SectionFolders(string root)
+    {
+        var contentDir = Path.GetFullPath(Path.Combine(root, ProjectLayout.ContentFolder));
+        return Directory.Exists(contentDir)
+            ? Directory.GetDirectories(contentDir).OrderBy(d => d, StringComparer.Ordinal)
+            : [];
+    }
+
+    /// <summary>A chapter file's frontmatter as a dictionary (empty when it has none).</summary>
+    private static Dictionary<string, object?> FrontmatterOf(string text) =>
+        ChapterYaml.Parse(FrontmatterParser.Split(text).Yaml);
+
+    /// <summary>A structure or history change (rename/move/create/delete/restore) as an HTTP
+    /// result: a refusal explains itself (400); Windows refusing to rename because a file is
+    /// open elsewhere becomes a plain-language 409.</summary>
+    private static IResult StructureChange(Func<object> change)
+    {
+        try
+        {
+            return Results.Json(change());
+        }
+        catch (DocWizLoadException ex)
+        {
+            return Results.Text(ex.Message, "text/plain", statusCode: 400);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return Results.Text(
+                "Windows couldn't rename or move it — a file in it is probably open in another program " +
+                "(Explorer preview, Word, an editor). Close it and try again.",
+                "text/plain", statusCode: 409);
+        }
+    }
+
     private static (DocProject Project, Markdig.MarkdownPipeline Pipeline) LoadParsed(string root)
     {
         var project = ProjectLoader.Load(root);
-        var pipeline = DocWizMarkdown.CreatePipeline();
+        var pipeline = DocWizMarkdown.CreatePipeline(project.Manifest.Audiences);
         DocWizMarkdown.ParseAll(project, pipeline);
         return (project, pipeline);
     }

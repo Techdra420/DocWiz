@@ -44,7 +44,7 @@ public static class PdfExporter
         Directory.CreateDirectory(outDir);
 
         var project = ProjectLoader.Load(projectRoot);
-        var pipeline = DocWizMarkdown.CreatePipeline();
+        var pipeline = DocWizMarkdown.CreatePipeline(project.Manifest.Audiences);
         DocWizMarkdown.ParseAll(project, pipeline);
 
         return selection.Format == ExportFormat.Html

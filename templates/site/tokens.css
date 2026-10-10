@@ -38,6 +38,8 @@
   --dw-chrome-muted: #8da0b2;   /* NEW — secondary text in the chrome bar */
   --dw-chrome-border: #253443;  /* NEW — separators inside the chrome bar */
   --dw-mark: #2f6cae;           /* NEW — brand-mark fill / Build button on chrome (white text 5.4:1) */
+  --dw-mark-text: #ffffff;      /* text on --dw-mark (chrome-only; the dark header resolves --dw-accent-contrast to dark ink, 3.4:1) */
+  --dw-mark-strong: #255b94;    /* hover/pressed --dw-mark; white text 7.0:1 (chrome-only) */
 
   /* ---- Type -------------------------------------------------------------- */
   --dw-font-ui: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
@@ -90,6 +92,10 @@
   --dw-r0: 4px;   /* NEW — badges, small inputs */
   --dw-r1: 6px;
   --dw-r2: 10px;
+  /* Control heights (Stage 6) — every button, input and pill is one of three. */
+  --dw-ctl-sm: 28px;  /* in-row tools: tree / rail ⋯, small icon buttons */
+  --dw-ctl-md: 32px;  /* bars, menus, fields: document bar, toolbar, menu items, inputs */
+  --dw-ctl-lg: 36px;  /* the chrome bar and dialog / sheet actions */
   --dw-shadow: 0 1px 3px rgba(16, 24, 32, 0.08);
   --dw-shadow-2: 0 8px 28px rgba(16, 24, 32, 0.18);  /* NEW — dialogs, toasts */
   --dw-focus-ring: 0 0 0 3px var(--dw-accent-glow);  /* NEW — every focusable */
@@ -132,6 +138,8 @@
   --dw-chrome-muted: #7e92a5;
   --dw-chrome-border: #1d2935;
   --dw-mark: #2f6cae;           /* NEW — same on dark; sits on the dark chrome */
+  --dw-mark-text: #ffffff;
+  --dw-mark-strong: #255b94;
 
   --dw-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
   --dw-shadow-2: 0 10px 32px rgba(0, 0, 0, 0.55);

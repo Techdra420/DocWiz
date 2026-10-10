@@ -145,6 +145,37 @@ public class ContentOrganizerTests : IDisposable
     }
 
     [Fact]
+    public void FindUsage_ListsLinkingChaptersAndSlideNumbers()
+    {
+        var project = new DocProject
+        {
+            Root = _root,
+            Manifest = new ProjectManifest(),
+            Chapters =
+            [
+                Ch("safety", "Safety", ""),
+                Ch("ops", "Operation", "See [safety](dw:safety)."),
+            ],
+            Views =
+            [
+                new ViewDefinition
+                {
+                    Title = "Operator Training",
+                    Slides = [new SlideDef { Include = "ops" }, new SlideDef { Include = "safety" }, new SlideDef { Include = "safety#lockout" }],
+                },
+                new ViewDefinition { Title = "Quick Reference", Slides = [new SlideDef { Include = "ops" }] },
+            ],
+        };
+
+        var usage = ContentOrganizer.FindUsage(project, "safety");
+
+        Assert.Equal(["Operation"], usage.LinkedFrom.Select(c => c.Title));
+        var view = Assert.Single(usage.Views);
+        Assert.Equal("Operator Training", view.View.Title);
+        Assert.Equal([2, 3], view.Slides);
+    }
+
+    [Fact]
     public void FindReferences_CleanChapter_IsEmpty()
     {
         var project = new DocProject

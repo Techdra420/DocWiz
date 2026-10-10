@@ -54,30 +54,182 @@ public static class ContentOrganizer
         return Path.GetFileName(Renumber(ordered, isDirectory: true)[target]);
     }
 
+    /// <summary>Next order prefix in steps of 10 after the highest existing one ("010",
+    /// "020", …) — for a new section folder or chapter file.</summary>
+    public static string NextPrefix(IEnumerable<string> paths)
+    {
+        var max = paths
+            .Select(p => ProjectLoader.SplitNumericPrefix(Path.GetFileNameWithoutExtension(p)).Order)
+            .Where(o => o.Length > 0)
+            .Select(int.Parse)
+            .DefaultIfEmpty(0)
+            .Max();
+        return (max + 10).ToString("D3");
+    }
+
+    /// <summary>Creates an empty section "{next prefix}-{name}" and returns its folder name.
+    /// Refused when the name can't be a folder name or another section already shows it.</summary>
+    public static string CreateSection(string root, string name)
+    {
+        var contentDir = Path.Combine(Path.GetFullPath(root), ProjectLayout.ContentFolder);
+        Directory.CreateDirectory(contentDir);
+        var clean = CheckSectionName(contentDir, name, except: null);
+        var folder = $"{NextPrefix(Directory.GetDirectories(contentDir))}-{clean}";
+        Directory.CreateDirectory(Path.Combine(contentDir, folder));
+        return folder;
+    }
+
+    /// <summary>Renames a section: its folder becomes "{same prefix}-{name}" — the folder
+    /// name IS the section name. Returns the new folder name.</summary>
+    public static string RenameSection(string root, string sectionFolder, string name)
+    {
+        var contentDir = Path.Combine(Path.GetFullPath(root), ProjectLayout.ContentFolder);
+        var full = SectionDir(contentDir, sectionFolder);
+        var clean = CheckSectionName(contentDir, name, except: full);
+        var (prefix, _) = ProjectLoader.SplitNumericPrefix(Path.GetFileName(full));
+        var target = prefix.Length > 0 ? $"{prefix}-{clean}" : clean;
+        MoveEntry(full, Path.Combine(contentDir, target), isDirectory: true);
+        return target;
+    }
+
+    /// <summary>Deletes an empty section folder. A section that still holds chapters (or any
+    /// other file) is refused — the author moves or deletes those first.</summary>
+    public static void DeleteSection(string root, string sectionFolder)
+    {
+        var contentDir = Path.Combine(Path.GetFullPath(root), ProjectLayout.ContentFolder);
+        var full = SectionDir(contentDir, sectionFolder);
+        var chapters = Directory.GetFiles(full, "*.md").Length;
+        if (chapters > 0)
+            throw new DocWizLoadException(
+                $"“{ContentNames.SectionTitle(Path.GetFileName(full))}” still has {chapters} chapter{(chapters == 1 ? "" : "s")}. Move or delete {(chapters == 1 ? "it" : "them")} first.");
+        if (Directory.EnumerateFileSystemEntries(full).Any())
+            throw new DocWizLoadException("This section's folder still contains other files. Remove them in Explorer first.");
+        Directory.Delete(full);
+    }
+
+    /// <summary>Moves a chapter into another section (or to another position in its own) at
+    /// <paramref name="index"/> (clamped), renumbering the target section. Returns the
+    /// chapter's new absolute path.</summary>
+    public static string MoveChapterTo(string chapterPath, string targetSectionDir, int index)
+    {
+        var full = Path.GetFullPath(chapterPath);
+        var target = Path.GetFullPath(targetSectionDir);
+        var others = Directory.GetFiles(target, "*.md").OrderBy(f => f, StringComparer.Ordinal)
+            .Where(f => !string.Equals(Path.GetFullPath(f), full, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        index = Math.Clamp(index, 0, others.Count);
+
+        var moving = full;
+        if (!string.Equals(Path.GetDirectoryName(full), target, StringComparison.OrdinalIgnoreCase))
+        {
+            // Land under a parking name that can't collide; the renumber below names it.
+            var (_, rest) = ProjectLoader.SplitNumericPrefix(Path.GetFileNameWithoutExtension(full));
+            moving = Path.Combine(target, $"999999-{rest}.md");
+            File.Move(full, moving);
+        }
+        others.Insert(index, moving);
+        return Renumber(others, isDirectory: false)[index];
+    }
+
+    /// <summary>Chapter files follow their title: "{same prefix}-{title, file-safe}.md".
+    /// Another file already using that name gets " (2)", " (3)"… Returns the new path.</summary>
+    public static string RenameChapterFile(string chapterPath, string title)
+    {
+        var full = Path.GetFullPath(chapterPath);
+        var dir = Path.GetDirectoryName(full)!;
+        var (prefix, _) = ProjectLoader.SplitNumericPrefix(Path.GetFileNameWithoutExtension(full));
+        var stem = (prefix.Length > 0 ? prefix + "-" : "") + ContentNames.FileSafe(title);
+        var candidate = Path.Combine(dir, stem + ".md");
+        for (var n = 2; File.Exists(candidate) && !string.Equals(candidate, full, StringComparison.OrdinalIgnoreCase); n++)
+            candidate = Path.Combine(dir, $"{stem} ({n}).md");
+        MoveEntry(full, candidate, isDirectory: false);
+        return candidate;
+    }
+
+    private static string SectionDir(string contentDir, string sectionFolder)
+    {
+        if (sectionFolder.Length == 0 || sectionFolder.IndexOfAny(['/', '\\']) >= 0 || sectionFolder.Contains(".."))
+            throw new DocWizLoadException("Not a section folder name.");
+        var full = Path.Combine(contentDir, sectionFolder);
+        if (!Directory.Exists(full))
+            throw new DocWizLoadException($"No section folder '{sectionFolder}' in this project.");
+        return full;
+    }
+
+    /// <summary>Validates a section name and refuses one another section already shows
+    /// (Windows folder names are case-insensitive). Returns the trimmed name.</summary>
+    private static string CheckSectionName(string contentDir, string name, string? except)
+    {
+        if (ContentNames.SectionNameProblem(name) is { } problem)
+            throw new DocWizLoadException(problem);
+        var clean = name.Trim();
+        var taken = Directory.GetDirectories(contentDir).Any(d =>
+            !string.Equals(d, except, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(ContentNames.SectionTitle(Path.GetFileName(d)), clean, StringComparison.OrdinalIgnoreCase));
+        if (taken)
+            throw new DocWizLoadException($"There's already a section called “{clean}”.");
+        return clean;
+    }
+
+    /// <summary>Rename a file or folder; a case-only rename (Windows treats both names as the
+    /// same entry) goes through a temporary name.</summary>
+    private static void MoveEntry(string from, string to, bool isDirectory)
+    {
+        if (string.Equals(from, to, StringComparison.Ordinal))
+            return;
+        if (string.Equals(from, to, StringComparison.OrdinalIgnoreCase))
+        {
+            var tmp = to + ".__dwcase";
+            if (isDirectory) { Directory.Move(from, tmp); Directory.Move(tmp, to); }
+            else { File.Move(from, tmp); File.Move(tmp, to); }
+            return;
+        }
+        if (isDirectory) Directory.Move(from, to);
+        else File.Move(from, to);
+    }
+
     /// <summary>Human-readable list of places that reference the chapter id. Used to
     /// refuse deleting a chapter that would leave dangling dw: links or view includes.</summary>
     public static List<string> FindReferences(DocProject project, string chapterId)
     {
-        var references = new List<string>();
-        var linkPattern = new Regex($@"dw:{Regex.Escape(chapterId)}(?![\w-])", RegexOptions.IgnoreCase);
+        var usage = FindUsage(project, chapterId);
+        var references = usage.LinkedFrom.Select(c => $"chapter \"{c.Title}\" links to it").ToList();
+        references.AddRange(usage.Views.Select(v =>
+            $"view \"{v.View.Title}\" includes it in {v.Slides.Count} slide{(v.Slides.Count == 1 ? "" : "s")}"));
+        return references;
+    }
 
-        foreach (var chapter in project.Chapters.Where(c => c.Id != chapterId))
-        {
-            if (linkPattern.IsMatch(chapter.Markdown))
-                references.Add($"chapter \"{chapter.Title}\" links to it");
-        }
+    /// <summary>Where a chapter is used: the chapters that link to it and the views whose
+    /// slides include or embed it. One finder for the delete guard (<see cref="FindReferences"/>)
+    /// and the editor's "Used in".</summary>
+    public sealed record ChapterUsage(IReadOnlyList<Chapter> LinkedFrom, IReadOnlyList<ViewUsage> Views);
+
+    /// <summary>A view using a chapter, with the 1-based numbers of the slides that do.</summary>
+    public sealed record ViewUsage(ViewDefinition View, IReadOnlyList<int> Slides);
+
+    public static ChapterUsage FindUsage(DocProject project, string chapterId)
+    {
+        var linkPattern = new Regex($@"dw:{Regex.Escape(chapterId)}(?![\w-])", RegexOptions.IgnoreCase);
+        var linkedFrom = project.Chapters
+            .Where(c => c.Id != chapterId && linkPattern.IsMatch(c.Markdown))
+            .ToList();
 
         // A slide references the chapter via the legacy single-include field OR an inline
         // ::: embed in any region's markdown (Structured Slides v2). Count each slide once.
         var pipeline = DocWizMarkdown.CreatePipeline();
+        var views = new List<ViewUsage>();
         foreach (var view in project.Views)
         {
-            var count = view.Slides.Count(s => SlideReferences(s, chapterId, pipeline));
-            if (count > 0)
-                references.Add($"view \"{view.Title}\" includes it in {count} slide{(count == 1 ? "" : "s")}");
+            var slides = view.Slides
+                .Select((s, i) => (s, number: i + 1))
+                .Where(x => SlideReferences(x.s, chapterId, pipeline))
+                .Select(x => x.number)
+                .ToList();
+            if (slides.Count > 0)
+                views.Add(new ViewUsage(view, slides));
         }
 
-        return references;
+        return new ChapterUsage(linkedFrom, views);
     }
 
     /// <summary>Does the slide reference <paramref name="chapterId"/> — via the legacy

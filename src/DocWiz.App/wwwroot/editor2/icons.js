@@ -41,11 +41,9 @@ export const ICONS = {
   indent: S + '<path d="M6 3.5H14M6 8H14M6 12.5H14"></path><path d="M1.5 5.5L4 8l-2.5 2.5"></path>' + E,
   outdent: S + '<path d="M6 3.5H14M6 8H14M6 12.5H14"></path><path d="M4 5.5L1.5 8 4 10.5"></path>' + E,
 
-  // Phase 4: view-switch + contextual toolbar icons (round caps, same 16×16 spec)
-  // Pencil — Edit view active indicator
+  // Phase 4: contextual toolbar icons (round caps, same 16×16 spec)
+  // Pencil — Edit source of a linked block
   pencil: SR + '<path d="M2.5 12.5l1-3L10 3a1.4 1.4 0 0 1 2 2l-6.5 6.5z"></path>' + E,
-  // Eye — Read view
-  eye: SR + '<path d="M1.5 8s2.5-4.5 6.5-4.5S14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z"></path><circle cx="8" cy="8" r="1.9"></circle>' + E,
   // Trash — Delete in context bars
   trash: SR + '<path d="M2.5 4.5h11M6.5 4.5V3h3v1.5M3.5 4.5l.8 8.3a1 1 0 0 0 1 .9h5.4a1 1 0 0 0 1-.9l.8-8.3"></path>' + E,
   // Replace (folder-open) — Replace image

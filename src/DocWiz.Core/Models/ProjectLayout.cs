@@ -15,6 +15,13 @@ public static class ProjectLayout
     public const string ViewsFolder = "views";
     public const string ManifestFileName = "docwiz.yaml";
 
+    /// <summary>The editor's own data inside a project (never built, never shipped, git-ignored
+    /// by a self-ignoring .gitignore inside it). Holds <see cref="HistoryFolder"/>.</summary>
+    public const string EditorDataFolder = ".docwiz";
+
+    /// <summary>Change history (Stage 6): snapshots, named versions, recently deleted files.</summary>
+    public const string HistoryFolder = ".docwiz/history";
+
     /// <summary>The offline entry pages an external documentation package (ADR-006) may
     /// expose, in preference order: a navigable offline frame
     /// (handover.html — project tree + search + iframe) before the generic single-page

@@ -88,10 +88,29 @@ public class ManifestWriterTests
     public void SetAudiences_ReplacesTheBlock_PreservesAfter()
     {
         var yaml = "project: X\naudiences:\n  - id: user\n    title: User\nversion: 1.0.0\n";
-        var outp = ManifestWriter.SetAudiences(yaml, new[] { ("user", "User"), ("support", "Support") });
+        var outp = ManifestWriter.SetAudiences(yaml, new (string, string, string?)[] { ("user", "User", null), ("support", "Support", null) });
         Assert.Contains("- id: user", outp);
         Assert.Contains("- id: support", outp);
         Assert.Contains("title: Support", outp);
         Assert.Contains("version: 1.0.0", outp);
+        Assert.DoesNotContain("description", outp);
+    }
+
+    [Fact]
+    public void SetAudiences_WritesDescriptions_AndTheLoaderReadsThemBack()
+    {
+        var yaml = "project: X\ncode: X\naudiences:\n  - id: user\n    title: User\n";
+        var outp = ManifestWriter.SetAudiences(yaml, new (string, string, string?)[] { ("user", "User", "Operators on the warehouse floor") });
+        Assert.Contains("    description: Operators on the warehouse floor", outp);
+
+        var root = Path.Combine(Path.GetTempPath(), "docwiz-mw-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(Path.Combine(root, "content"));
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "docwiz.yaml"), outp);
+            var project = DocWiz.Core.Loading.ProjectLoader.Load(root);
+            Assert.Equal("Operators on the warehouse floor", Assert.Single(project.Manifest.Audiences).Description);
+        }
+        finally { Directory.Delete(root, recursive: true); }
     }
 }

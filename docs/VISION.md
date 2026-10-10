@@ -128,6 +128,16 @@ actually needed. If it stays at zero, demote it: keep the pipeline support (chea
 tested), drop the toolbar button and the new-chapter audience prompts. No new audience
 machinery either way.
 
+**Update 2026-10-10 (stakeholder decision, supersedes the plan above):** real projects tag
+audiences *inside* chapters too — single paragraphs and steps, not just whole chapters — and
+may have many audiences. Audiences become first-class in the editor: one Readers picker per
+chapter and per block (search, "Everyone" shortcut, scales to many audiences), a quiet margin
+marker on tagged blocks, a manager with a one-line description and usage counts, and
+"Preview as" an audience to check the result. Views as playlists stay the primary way to
+build an output; audience tags are how one source serves several readers without copies.
+See Stage 6 in [ROADMAP.md](ROADMAP.md) — shipped as step 5 (2026-10-10), including tagging a
+single step of a procedure (the filtered output drops the step and renumbers the rest).
+
 ## Open wishlist
 
 Items captured from dogfooding that are still open (everything shipped is recorded in

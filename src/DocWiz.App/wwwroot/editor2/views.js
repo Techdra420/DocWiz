@@ -9,7 +9,7 @@ import { TableView } from './tableview.js';
 import { FigureView } from './figureview.js';
 import { TaskItemView } from './taskitemview.js';
 import { nodesFromSegments } from './ingest.js';
-import { sep } from './icons.js';
+import { sep, icon } from './icons.js';
 import { trackWidthDrag } from './boxresize.js';
 import { adjacencyButtons } from './blockadjacency.js';
 import { buildStrip, menuItem, openContextMenu } from './contexttools.js';
@@ -22,6 +22,16 @@ const CONTAINER_LABEL = {
   cards: 'Navigation cards', buttons: 'Button row', center: 'Centered', right: 'Right-aligned',
   group: 'Group',
 };
+
+// The audience block's tag — the same words the pipeline writes (AudienceTag.Label in
+// AudienceContainerRenderer.cs; pinned by AudienceTagParityTests): titles, ids as fallback.
+export function audienceTagLabel(args, audiences) {
+  const titles = args.split(/\s+/).filter(Boolean).map((id) => {
+    const a = (audiences || []).find((x) => x.id === id);
+    return a && a.title ? a.title : id;
+  });
+  return 'Only for ' + titles.join(', ');
+}
 
 class ContainerView {
   constructor(node, view, getPos, ui) {
@@ -66,7 +76,7 @@ class ContainerView {
       this.dom = element('div', 'aud');
       this.dom.setAttribute('data-aud', args);
       const tag = element('span', 'aud-tag');
-      tag.textContent = args.split(/\s+/).filter(Boolean).join(' · ') + ' only';
+      tag.textContent = audienceTagLabel(args, ui && ui.audiences);
       this.dom.appendChild(pill(tag));
       this.contentDOM = this.dom.appendChild(document.createElement('div'));
       return;
@@ -158,24 +168,12 @@ class ContainerView {
       labelInput.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); labelInput.blur(); } };
       tools.appendChild(labelInput);
     } else if (type === 'audience') {
-      const audiences = (this.ui && this.ui.audiences) || [];
-      const current = new Set(args.split(/\s+/).filter(Boolean));
-      for (const a of audiences) {
-        const lab = document.createElement('label');
-        lab.className = 'e2-ctx-check';
-        const cb = document.createElement('input');
-        cb.type = 'checkbox';
-        cb.checked = current.has(a.id);
-        cb.onchange = () => {
-          const next = new Set(current);
-          if (cb.checked) next.add(a.id); else next.delete(a.id);
-          if (next.size === 0) { cb.checked = true; return; } // never empty (validator error)
-          this.patchAttrs({ args: audiences.filter((x) => next.has(x.id)).map((x) => x.id).join(' ') });
-        };
-        lab.appendChild(cb);
-        lab.appendChild(document.createTextNode(a.title));
-        tools.appendChild(lab);
-      }
+      // The shared Readers picker (app.js): change who, or "Everyone" to remove the tag.
+      const who = add(audienceTagLabel(args, this.ui && this.ui.audiences).replace(/^Only for /, 'Readers: '),
+        'Who reads this block. Everyone removes the tag and keeps the content.', () => {
+          const b = window.DocWizBridge;
+          if (b && b.blockReaders) b.blockReaders(who);
+        });
     } else if (type === 'details') {
       const labelInput = document.createElement('input');
       labelInput.className = 'e2-figcap';
@@ -211,8 +209,8 @@ class ContainerView {
         });
       }
     } else if (type === 'center' || type === 'right') {
-      add('↔ Center', 'Center the content.', () => this.patchAttrs({ type: 'center' }), type === 'center');
-      add('⇥ Right', 'Right-align the content.', () => this.patchAttrs({ type: 'right' }), type === 'right');
+      add('Center', 'Center the content.', () => this.patchAttrs({ type: 'center' }), type === 'center').prepend(icon('alignCenter'));
+      add('Right', 'Right-align the content.', () => this.patchAttrs({ type: 'right' }), type === 'right').prepend(icon('alignRight'));
     }
 
     tools.appendChild(sep());

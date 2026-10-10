@@ -52,7 +52,7 @@ public static class ProjectLoader
         {
             var sectionName = Path.GetFileName(sectionDir);
             var (sectionOrder, sectionSlug) = SplitNumericPrefix(sectionName);
-            var sectionTitle = ToDisplayTitle(sectionSlug);
+            var sectionTitle = ContentNames.SectionTitle(sectionName);
 
             foreach (var file in Directory.GetFiles(sectionDir, "*.md").OrderBy(f => f, StringComparer.Ordinal))
             {
@@ -115,8 +115,9 @@ public static class ProjectLoader
         return views;
     }
 
-    /// <summary>"010-overview" → ("010", "overview"); "intro" → ("", "intro").</summary>
-    internal static (string Order, string Slug) SplitNumericPrefix(string name)
+    /// <summary>"010-overview" → ("010", "overview"); "intro" → ("", "intro"). The one reading
+    /// of an order prefix (loader, organizer, chapter factory).</summary>
+    public static (string Order, string Slug) SplitNumericPrefix(string name)
     {
         var dash = name.IndexOf('-');
         if (dash > 0 && name[..dash].All(char.IsDigit))

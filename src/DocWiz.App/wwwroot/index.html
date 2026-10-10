@@ -6,7 +6,7 @@
 <title>DocWiz Editor</title>
 <!-- No-flash theme guard: set data-theme before first paint from the saved choice,
      else the OS preference. The same 3 lines as the handover templates (base/slides.html);
-     the #themeBtn toggle behaviour is the shared /app/site.js, loaded at the end of body. -->
+     Settings › Appearance (app.js) saves or clears the choice and follows Windows live. -->
 <script>
   (function () {
     var t = localStorage.getItem('dw-theme');
@@ -56,16 +56,22 @@
   <!-- Divider -->
   <div class="hd-div" aria-hidden="true"></div>
 
-  <!-- Project block (hidden when no project mounted) -->
+  <!-- Project (hidden when no project is mounted). Its name opens the project menu: everything
+       that acts on the whole project — switch, folder, import, export, copies (app.js
+       projectMenu, on the shared .e2-menu recipe). -->
   <div class="hd-proj" id="projBlock" hidden>
-    <div class="hd-proj-ico" aria-hidden="true">
-      <!-- folder icon -->
-      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a1 1 0 0 1 1-1h4l2 2h9a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg>
-    </div>
-    <div class="hd-proj-text">
-      <span class="hd-proj-name" id="projName"></span>
-      <span class="hd-proj-meta"><span class="hd-proj-code" id="projCode"></span><span class="hd-live-dot" aria-label="live"></span><span class="hd-proj-live">live</span></span>
-    </div>
+    <button type="button" class="hd-proj-btn" id="projMenuBtn" aria-haspopup="menu" aria-expanded="false"
+      data-tip="Project menu — switch project, open its folder, import a Word document, export, or save a copy or a template.">
+      <span class="hd-proj-ico" aria-hidden="true">
+        <!-- folder icon -->
+        <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a1 1 0 0 1 1-1h4l2 2h9a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/></svg>
+      </span>
+      <span class="hd-proj-text">
+        <span class="hd-proj-name" id="projName"></span>
+        <span class="hd-proj-meta"><span class="hd-proj-code" id="projCode"></span></span>
+      </span>
+      <svg class="hd-proj-chev" viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
+    </button>
     <span class="hd-tpl-badge" id="tplBadge" hidden
       data-tip="You are editing the template master itself. Every change is saved straight into the template — new projects created from it will start from this content.">Editing template</span>
   </div>
@@ -73,68 +79,16 @@
   <!-- Spacer -->
   <div class="hd-spacer"></div>
 
-  <!-- Grouped ghost nav cluster (hidden on welcome). On a narrow window the whole cluster
-       collapses into the "More" dropdown — the SAME buttons relocated by CSS, so there is no
-       second copy to keep in sync (ADR-008). -->
-  <div class="hd-nav-wrap" id="navWrap" hidden>
-    <button id="moreBtn" type="button" class="hd-more-btn" aria-haspopup="true" aria-expanded="false"
-      data-tip="More project actions — open the project folder, add or import chapters, and the save-as options.">
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>
-      More
-    </button>
-    <div class="hd-nav-cluster" id="navCluster">
-    <button id="homeBtn" type="button" class="hd-cbtn"
-      data-tip="Close this project and go back to the start screen to open another one. Saved work stays in the project folder.">
-      <!-- grid icon -->
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 9h16M9 9v11"/></svg>
-      Projects
-    </button>
-    <button id="openFolderBtn" type="button" class="hd-cbtn"
-      data-tip="Open the project folder in Windows Explorer — where all chapters, images and attachments live.">
-      <!-- folder-open icon -->
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 8a1 1 0 0 1 1-1h3.6l1.8 2H19a1 1 0 0 1 1 1v1H4z"/><path d="M3.7 11h16.6l-1.9 7.2a1 1 0 0 1-1 .8H6.6a1 1 0 0 1-1-.8z"/></svg>
-      Open folder
-    </button>
-    <button id="newChapterBtn" type="button" class="hd-cbtn"
-      data-tip="Create a new chapter from a template and place it into a section of the documentation.">
-      <!-- doc-plus icon -->
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V9z"/><path d="M14 3v6h6"/><path d="M9 13h6M12 10v6"/></svg>
-      New chapter
-    </button>
-    <button id="saveAsBtn" type="button" class="hd-cbtn"
-      data-tip="Save a copy of this whole project into another folder and switch to working on the copy. The original is left untouched.">
-      <!-- copy icon -->
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"/></svg>
-      Save as…
-    </button>
-    <button id="saveAsTemplateBtn" type="button" class="hd-cbtn"
-      data-tip="Save this project as a reusable template. It is copied into your Templates folder so you and your colleagues can start new projects from it.">
-      <!-- grid icon -->
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 9h16M9 9v11"/></svg>
-      Save as template
-    </button>
-    <button id="importDocxBtn" type="button" class="hd-cbtn"
-      data-tip="Import a Word (.docx) document: pick which of its sections to add as chapters, then set who each chapter is for.">
-      <!-- doc-import icon -->
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V9z"/><path d="M14 3v6h6"/><path d="M12 18v-6M9.5 14.5 12 12l2.5 2.5"/></svg>
-      Import…
-    </button>
-    <button id="convertEmfBtn" type="button" class="hd-cbtn" hidden
-      data-tip="Convert this project's Word vector images (EMF/WMF) to PNG so they display in the editor and handover. Originals are moved to _emf-originals/ (kept, not shipped).">
-      <!-- image-convert icon -->
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="1.5"/><path d="m3 13 5-5 4 4 3-3 6 6"/><path d="M16 21h5m-2.5-2.5L21 21l-2.5 2.5"/></svg>
-      <span id="convertEmfLabel">Convert EMF…</span>
-    </button>
-    <button id="exportPdfBtn" type="button" class="hd-cbtn" data-tip="Export the manual, chapters, and/or views as PDF or single-file HTML (runs in the background).">
-      <!-- export icon -->
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6"/></svg>
-      Export…
-    </button>
-    </div>
-  </div>
-
   <!-- Right cluster -->
   <div class="hd-right">
+    <!-- Preview as (Stage 6): see the manual as one audience gets it (app.js previewMenu) -->
+    <button id="previewBtn" type="button" class="hd-check-btn hd-preview-btn" aria-haspopup="menu" aria-expanded="false"
+      data-tip="Preview the manual as one audience gets it — chapters they don't get are dimmed in the tree, blocks for other readers are hidden on the page.">
+      <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1.5 8s2.4-4.5 6.5-4.5S14.5 8 14.5 8 12.1 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/></svg>
+      <span>Preview as <b id="previewLabel">Everyone</b></span>
+      <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
+    </button>
+
     <button id="checkBtn" type="button" class="hd-check-btn"
       data-tip="Validate the whole project: broken links, missing images, unknown audiences, dangling view references.">
       <!-- check icon -->
@@ -142,17 +96,11 @@
       Check
     </button>
 
-    <div class="hd-build-meta" id="buildMeta" hidden
-      data-tip="When this DocWiz program was built. If you report a problem, mention this date — an older build may not have the latest fixes.">
-      <span class="hd-build-label">build</span>
-      <span id="buildStamp" class="hd-build-stamp"></span>
-    </div>
-
     <button id="buildBtn" type="button" class="hd-build-btn"
       data-tip="Generate the offline handover website (manual + all audience views) from the current content. Saves your open chapter first.">
       <!-- upload icon -->
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-      Build
+      Build handover
     </button>
 
     <a id="handoverLink" href="/handover" target="_blank" class="hd-cbtn hd-ghost-btn" hidden
@@ -292,10 +240,10 @@
       </div><!-- /welcome-cols -->
       <div class="welcome-settings" id="wSettings" hidden>
         <span class="welcome-settings-label">Open the editor in</span>
-        <div class="welcome-settings-toggle" role="group">
-          <button type="button" id="wModeApp" class="wmode"
+        <div class="dw-seg" role="group" aria-label="Open the editor in">
+          <button type="button" id="wModeApp"
             data-tip="Open the editor in its own DocWiz window (no browser). Read/present and the handover still open in your browser. Applies next time you launch.">DocWiz window</button>
-          <button type="button" id="wModeBrowser" class="wmode"
+          <button type="button" id="wModeBrowser"
             data-tip="Open DocWiz as a tab in your default web browser. Applies next time you launch.">Browser tab</button>
         </div>
         <span class="welcome-settings-note" id="wModeNote"></span>
@@ -306,14 +254,36 @@
 </section>
 
 <div class="shell" id="editorShell">
-  <aside id="tree"></aside>
+  <!-- Sidebar: three tabs — the manual's sections and chapters, the outputs built from them,
+       and the project's files — with Project settings at the foot (Stage 6). app.js renders
+       the panes; opening something switches to its tab. -->
+  <aside id="sidebar" class="sidebar" aria-label="Project contents">
+    <div class="dw-seg side-tabs" role="tablist" aria-label="Show">
+      <button type="button" role="tab" data-side="manual" aria-controls="tree" aria-selected="true"
+        data-tip="The manual — its sections and chapters, in reading order.">Manual</button>
+      <button type="button" role="tab" data-side="outputs" aria-controls="outputsPane" aria-selected="false"
+        data-tip="What is built from the manual — slide decks and documents for each audience, plus documentation bundled with the handover.">Outputs</button>
+      <button type="button" role="tab" data-side="files" aria-controls="filesPane" aria-selected="false"
+        data-tip="The project's pictures and attachments — click one to put it into the page you are editing.">Files</button>
+    </div>
+    <div id="tree" class="side-pane" role="tabpanel" aria-label="Manual"></div>
+    <div id="outputsPane" class="side-pane" role="tabpanel" aria-label="Outputs" hidden></div>
+    <div id="filesPane" class="side-pane" role="tabpanel" aria-label="Files" hidden></div>
+    <div class="side-foot">
+      <button type="button" id="settingsBtn" class="side-foot-btn"
+        data-tip="Project settings — name, audiences, handover output, history — and your preferences for this computer.">
+        <svg viewBox="0 0 16 16" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg>
+        Project settings
+      </button>
+    </div>
+  </aside>
 
   <main id="main">
     <section id="welcome">
       <h1>Welcome</h1>
-      <p>Pick a chapter on the left to edit it, or create a new one. <b>Views</b>
-         (trainings, handover decks) have their own visual editor; the
-         <b>project manifest</b> is edited as YAML.</p>
+      <p>Pick a chapter in the <b>Manual</b> tab to edit it, or add one with <b>+</b> next to a
+         section. <b>Outputs</b> — trainings, quick references, guides — have their own tab and
+         their own visual editor.</p>
       <p>Editing: the chapter opens as <b>the real page</b> — click into text and
          type. Click a table or image to select it; its tools appear in the bar
          under the banner. Esc steps out. <b>Reading view</b> opens the saved
@@ -324,69 +294,92 @@
     </section>
 
     <section id="chapterEditor" hidden>
+      <!-- The document bar (Stage 6): where you are, who reads it, save state, the view, and
+           the chapter's panels and actions. Changes save by themselves (autosave). -->
       <div class="chapterbar">
-        <!-- ID chip: mono #-accent slug, read-only -->
-        <div class="cb-id-chip" id="fmId" aria-label="Chapter ID"
-          data-tip="The chapter's stable identifier. Links and views reference it, so it is fixed at creation and can never change — renaming the title is always safe instead.">
-          <span class="cb-id-hash" aria-hidden="true">#</span>
-          <span class="cb-id-slug"></span>
+        <!-- "Section / Title". The title IS the page's heading (H1) — change it there, or
+             double-click the chapter in the tree. -->
+        <div class="cb-crumb" id="fmCrumb"
+          data-tip="The chapter's title is its heading on the page. Change it there, or double-click the chapter in the tree.">
+          <span class="cb-crumb-sec" id="fmCrumbSec"></span>
+          <span class="cb-crumb-sep" aria-hidden="true">/</span>
+          <span class="cb-crumb-title" id="fmCrumbTitle"></span>
         </div>
 
-        <!-- Title input -->
-        <input id="fmTitle" class="cb-title-input" type="text" placeholder="Chapter title"
-          data-tip="The chapter title shown in the navigation tree and as the page heading. Safe to change any time.">
-
-        <!-- Discipline custom dropdown wrapped with tag icon -->
-        <div class="cb-sel-wrap" id="fmDisciplineWrap"
-          data-tip="Which kind of chapter this is (setup, operations, troubleshooting, …). Also selects the structure template when creating new chapters.">
-          <!-- tag icon -->
-          <svg class="cb-sel-ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
-          <!-- Hidden input keeps the .value contract for app.js read/write paths -->
-          <input type="hidden" id="fmDiscipline">
-          <!-- Custom dropdown trigger + popup are injected by app.js buildDisciplineDropdown() -->
-          <div id="fmDisciplineDropdown"></div>
-        </div>
-
-        <!-- Segmented audience multi-toggle -->
-        <div id="fmAudiences" class="cb-aud-set"
-          data-tip="Who this chapter is for. It only appears in the generated views of the checked audiences — the full manual always contains everything."></div>
+        <!-- Readers: who this chapter is for (a checkable menu, app.js readersMenu) -->
+        <button type="button" class="cb-readers" id="cbReaders" aria-haspopup="menu" aria-expanded="false"
+          data-tip="Who reads this chapter. It appears only in the outputs made for these audiences — the full manual always contains everything.">
+          <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="6" cy="5.5" r="2.3"/><path d="M1.8 13c.6-2.3 2.2-3.6 4.2-3.6s3.6 1.3 4.2 3.6"/><path d="M10.6 3.4a2.2 2.2 0 0 1 0 4.3M12 9.6c1.2.5 2 1.6 2.3 3.4"/></svg>
+          <span class="cb-readers-label" id="cbReadersLabel"></span>
+          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
+        </button>
 
         <!-- Action group (pushed right) -->
         <div class="cb-actions">
-          <div class="cb-div" aria-hidden="true"></div>
+          <!-- Save state: the amber dot shows edits not yet written; the text says when the
+               last save happened (Ctrl+S saves right away). -->
+          <span class="cb-save-dot" aria-hidden="true"></span>
+          <span id="status" class="cb-status" role="status"></span>
 
-          <span id="status" class="cb-status"></span>
+          <div class="dw-seg cb-mode" role="group" aria-label="View">
+            <button type="button" data-mode="edit" aria-pressed="true"
+              data-tip="Edit this chapter on the page itself — what you see is what you ship.">Edit</button>
+            <button type="button" data-mode="source" aria-pressed="false"
+              data-tip="The exact Markdown this chapter saves as — for fixing what the page can't show. Going back to Edit keeps what you changed here.">Source</button>
+            <button type="button" data-mode="read"
+              data-tip="Open this chapter in a new tab exactly as the built handover shows it.">Read</button>
+          </div>
 
-          <!-- Save (primary, --dw-accent) with amber unsaved dot -->
-          <button id="saveBtn" type="button" class="cb-save-btn"
-            data-tip="Save this chapter to its Markdown file (Ctrl+S).">
-            <!-- save dot (amber; local chrome value — see CSS comment) -->
-            <span class="cb-save-dot" aria-hidden="true"></span>
-            <!-- save icon -->
-            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
-            Save
+          <!-- History panel toggle (Stage 6 step 3) -->
+          <button type="button" class="cb-kebab-btn" id="cbHistoryBtn" aria-pressed="false" aria-controls="histPanel"
+            data-tip="History — earlier versions of this chapter, named versions of the project, and recently deleted files.">
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1"/><path d="M3.5 4.5v4h4"/><path d="M12 7.5v4.8l3.2 2"/></svg>
           </button>
 
-          <!-- Kebab popup holding Delete chapter -->
-          <div class="cb-kebab-wrap">
-            <button type="button" class="cb-kebab-btn" id="cbKebabBtn" aria-haspopup="true" aria-expanded="false"
-              data-tip="More chapter actions.">
-              <!-- vertical dots (kebab) -->
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
-            </button>
-            <div class="cb-kebab-menu" id="cbKebabMenu" role="menu">
-              <button id="chDeleteBtn" type="button" class="cb-kebab-item cb-kebab-danger" role="menuitem"
-                data-tip="Delete this chapter file. Refused while other chapters or views still link to it, so nothing ends up broken.">
-                <!-- trash icon -->
-                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
-                Delete chapter
-              </button>
-            </div>
-          </div>
+          <!-- Properties panel toggle -->
+          <button type="button" class="cb-kebab-btn" id="cbPropsBtn" aria-pressed="false" aria-controls="propsPanel"
+            data-tip="Chapter properties — its section, who reads it, where it is used, and its permanent link.">
+            <svg viewBox="0 0 16 16" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="2.5" width="12" height="11" rx="1.5"/><path d="M10 2.5v11"/></svg>
+          </button>
+
+          <!-- More chapter actions: the same menu as the chapter's ⋯ in the tree -->
+          <button type="button" class="cb-kebab-btn" id="cbKebabBtn" aria-haspopup="menu" aria-expanded="false"
+            data-tip="More chapter actions — rename, move, delete.">
+            <!-- vertical dots (kebab) -->
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+          </button>
         </div>
+      </div>
+      <!-- Preview as: what is being shown, and the way back (app.js updatePreviewBanner) -->
+      <div class="preview-banner" id="previewBanner" role="status" hidden>
+        <span id="previewText"></span>
+        <button type="button" class="hist-link" id="previewStop">Stop preview</button>
       </div>
       <div class="split">
         <div id="editor2" class="dw-live-surface dw-zoomable"></div>
+        <!-- An older version beside now: the page with what was added/removed since (app.js). -->
+        <div id="histCompare" class="dw-live-surface hist-compare" hidden></div>
+        <!-- History panel: this chapter's timeline | every chapter's changes in one list | the
+             project's versions and deleted files. -->
+        <aside id="histPanel" class="hist-panel" hidden aria-label="History">
+          <div class="hist-head">
+            <span class="hist-title">History</span>
+            <div class="dw-seg" role="tablist" aria-label="History scope">
+              <button type="button" role="tab" aria-selected="true" data-hscope="chapter">This chapter</button>
+              <button type="button" role="tab" aria-selected="false" data-hscope="all">All chapters</button>
+              <button type="button" role="tab" aria-selected="false" data-hscope="project">Project</button>
+            </div>
+          </div>
+          <div class="hist-body" id="histChapter"></div>
+          <div class="hist-body" id="histAll" hidden></div>
+          <div class="hist-body" id="histProject" hidden></div>
+        </aside>
+        <!-- Properties panel: the chapter's section, readers, where it is used, its permanent
+             link id and its file — the technical facts, out of the way (app.js renderProps). -->
+        <aside id="propsPanel" class="props-panel" hidden aria-label="Chapter properties">
+          <div class="hist-head"><span class="hist-title">Chapter</span></div>
+          <div class="hist-body" id="propsBody"></div>
+        </aside>
       </div>
     </section>
 
@@ -401,43 +394,54 @@
     </section>
 
     <section id="viewEditor" hidden>
-      <div class="fm">
-        <label data-tip="The view's title, shown as its tab in the handover.">Title <input id="vTitle"></label>
-        <label data-tip="Who this view is for. Included sections are filtered to this audience — admin-only blocks won't show in a user view.">Audience <select id="vAudience"></select></label>
-        <label data-tip="Slides = a click-through presentation (the PowerPoint replacement). Document = one tidy filtered page.">Mode
-          <select id="vMode">
-            <option value="slides">Slides (presentation)</option>
-            <option value="document">Document (page)</option>
-          </select></label>
-        <button id="vSaveBtn" type="button" class="primary" data-tip="Save this view to its file.">Save</button>
-        <button id="vReadBtn" type="button" data-tip="Open the deck the way your audience sees it — full-screen-ready slides, one at a time. This is the present/handover view; editing happens on the surface below.">Read / present</button>
-        <button id="vExportBtn" type="button" data-tip="Export this view as a single self-contained .html file — emailable, opens in any browser. Save first.">Export single file</button>
-        <button id="vDuplicateBtn" type="button" data-tip="Save, then copy this view with all its slides — build the next training or handover from a structure that already works.">Duplicate</button>
-        <button id="vDeleteBtn" type="button" data-tip="Delete this view (its file is removed).">Delete view</button>
-        <span id="vStatus"></span>
+      <!-- The output bar (Stage 6): the chapter's document-bar pattern — what it is and its
+           title, who it is for, save state, Slides or Document, Present, ⋯. Changes save by
+           themselves. -->
+      <div class="chapterbar output-bar">
+        <div class="cb-crumb">
+          <span class="cb-crumb-sec" id="vKind"></span>
+          <span class="cb-crumb-sep" aria-hidden="true">/</span>
+          <input id="vTitle" class="cb-title-input" aria-label="Title of this output" spellcheck="false"
+            data-tip="The output's title — its tab in the handover and the first slide of a deck.">
+        </div>
+        <button type="button" class="cb-readers" id="vFor" aria-haspopup="menu" aria-expanded="false"
+          data-tip="Who this output is for. Its chapters and blocks are filtered to this audience — another audience's blocks never show in it.">
+          <svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" aria-hidden="true"><circle cx="6" cy="5.5" r="2.3"/><path d="M1.8 13c.6-2.3 2.2-3.6 4.2-3.6s3.6 1.3 4.2 3.6"/><path d="M10.6 3.4a2.2 2.2 0 0 1 0 4.3M12 9.6c1.2.5 2 1.6 2.3 3.4"/></svg>
+          <span class="cb-readers-label">For <b id="vForLabel"></b></span>
+          <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"/></svg>
+        </button>
+        <div class="cb-actions">
+          <span class="cb-save-dot" aria-hidden="true"></span>
+          <span id="vStatus" class="cb-status" role="status"></span>
+          <div class="dw-seg cb-mode" id="vModeSeg" role="group" aria-label="Kind of output">
+            <button type="button" data-vmode="slides" aria-pressed="false"
+              data-tip="A slide deck — a click-through presentation, one slide at a time.">Slides</button>
+            <button type="button" data-vmode="document" aria-pressed="false"
+              data-tip="A document — one tidy page of sections, like a quick reference.">Document</button>
+          </div>
+          <button id="vReadBtn" type="button" class="cb-present"></button>
+          <button type="button" class="cb-kebab-btn" id="vMoreBtn" aria-haspopup="menu" aria-expanded="false"
+            data-tip="More — duplicate this output, export it as one file, or delete it.">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+          </button>
+        </div>
       </div>
-      <div class="toolbelt">
-        <button id="vAddSlide" type="button"
-          data-tip="Add a slide after the last one — pick a layout (title + content, two columns, big media, or a section divider). You fill in its content on the slide itself.">+ Add slide</button>
-        <span class="vhint">This is the slide canvas — every slide shown full-size, laid out exactly as your audience sees it. Use “Read / present” for the click-through deck.</span>
-      </div>
-      <!-- Slides mode lays out a left organization panel (the slide list — navigate,
-           reorder, delete) beside the slide canvas; document mode hides the panel and
-           shows the filtered-page iframe full width. The canvas is rendered in THIS
-           (parent) document, like the chapter editor's #editor2.dw-live-surface: site.css
-           applies inside .dw-live-surface via the /app/site-scoped.css @scope wrapper. The
-           slide canvas follows the editor page theme (no pinned data-theme — Rule 16). app.js
-           injects the RenderSlides fragment into #vEditSurface and marks each .slide .active. 7b
-           mounts per-zone editors in here (one document — no cross-document ProseMirror).
-           Document mode swaps in the #vDocSurface iframe instead (a filtered page). -->
+      <!-- The rail (slide miniatures, or a document's sections) sits beside the canvas. The
+           canvas is rendered in THIS (parent) document, like the chapter editor's
+           #editor2.dw-live-surface: site.css applies inside .dw-live-surface via the
+           /app/site-scoped.css @scope wrapper. The slide canvas follows the editor page theme
+           (no pinned data-theme — Rule 16). app.js injects the RenderSlides fragment into
+           #vEditSurface and marks each .slide .active; zone editors mount in here (one
+           document — no cross-document ProseMirror). A document renders its sections there
+           too; the #vDocSurface iframe is only the read view. -->
       <div id="vEditLayout" class="vedit-layout">
-        <!-- PowerPoint-style slide organization panel: a vertical list of slides to
-             navigate, reorder (▲▼) and delete. Built by app.js renderSlidePanel(). -->
+        <!-- The rail (Stage 6): miniatures of the slides (a deck) or the list of sections (a
+             document) — click to go there, drag to reorder, ⋯ for move / layout / delete, and
+             add between any two. Built by app.js renderSlidePanel(). -->
         <aside id="vPanel" class="vpanel" aria-label="Slides">
-          <div class="vpanel-head">Slides</div>
+          <div class="vpanel-head" id="vPanelHead"></div>
           <div id="vPanelList" class="vpanel-list" role="list"></div>
-          <button id="vPanelAdd" type="button" class="vpanel-add"
-            data-tip="Add a slide after the last one — pick a layout, then fill in its content on the slide itself.">+ Add slide</button>
+          <button id="vPanelAdd" type="button" class="vpanel-add"></button>
         </aside>
         <div id="vSurface" class="vsurface">
           <div id="vEditSurface" class="dw-live-surface dw-slide-edit"></div>
@@ -456,7 +460,7 @@
           <div class="dwa-desc">Self-contained HTML documentation bundled as tabs in the handover —
             e.g. a generated API site. Each package becomes its own tab readers can open offline.</div>
         </div>
-        <button id="addPkgBtn" type="button" class="dwa-btn dwa-btn-primary"
+        <button id="addPkgBtn" type="button" class="dwa-btn dwa-btn-secondary"
           data-tip="Add a folder of HTML documentation (with an index.html or handover.html) as a tab in the handover — e.g. a generated API reference.">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
           Add package
@@ -467,7 +471,7 @@
         <div class="dwa-em-title">No documentation packages yet</div>
         <div class="dwa-em-desc">Add a generated API site to give administrators an API Reference tab in the
           handover. Packages are bundled offline alongside your chapters and attachments.</div>
-        <button type="button" class="dwa-btn dwa-btn-primary" onclick="document.getElementById('addPkgBtn').click()">
+        <button type="button" class="dwa-btn dwa-btn-secondary" onclick="document.getElementById('addPkgBtn').click()">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
           Add documentation package
         </button>
@@ -500,37 +504,39 @@
       </div>
     </section>
 
-    <!-- Settings (interactive docwiz.yaml editor + app preferences). Rail + content pane.
-         Fields are bound/saved by app.js openSettings(); writes via /api/settings-project
-         (project) and /api/settings (app prefs, immediate). -->
-    <section id="setPane" hidden>
+  </main>
+</div>
+
+<!-- Settings: a sheet over the editor (Stage 6), not a screen of its own — closing it returns
+     to whatever was open. Rail + content pane. Fields are bound/saved by app.js openSettings();
+     writes via /api/settings-project (project) and /api/settings (app prefs, immediate). -->
+<div id="setSheet" class="set-sheet" hidden>
+    <section id="setPane" role="dialog" aria-modal="true" aria-labelledby="setTitle" tabindex="-1">
       <nav class="set-rail">
         <div class="set-rail-scroll" id="setRail">
           <div class="set-grp">Project</div>
           <div class="set-item active" data-sec="general">General</div>
           <div class="set-item" data-sec="audiences">Audiences</div>
           <div class="set-item" data-sec="output">Handover output</div>
+          <div class="set-item" data-sec="history">History</div>
           <div class="set-grp">Preferences</div>
           <div class="set-item" data-sec="application">Application</div>
           <div class="set-grp">Advanced</div>
           <div class="set-item" data-sec="raw">Raw YAML</div>
-          <div class="set-grp">Coming soon</div>
-          <div class="set-item soon">Branding<span class="soon-badge">Soon</span></div>
-          <div class="set-item soon">Localization<span class="soon-badge">Soon</span></div>
-          <div class="set-item soon">Export<span class="soon-badge">Soon</span></div>
-          <div class="set-item soon">Integrations<span class="soon-badge">Soon</span></div>
-          <div class="set-item soon">Search<span class="soon-badge">Soon</span></div>
         </div>
       </nav>
       <div class="set-pane-body">
         <div class="set-topbar">
-          <div class="set-crumb">Settings<span class="sep">›</span><b id="crumbSec">General</b></div>
+          <div class="set-crumb" id="setTitle">Settings<span class="sep">›</span><b id="crumbSec">General</b></div>
           <div class="grow"></div>
-          <button class="dwa-btn dwa-btn-secondary dwa-btn-sm" id="setBack" type="button">Back to editor</button>
           <div class="save-state">
             <span class="dirty-dot"></span>
             <button class="dwa-btn btn-save" id="setSave" type="button">Save</button>
           </div>
+          <button class="set-close" id="setClose" type="button" aria-label="Close settings"
+            data-tip="Close settings (Esc) and go back to what you were doing.">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
         </div>
         <div class="set-body">
           <div class="set-content">
@@ -550,7 +556,7 @@
 
             <div class="set-section" id="secAudiences">
               <div class="set-sec-head"><div class="set-sec-title">Audiences</div>
-                <div class="set-sec-desc">Lightweight labels chapters and views are tagged with. Ids are stable and read-only — renaming would break view bindings.</div></div>
+                <div class="set-sec-desc">Who reads your documentation. Chapters, and single paragraphs or steps inside them, are tagged with audiences; every output is made for one. Renaming is always safe — tags and outputs keep pointing at the same audience.</div></div>
               <div class="rowlist" id="audList"></div>
               <button class="addrow" id="addAud" type="button"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Add audience</button>
             </div>
@@ -566,16 +572,28 @@
               </div>
             </div>
 
+            <div class="set-section" id="secHistory">
+              <div class="set-sec-head"><div class="set-sec-title">History</div>
+                <div class="set-sec-desc">Earlier versions of chapters, named versions of the project, and recently deleted files — kept in <span class="dwa-mono">.docwiz/history</span> inside the project until you remove them. Removing any of it never changes your documentation. Actions here apply immediately.</div></div>
+              <div class="fcard">
+                <div class="frow"><div class="fl"><div class="ftitle">Size</div></div><div class="fc"><div class="applies" id="histStats">—</div></div></div>
+                <div class="frow"><div class="fl"><div class="ftitle">Clean up</div><div class="fhint">Named versions are always kept.</div></div>
+                  <div class="fc"><div class="inline-row"><select class="finput" id="histCleanAge"><option value="30">Older than 30 days</option><option value="90" selected>Older than 90 days</option><option value="365">Older than a year</option></select>
+                    <button class="dwa-btn dwa-btn-secondary dwa-btn-sm" id="histCleanBtn" type="button">Clean up</button></div></div></div>
+                <div class="frow"><div class="fl"><div class="ftitle">Folder</div></div><div class="fc"><button class="dwa-btn dwa-btn-secondary dwa-btn-sm" id="histOpenBtn" type="button">Open history folder</button></div></div>
+              </div>
+            </div>
+
             <div class="set-section" id="secApplication">
               <div class="set-sec-head"><div class="set-sec-title">Application</div>
                 <div class="set-sec-desc">Per-user preferences stored in <span class="dwa-mono">settings.json</span> — saved instantly as you change them (no Save button).</div></div>
               <div class="fcard">
                 <div class="frow"><div class="fl"><div class="ftitle">Window mode</div><div class="fhint">How DocWiz opens on this machine.</div></div>
-                  <div class="fc"><div class="seg" id="winMode"><button data-mode="native" type="button">Native window</button><button data-mode="browser" type="button">Browser tab</button></div>
+                  <div class="fc"><div class="dw-seg" id="winMode" role="group" aria-label="Window mode"><button data-mode="native" type="button" aria-pressed="false">DocWiz window</button><button data-mode="browser" type="button" aria-pressed="false">Browser tab</button></div>
                     <div class="applies">Saved instantly · takes effect the next time you open DocWiz</div></div></div>
-                <div class="frow"><div class="fl"><div class="ftitle">Appearance</div><div class="fhint">Light or dark theme for the editor and its slide previews. Remembered on this computer.</div></div>
-                  <div class="fc"><button id="themeBtn" type="button" data-tip="Switch the editor between light and dark appearance.">Dark</button>
-                    <div class="applies">Saved instantly</div></div></div>
+                <div class="frow"><div class="fl"><div class="ftitle">Appearance</div><div class="fhint">The editor and its slide previews. Light unless Windows is set to dark.</div></div>
+                  <div class="fc"><div class="dw-seg" id="themeMode" role="group" aria-label="Appearance"><button data-theme-mode="system" type="button" aria-pressed="false">Follow Windows</button><button data-theme-mode="light" type="button" aria-pressed="false">Light</button><button data-theme-mode="dark" type="button" aria-pressed="false">Dark</button></div>
+                    <div class="applies">Saved instantly · remembered on this computer</div></div></div>
               </div>
             </div>
 
@@ -584,27 +602,28 @@
                 <div class="set-sec-desc">The complete <span class="dwa-mono">docwiz.yaml</span>, including keys with no UI. An escape hatch for power users.</div></div>
               <div class="warnbox"><div class="wb-text">Advanced — editing here can break your project. The form sections write only known fields and preserve unknown keys and comments.</div></div>
               <textarea class="finput mono" id="setRawText" spellcheck="false" style="margin-top:var(--dw-s4);min-height:300px"></textarea>
-              <div class="inline-row" style="margin-top:var(--dw-s3)"><button class="dwa-btn dwa-btn-primary dwa-btn-sm" id="setRawSave" type="button">Save raw YAML</button></div>
+              <div class="inline-row" style="margin-top:var(--dw-s3)"><button class="dwa-btn dwa-btn-secondary dwa-btn-sm" id="setRawSave" type="button">Save raw YAML</button></div>
             </div>
 
           </div>
         </div>
       </div>
     </section>
-  </main>
 </div>
 
 <div id="issuesPanel" hidden>
   <div class="issues-head"><b id="issuesTitle">Check results</b>
-    <button id="issuesClose" type="button">×</button></div>
+    <button id="issuesClose" type="button" aria-label="Close the check results" data-tip="Close the check results.">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button></div>
   <ul id="issuesList"></ul>
 </div>
 
 <dialog id="modal"></dialog>
 
 <script src="/app/app.js"></script>
-<!-- Light/dark theme toggle — the SAME script the handover uses (binds #themeBtn,
-     flips data-theme on <html>, persists dw-theme). Single source, no editor copy (Rule 21). -->
+<!-- The handover's shared script: content-only zoom (Ctrl+wheel). Its theme toggle binds
+     #themeBtn, which the editor doesn't have — Settings › Appearance (app.js) sets dw-theme. -->
 <script src="/app/site.js"></script>
 <!-- Visual self-check probe (dev/verification only): inert unless the URL carries
      ?probe=1. Reads geometry/contrast facts off the live surface for headless checks. -->
