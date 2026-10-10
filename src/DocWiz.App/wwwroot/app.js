@@ -800,8 +800,11 @@
       b.setAttribute('aria-selected', String(b.getAttribute('data-hscope') === hist.scope));
     });
     $('histChapter').hidden = hist.scope !== 'chapter';
+    $('histAll').hidden = hist.scope !== 'all';
     $('histProject').hidden = hist.scope !== 'project';
-    if (hist.scope === 'chapter') loadChapterHistory(); else loadProjectHistory();
+    if (hist.scope === 'chapter') loadChapterHistory();
+    else if (hist.scope === 'all') loadAllHistory();
+    else loadProjectHistory();
   }
 
   // A newly opened chapter starts with no comparison and no pending undo.
@@ -859,8 +862,66 @@
         return api.json('/api/history/compare?file=' + encodeURIComponent(state.currentFile) +
           '&entry=' + encodeURIComponent(entry.id));
       })
-      .then(function (r) { hist.comparing = entry; renderCompare(entry, r); loadChapterHistory(); })
+      .then(function (r) { hist.comparing = entry; renderCompare(entry, r); refreshHistory(); })
       .catch(function (e) { showToast('Can’t show that version', e.message || String(e), 'error'); });
+  }
+
+  /* All chapters: every chapter's changes in one list, newest first. A row opens its chapter
+     and compares that version with now — what a row in This chapter does — and the list stays,
+     so the changes can be gone through one after another. */
+  var ALL_PAGE = 50;
+  function loadAllHistory() {
+    var box = $('histAll');
+    var scroll = box.scrollTop; // a re-draw (another chapter opened) keeps the place
+    api.json('/api/history/all').then(function (r) {
+      box.innerHTML = '';
+      if (!r.entries.length) {
+        box.appendChild(el('p', 'hist-empty', 'No changes yet. From now on, every save of every chapter is listed here.'));
+        return;
+      }
+      var shown = 0, lastDay = null, more = null;
+      function upTo(n) {
+        if (more) more.remove();
+        r.entries.slice(shown, n).forEach(function (e) {
+          var day = dayLabel(e.utc);
+          if (day !== lastDay) { box.appendChild(el('div', 'hist-day', day)); lastDay = day; }
+          var here = e.file === state.currentFile;
+          var on = here && (hist.comparing ? hist.comparing.id === e.id : e.current);
+          var b = el('button', 'hist-entry' + (on ? ' on' : ''));
+          b.type = 'button';
+          b.appendChild(el('span', 'hist-time', clockTime(e.utc)));
+          var text = el('span', 'hist-text');
+          text.appendChild(el('span', null, e.title));
+          text.appendChild(el('small', null, entryLabel(e) + (e.current ? ' · current version' : '')));
+          b.appendChild(text);
+          b.onclick = function () { showEntry(e); };
+          box.appendChild(b);
+        });
+        shown = hist.allShown = Math.min(n, r.entries.length);
+        if (shown < r.entries.length) {
+          more = el('button', 'hist-mark', 'Show older changes');
+          more.type = 'button';
+          more.onclick = function () { upTo(shown + ALL_PAGE); };
+          box.appendChild(more);
+        }
+      }
+      upTo(Math.max(hist.allShown || 0, ALL_PAGE));
+      box.scrollTop = scroll;
+    }).catch(function (e) {
+      box.innerHTML = '';
+      box.appendChild(el('p', 'hist-empty', e.message || String(e)));
+    });
+  }
+
+  function showEntry(e) {
+    saveIfDirty()
+      .then(function () { return e.file === state.currentFile ? null : openChapter(e.file); })
+      .then(function () {
+        if (!e.current) compareWith(e);
+        else if (hist.comparing) endCompare();
+        else refreshHistory();
+      })
+      .catch(function (x) { showToast('Can’t show that version', x.message || String(x), 'error'); });
   }
 
   // The older version reads like the page: the same pipeline HTML, with blocks removed since
@@ -915,7 +976,7 @@
     $('histCompare').hidden = true;
     $('histCompare').innerHTML = '';
     $('editor2').hidden = false;
-    if (was && hist.open) loadChapterHistory();
+    if (was && hist.open) refreshHistory();
   }
 
   function restoreEntry(entry, opts) {
@@ -940,7 +1001,7 @@
         hist.undo = opts && opts.undoing ? null
           : { label: whenLabel(entry.utc), entryId: r.entries[1] && r.entries[1].id };
         if (hist.undo && !hist.undo.entryId) hist.undo = null;
-        loadChapterHistory();
+        refreshHistory();
         setStatus(opts && opts.undoing ? 'Restore undone' : 'Restored ✓', 'ok');
       })
       .catch(function (e) { showToast('Not restored', e.message || String(e), 'error'); });
@@ -1475,9 +1536,10 @@
 
   /* ---------- chapter editing ---------- */
 
+  // Resolves once the chapter is on the page (History › All chapters compares it then).
   function openChapter(file) {
-    if (!confirmDiscard(openChapter, arguments)) return;
-    api.json('/api/chapter?file=' + encodeURIComponent(file)).then(function (ch) {
+    if (!confirmDiscard(openChapter, arguments)) return Promise.resolve();
+    return api.json('/api/chapter?file=' + encodeURIComponent(file)).then(function (ch) {
       state.currentFile = file;
       state.currentId = ch.id;
       state.currentYaml = null;
@@ -1490,9 +1552,10 @@
       state.dirty = false;
       setStatus('');
       renderTree(state.project);
-      mountLiveEditor();
+      var mounted = mountLiveEditor();
       refreshHistory(); // an open History panel follows to the newly opened chapter
       renderProps();    // and so does an open Properties panel
+      return mounted;
     });
   }
 
@@ -1501,18 +1564,18 @@
      (module scripts are deferred). */
 
   function mountLiveEditor() {
-    if (!state.currentFile) return;
+    if (!state.currentFile) return Promise.resolve();
     if (window.DocWizEditor2) {
       markMode('edit'); // a newly opened chapter shows the page
-      window.DocWizEditor2
+      return window.DocWizEditor2
         .open(state.currentFile, {
           onDirty: function () { state.dirty = true; },
           audiences: state.project.audiences,
         })
         .catch(function (e) { reportError(e.message); });
-    } else {
-      setTimeout(mountLiveEditor, EDITOR2_RETRY_MS); // module still loading
     }
+    setTimeout(mountLiveEditor, EDITOR2_RETRY_MS); // module still loading
+    return Promise.resolve();
   }
 
   /* ---------- the document bar (Stage 6) ---------- */
@@ -4871,7 +4934,7 @@
       var b = e.target.closest('[data-hscope]');
       if (!b) return;
       hist.scope = b.getAttribute('data-hscope');
-      if (hist.scope !== 'chapter') endCompare();
+      if (hist.scope === 'project') endCompare(); // the two timelines keep a comparison open
       refreshHistory();
     });
   })();

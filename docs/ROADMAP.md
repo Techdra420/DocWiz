@@ -191,7 +191,8 @@ is structure, consolidation, and fixing what breaks trust.
       the page's own edits (added after the stakeholder's first look)
 - [x] 3. History, then autosave: snapshots, per-chapter timeline with highlighted changes, restore
       (itself undoable), named project versions, Recently deleted, size + clean-up; then autosave
-      of chapters and outputs
+      of chapters and outputs; an All chapters timeline beside This chapter and Project (added
+      after the stakeholder's first look)
 - [x] 4. Shell and document bar: sidebar tabs, document bar (section / title, Readers, status,
       Edit · Source · Read, properties, ⋯), properties panel, settings sheet, one primary per
       screen, light default
@@ -225,6 +226,7 @@ Open items (everything shipped is in Recent Changes):
 
 | Date | Stage | Description |
 |------|-------|-------------|
+| 2026-10-10 | Stage 6 | History › All chapters: every chapter's saved changes in one list, newest first by day (`GET /api/history/all`, sharing the per-chapter timeline code; the "before history started" entries left out), 50 at a time; a row opens its chapter and compares that version with now, and the list stays for going through changes one after another |
 | 2026-10-10 | Stage 6 | Ctrl+Z for the sidebar: renaming, moving, adding and deleting sections and chapters (menus, drag, Properties, New chapter) records an undo step; Ctrl+Z / Ctrl+Y and the toolbar's Undo / Redo take sidebar changes and page edits newest first (compared by the page's undo depth), a toast names each change with an Undo link, a deleted chapter comes back from Recently deleted (and reopens if it was open). Renaming or moving the open chapter now updates it in place instead of reopening it, so its typing history survives; nothing undoes behind an open dialog. Also fixed: typing on a slide threw an error when refreshing the title slide's miniature |
 | 2026-10-10 | Stage 6 | Preview as hides the chapter toolbar instead of fading it (the faded sticky bar let the page show through it); the title keeps its distance from the banner |
 | 2026-10-10 | Stage 6 | Step 7 consolidation: a "Recipes" block at the top of app.css defines each concept once — buttons (secondary, primary, danger, sized, icon, chrome, toolbar, add, text link), fields, the menu container (action menus, the block-type list, the slash menu, the table picker), the CAPS label (13 former styles), the badge (8 former styles, variants set only colour) and icons; component rules keep only placement or a named variant; three control heights as tokens (`--dw-ctl-sm/md/lg` = 28/32/36px in tokens.css — every button, field, pill and segmented control in the chrome, bars, sidebar, rail and menus measured at one of them); a z-index scale (`--dw-z-*`, nine layers, no literal left); the last two segmented controls (window mode, appearance) and the welcome screen's toggle became `.dw-seg`; one icon stroke (non-scaling 1.5px for both icon grids) and the leftover glyph icons (× ⧉ ↔ ⇥ • ▣ ↗) replaced by the icon set; literal radii and 8px corners moved to the radius tokens; DESIGN_SYSTEM documents the recipes (stale toolbelt / slide-card / splitter entries removed) and the design skill gains rule 22 |

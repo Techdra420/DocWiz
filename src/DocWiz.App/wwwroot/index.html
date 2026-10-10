@@ -359,16 +359,19 @@
         <div id="editor2" class="dw-live-surface dw-zoomable"></div>
         <!-- An older version beside now: the page with what was added/removed since (app.js). -->
         <div id="histCompare" class="dw-live-surface hist-compare" hidden></div>
-        <!-- History panel: this chapter's timeline | the project's versions and deleted files. -->
+        <!-- History panel: this chapter's timeline | every chapter's changes in one list | the
+             project's versions and deleted files. -->
         <aside id="histPanel" class="hist-panel" hidden aria-label="History">
           <div class="hist-head">
             <span class="hist-title">History</span>
             <div class="dw-seg" role="tablist" aria-label="History scope">
               <button type="button" role="tab" aria-selected="true" data-hscope="chapter">This chapter</button>
+              <button type="button" role="tab" aria-selected="false" data-hscope="all">All chapters</button>
               <button type="button" role="tab" aria-selected="false" data-hscope="project">Project</button>
             </div>
           </div>
           <div class="hist-body" id="histChapter"></div>
+          <div class="hist-body" id="histAll" hidden></div>
           <div class="hist-body" id="histProject" hidden></div>
         </aside>
         <!-- Properties panel: the chapter's section, readers, where it is used, its permanent

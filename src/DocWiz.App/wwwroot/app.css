@@ -2217,7 +2217,7 @@ dialog#modal .mlbl { display: block; margin: var(--dw-s4) 0 var(--dw-s1); font-s
   background: var(--dw-surface); border-left: 1px solid var(--dw-border);
 }
 .hist-head {
-  display: flex; align-items: center; justify-content: space-between; gap: var(--dw-s2);
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--dw-s2);
   padding: var(--dw-s3) var(--dw-s3) var(--dw-s2) var(--dw-s4);
 }
 .hist-body { flex: 1; min-height: 0; overflow-y: auto; padding: 0 var(--dw-s2) var(--dw-s4); }

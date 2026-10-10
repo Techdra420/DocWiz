@@ -27,6 +27,7 @@ public sealed record MoveChapterToDto(string File, string Folder, int Index);
 public sealed record RenameChapterDto(string File, string Title);
 public sealed record SectionNameDto(string? Folder, string Name);
 public sealed record HistoryRestoreDto(string File, string Entry);
+public sealed record HistoryEntryDto(string Id, DateTime Utc, string Kind, DateTime? RestoredFrom, bool Current);
 public sealed record HistoryNameDto(string Name);
 public sealed record HistoryIdDto(string Id);
 public sealed record DeletedRestoreDto(string Stamp, string Path);
@@ -485,6 +486,15 @@ public static class EditorServer
         // ---- change history (Stage 6 step 3): a chapter's timeline, compare with now, restore,
         // named project versions, recently deleted files, size and clean-up. Everything lives in
         // .docwiz/history (ProjectHistory); the project's own files stay the truth.
+        // One chapter's timeline, newest first; `current` marks the entry that matches the file.
+        IEnumerable<HistoryEntryDto> Timeline(string path)
+        {
+            var now = File.ReadAllText(path);
+            var entries = ProjectHistory.List(holder.Root!, path);
+            var currentId = entries.FirstOrDefault(e => File.ReadAllText(e.FullPath) == now)?.Id;
+            return entries.Select(e => new HistoryEntryDto(e.Id, e.Utc, e.Kind, e.RestoredFromUtc, e.Id == currentId));
+        }
+
         app.MapGet("/api/history", (string file) =>
         {
             if (NoProject() is { } guard)
@@ -492,15 +502,24 @@ public static class EditorServer
             var path = ResolveChapterPath(holder.Root!, file);
             if (path is null)
                 return Results.BadRequest("Not a chapter file inside this project.");
-            var now = File.ReadAllText(path);
-            var entries = ProjectHistory.List(holder.Root!, path);
-            var currentId = entries.FirstOrDefault(e => File.ReadAllText(e.FullPath) == now)?.Id;
+            return Results.Json(new { entries = Timeline(path) });
+        });
+
+        // Every chapter's timeline in one list, newest first (History › All chapters). The
+        // "as it was before history started" entries stay out: they mark where a timeline
+        // begins, not a change.
+        app.MapGet("/api/history/all", () =>
+        {
+            if (NoProject() is { } guard)
+                return guard;
+            var project = ProjectLoader.Load(holder.Root!);
             return Results.Json(new
             {
-                entries = entries.Select(e => new
-                {
-                    id = e.Id, utc = e.Utc, kind = e.Kind, restoredFrom = e.RestoredFromUtc, current = e.Id == currentId,
-                }),
+                entries = project.Chapters
+                    .SelectMany(c => Timeline(c.FilePath)
+                        .Where(e => e.Kind != ProjectHistory.Original)
+                        .Select(e => new { file = RelPath(project.Root, c.FilePath), title = c.Title, e.Id, e.Utc, e.Kind, e.RestoredFrom, e.Current }))
+                    .OrderByDescending(e => e.Utc),
             });
         });
 
