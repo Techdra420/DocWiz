@@ -95,6 +95,35 @@ public class ToolbarParityTests
     }
 
     [Fact]
+    public void InsertVocabulary_IsOneListForTheToolbarAndTheSlashMenu()
+    {
+        // The toolbar's Picture / Table buttons and Insert menu (main.js) and the slide zones'
+        // slash menu take an insert's name, hint and icon from ONE list (inserts.js) — the slash
+        // menu once said "Image" / "Linked element" where the toolbar said "picture".
+        var inserts = Editor2("inserts.js");
+        Assert.Contains("export const INSERTS", inserts);
+        foreach (var file in new[] { "main.js", "slashmenu.js" })
+        {
+            var src = Editor2(file);
+            Assert.Contains("from './inserts.js'", src);
+            Assert.Contains("INSERTS.", src);
+        }
+        var slash = Editor2("slashmenu.js");
+        Assert.DoesNotContain("title: 'Image'", slash);
+        Assert.DoesNotContain("title: 'Linked element'", slash);
+    }
+
+    [Fact]
+    public void ContextBar_More_OpensTheSharedMenu()
+    {
+        // The bar's ⋯ opens the kind's right-click menu (buildMenu), so a tool moved off the bar
+        // stays reachable — and the parity audit counts a menu's items as the kind's capabilities.
+        Assert.Contains("more(ctx, kind)", ContextTools);
+        Assert.Contains("openContextMenu(buildMenu(kind", ContextTools);
+        Assert.Contains("bar.includes('more')", ContextTools);
+    }
+
+    [Fact]
     public void RightClickMenu_DerivesFromTheSharedDefinition()
     {
         // Phase 2: the right-click menu is a SECOND presentation of the same capability model —

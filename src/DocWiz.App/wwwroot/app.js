@@ -1698,10 +1698,10 @@
     return { title: '', audiences: state.chapterAudiences.slice() };
   }
 
-  // Edit · Source · Read. Read opens a tab and leaves the mode as it was.
+  // Edit · Source, and Read beside them: Read opens a tab and leaves the mode as it was.
   function markMode(mode) {
     Array.prototype.forEach.call(document.querySelectorAll('.cb-mode [data-mode]'), function (b) {
-      if (b.getAttribute('data-mode') !== 'read') b.setAttribute('aria-pressed', String(b.getAttribute('data-mode') === mode));
+      b.setAttribute('aria-pressed', String(b.getAttribute('data-mode') === mode));
     });
   }
   function setChapterMode(mode) {
@@ -4858,6 +4858,7 @@
   on('previewStop', function () { setPreview(null); });
   on('cbPropsBtn', function () { toggleProps(); });
   on('cbKebabBtn', function () { docBarMenu($('cbKebabBtn')); });
+  on('cbReadBtn', function () { setChapterMode('read'); });
   (function wireDocBar() {
     var modes = document.querySelector('.cb-mode');
     if (modes) modes.addEventListener('click', function (e) {

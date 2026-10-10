@@ -2,8 +2,8 @@
    and the in-cell image tools (tableview.js) don't each re-declare identical DOM. */
 
 /* An icon/text button in the toolbar's `.ib` style. mousedown is prevented so a click does
-   not steal the selection; the click runs `onclick`. (Used as the factory `adjacencyButtons`
-   takes, and anywhere a plain `.ib` button is built.) */
+   not steal the selection; the click runs `onclick`. (Used anywhere a plain text `.ib` button
+   is built, e.g. the Size chips.) */
 export function makeIbButton(label, tip, onclick) {
   const b = document.createElement('button');
   b.type = 'button';

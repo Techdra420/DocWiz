@@ -152,9 +152,10 @@ function mountTitleField(el, slideIndex, key) {
   return derived;
 }
 
-/* Mount the shared chapter toolbar ONCE above the surface (without the chapter-only
-   Edit/Source/Read view-switch) so it acts on the focused zone. Re-created on each
-   (re)mount so its button list binds to the live zones. */
+/* Mount the shared chapter toolbar ONCE, across the whole editor above the rail and the
+   canvas (as the chapter toolbar sits under its document bar), so it acts on the focused zone
+   and has the width to stay one row. Re-created on each (re)mount so its button list binds to
+   the live zones. */
 function mountToolbar(surfaceEl) {
   const E = ed();
   unmountToolbar();
@@ -177,7 +178,8 @@ function mountToolbar(surfaceEl) {
   wrap.className = 'e2-top e2-slide-top';
   wrap.appendChild(toolbarEl);
   wrap.appendChild(ctx);
-  surfaceEl.parentNode.insertBefore(wrap, surfaceEl);
+  const layout = surfaceEl.closest('.vedit-layout') || surfaceEl;
+  layout.parentNode.insertBefore(wrap, layout);
   E.contextBar.set(null);
 }
 

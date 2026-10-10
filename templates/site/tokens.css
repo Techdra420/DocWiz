@@ -5,6 +5,8 @@
    ========================================================================== */
 
 :root {
+  /* Native scroll bars and form controls draw in the theme's colours (dark sets its own). */
+  color-scheme: light;
   /* ---- Surfaces & text (light) ------------------------------------------ */
   --dw-bg: #f3f5f7;            /* app/page canvas */
   --dw-surface: #ffffff;       /* cards, panels, content column */
@@ -108,6 +110,7 @@
 }
 
 [data-theme="dark"] {
+  color-scheme: dark;
   /* ---- Surfaces & text (dark) — designed pair, not a dimmed copy ---------- */
   --dw-bg: #0f141a;
   --dw-surface: #171e27;

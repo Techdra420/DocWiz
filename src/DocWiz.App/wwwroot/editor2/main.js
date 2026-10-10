@@ -20,7 +20,8 @@ import { buildDoc } from './ingest.js';
 import { nodeViews } from './views.js';
 import { serializeBlock } from './serialize.js';
 import { icon, sep } from './icons.js';
-import { BADGES, menuItem, openContextMenu } from './contexttools.js';
+import { BADGES, menuItem, menuCheck, menuSep, ibLabel, openContextMenu, closeOpenMenu } from './contexttools.js';
+import { INSERTS } from './inserts.js';
 import { routePastedImage, dataImageGuard } from './pasteimage.js';
 
 const schema = createSchema();
@@ -282,6 +283,7 @@ const contextBar = {
       tag.textContent = label || '';
       this.el.appendChild(tag);
     }
+    this.el.appendChild(sep());
     this.el.appendChild(toolsEl);
   },
   // Transient notice (e.g. a locked cell) — shown even when no tools are mounted.
@@ -362,7 +364,6 @@ async function open(file, opts) {
       // The chapter editor is the active view whenever it is being driven.
       setActiveView(view);
       if (tr.docChanged && current.opts.onDirty && !tr.getMeta(SOFT_REBUILD)) current.opts.onDirty();
-      updateAnchorInfo();
       updateToolbarState();
     },
     handlePaste: (_v, event) => {
@@ -1081,14 +1082,48 @@ function showTableGridPicker(anchorEl, onPick) {
 
 let toolbarButtons = [];
 
-/* opts.linkTool (slide canvas only) adds the "Link…" relink button — turn the selected
-   block into a live-linked embed (Task 9). Edit · Source · Read lives in the document bar
-   (app.js, Stage 6) and calls setMode() below. */
+/* The Align menu's choices; the button shows the current one. */
+const ALIGNS = [
+  { value: null, label: 'Left', icon: 'alignLeft' },
+  { value: 'center', label: 'Center', icon: 'alignCenter' },
+  { value: 'right', label: 'Right', icon: 'alignRight' },
+];
+function currentAlign() {
+  const w = alignWrapperAt();
+  return w ? w.node.attrs.type : null;
+}
+
+/* The Insert menu's entries that ask something first (a file, a size, a name …) end in "…". */
+const INSERT_ASKS = new Set(['picture', 'table', 'block', 'group', 'linked']);
+
+/* Copy the dw: link of the heading the cursor is in (the Link menu's last entry). */
+function copySectionLink() {
+  // Chapter-only: a slide zone has no chapter anchor to copy.
+  if (!current || !current.view || getActiveView() !== current.view) {
+    contextBar.flash('Section links live in chapters — open a chapter to copy a heading link.');
+    return;
+  }
+  const { $from } = current.view.state.selection;
+  let heading = null;
+  for (let d = $from.depth; d >= 1; d--)
+    if ($from.node(d).type.name === 'heading') heading = $from.node(d);
+  if (!heading) { contextBar.flash('Section links live on headings — click into a heading first.'); return; }
+  if (heading.attrs.level === 1) { contextBar.flash('The chapter title needs no anchor — link the chapter itself as dw:' + current.dto.id + '.'); return; }
+  if (!heading.attrs.anchor) { contextBar.flash('This heading gets its permanent anchor when you Save — save, then copy the link here.'); return; }
+  const ref = 'dw:' + current.dto.id + '#' + heading.attrs.anchor;
+  if (navigator.clipboard) navigator.clipboard.writeText(ref);
+  contextBar.flash('Copied ' + ref + ' — paste it into any text or chapter-link dialog.');
+}
+
+/* opts.linkTool marks the slide canvas: its Insert menu offers a Linked section (turn the block
+   you are in into a live-linked chapter section, Task 9), and it has no Readers button or
+   section-link copy (a deck is already for one audience; a slide has no heading anchors).
+   Edit · Source · Read lives in the document bar (app.js, Stage 6) and calls setMode() below. */
 function buildMainToolbar(opts) {
-  const withLinkTool = !!(opts && opts.linkTool);
+  const onSlide = !!(opts && opts.linkTool);
   toolbarButtons = [];
   // The shell: one 48px bar that contains two tracks.
-  // .e2-tb-main  — the formatting groups (they wrap on narrow windows)
+  // .e2-tb-main  — the formatting groups (they wrap between groups on narrow windows)
   // .e2-tb-ctx   — contextual format bar (IMAGE / TABLE) — badge + node tools (hidden initially)
   const bar = document.createElement('div');
   bar.className = 'e2-maintoolbar';
@@ -1098,26 +1133,54 @@ function buildMainToolbar(opts) {
   const mainTrack = document.createElement('div');
   mainTrack.className = 'e2-tb-main';
 
-  // Scrollable formatting groups
   const scroll = document.createElement('div');
   scroll.className = 'tb-scroll';
   mainTrack.appendChild(scroll);
 
-  // Helper: add icon-first button into the scroll track.
+  // Groups never split: a narrow window wraps the bar between groups, never inside one. Each
+  // group but the last ends in its separator.
+  let group = null;
+  const newGroup = () => {
+    if (group) group.appendChild(sep());
+    group = document.createElement('span');
+    group.className = 'tb-grp';
+    scroll.appendChild(group);
+  };
+
+  // Helper: an icon button, with a word beside the icon when `label` is given (it folds away on
+  // a narrow window — .ib-label in app.css; the tooltip always explains the button).
   const add = (iconName, label, tip, fn, isActive) => {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'ib';
     if (iconName) b.appendChild(icon(iconName));
-    if (label) b.appendChild(document.createTextNode(label));
+    if (label) b.appendChild(ibLabel(label));
     b.setAttribute('data-tip', tip);
+    if (label) b.setAttribute('aria-label', label);
     b.onmousedown = (e) => e.preventDefault(); // keep the text selection
     b.onclick = (e) => { e.preventDefault(); fn(); };
     if (isActive) toolbarButtons.push({ el: b, isActive });
-    scroll.appendChild(b);
+    group.appendChild(b);
     return b;
   };
-  const addSep = () => scroll.appendChild(sep());
+  // A button that opens a menu of `items()` (built when it opens, so checks are current).
+  const addMenu = (iconName, label, tip, items) => {
+    const b = add(iconName, label, tip, () => {
+      if (b.getAttribute('aria-expanded') === 'true') { closeOpenMenu(); return; }
+      const menu = document.createElement('div');
+      menu.className = 'e2-menu';
+      menu.setAttribute('role', 'menu');
+      for (const it of items()) menu.appendChild(it === '-' ? menuSep() : it);
+      const r = b.getBoundingClientRect();
+      openContextMenu(menu, r.left, r.bottom + 4, b);
+    });
+    const chev = icon('chevronDown');
+    chev.classList.add('ib-chev');
+    b.appendChild(chev);
+    b.setAttribute('aria-haspopup', 'menu');
+    b.setAttribute('aria-expanded', 'false');
+    return b;
+  };
 
   // Block-type DROPDOWN (custom — native <select> is OS-rendered, cannot preview fonts)
   // Options: value → [label shown in trigger, data-style attr for font preview]
@@ -1144,23 +1207,9 @@ function buildMainToolbar(opts) {
 
     const trigLabel = document.createElement('span');
     trigger.appendChild(trigLabel);
-
-    // Inline chevron SVG (down arrow) — use setAttribute for class on SVGElement
-    const chevSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    chevSvg.setAttribute('viewBox', '0 0 10 6');
-    chevSvg.setAttribute('width', '10');
-    chevSvg.setAttribute('height', '6');
-    chevSvg.setAttribute('aria-hidden', 'true');
-    chevSvg.setAttribute('class', 'dw-sel-chev');
-    const chevPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    chevPath.setAttribute('d', 'M1 1l4 4 4-4');
-    chevPath.setAttribute('fill', 'none');
-    chevPath.setAttribute('stroke', 'currentColor');
-    chevPath.setAttribute('stroke-width', '1.7');
-    chevPath.setAttribute('stroke-linecap', 'round');
-    chevPath.setAttribute('stroke-linejoin', 'round');
-    chevSvg.appendChild(chevPath);
-    trigger.appendChild(chevSvg);
+    const chev = icon('chevronDown');
+    chev.classList.add('ib-chev');
+    trigger.appendChild(chev);
 
     wrap.appendChild(trigger);
 
@@ -1300,11 +1349,12 @@ function buildMainToolbar(opts) {
   });
 
   // Convention (Word Quick Access Toolbar, Google Docs, CKEditor): undo/redo at far LEFT.
+  newGroup();
   add('undo', null, 'Undo (Ctrl+Z).', () => undoAny(false, null));
   add('redo', null, 'Redo (Ctrl+Y).', () => undoAny(true, null));
-  addSep();
-  scroll.appendChild(blockDropdown.wrap);
-  addSep();
+  newGroup();
+  group.appendChild(blockDropdown.wrap);
+  newGroup();
   add('bold', null, 'Bold (Ctrl+B).', () => runEitherCmd(toggleMark(schema.marks.strong)), () => markActive(schema.marks.strong));
   add('italic', null, 'Italic (Ctrl+I).', () => runEitherCmd(toggleMark(schema.marks.em)), () => markActive(schema.marks.em));
   add('strike', null, 'Strikethrough.', () => runEitherCmd(toggleMark(schema.marks.strike)), () => markActive(schema.marks.strike));
@@ -1319,7 +1369,7 @@ function buildMainToolbar(opts) {
     view.dispatch(tr);
     view.focus();
   });
-  addSep();
+  newGroup();
   add('bulletList', null, 'Bulleted list (click again to un-list).', () => {
     if (!blockedInCell() && !blockedOnNode())
       runCmd(blockIs('bullet_list') && listIsTask() ? setListChecked(null) : smartList(schema.nodes.bullet_list));
@@ -1345,70 +1395,71 @@ function buildMainToolbar(opts) {
   add('quote', null, 'Quote block (click again to un-quote).', () => {
     if (!blockedInCell() && !blockedOnNode()) runCmd(blockIs('blockquote') ? lift : wrapIn(schema.nodes.blockquote));
   }, () => blockIs('blockquote'));
-  add('alignLeft', null, 'Align left — the default; removes centering.', () => {
-    if (!blockedInCell() && !blockedOnNode()) setAlign(null);
-  }, () => !alignWrapperAt());
-  add('alignCenter', null, 'Center the selected block (click again to remove).', () => {
-    if (!blockedInCell() && !blockedOnNode()) setAlign('center');
-  }, () => { const w = alignWrapperAt(); return !!w && w.node.attrs.type === 'center'; });
-  add('alignRight', null, 'Right-align the selected block (click again to remove).', () => {
-    if (!blockedInCell() && !blockedOnNode()) setAlign('right');
-  }, () => { const w = alignWrapperAt(); return !!w && w.node.attrs.type === 'right'; });
-  addSep();
-  add('weblink', null, 'Insert a link to a web address (for chapters use the chapter-link tool).', () => bridge().weblink && bridge().weblink());
-  add('chapterLink', null, 'Insert a link to a chapter or one of its sections (stable IDs).', () => bridge().dwlink && bridge().dwlink());
-  add('doc', null, 'Insert a link to a PDF/document from the project\'s attachments.', () => bridge().attachment && bridge().attachment());
-  addSep();
-  add('image', null, 'Insert a picture from the project\'s assets (or upload one).', () => bridge().image && bridge().image());
-  const tableBtn = add('table', null, 'Insert a table — choose size in the grid that opens.', () => {
-    if (blockedInCell()) return;
-    showTableGridPicker(tableBtn, (r, c) => {
-      insertBlockAfterSelection(newTableNode(r, c));
-    });
+  // Align: one menu; the button shows the alignment of the block you are in.
+  const alignBtn = addMenu('alignLeft', null, 'Alignment — left (the default), centered or right-aligned.', () =>
+    ALIGNS.map((a) => menuCheck(a.icon, a.label, currentAlign() === a.value, () => {
+      if (blockedInCell() || blockedOnNode() || currentAlign() === a.value) return;
+      setAlign(a.value);
+    })));
+  alignBtn.setAttribute('aria-label', 'Alignment');
+  toolbarButtons.push({
+    el: alignBtn,
+    isActive: () => {
+      const a = ALIGNS.find((x) => x.value === currentAlign()) || ALIGNS[0];
+      if (alignBtn.dataset.align !== a.label) {
+        alignBtn.dataset.align = a.label;
+        alignBtn.firstChild.replaceWith(icon(a.icon));
+      }
+      return false;
+    },
   });
-  add('blocks', null, 'Insert a designed building block — callouts, steps, cards, buttons, collapsible.', () => {
-    if (!blockedInCell() && bridge().element) bridge().element();
+  newGroup();
+  // Links: one menu for the three kinds of link (and copying the section's own link).
+  addMenu('weblink', 'Link', 'Add a link — to a web page, to another chapter or section, or to an attachment.', () => {
+    const items = [
+      menuItem('globe', 'Web address…', () => bridge().weblink && bridge().weblink(), { hint: 'A page on the internet or your intranet' }),
+      menuItem('book', 'Chapter or section…', () => bridge().dwlink && bridge().dwlink(), { hint: 'Another part of this manual — keeps working when it is renamed' }),
+      menuItem('doc', 'Attachment…', () => bridge().attachment && bridge().attachment(), { hint: 'A PDF or document from the project’s files' }),
+    ];
+    if (!onSlide) items.push('-', menuItem('link', 'Copy link to this section', copySectionLink, { hint: 'Click into a heading first — then paste it anywhere' }));
+    return items;
   });
-  add('group', null, 'Group the selected blocks so you can embed them together on a slide (you give the group a name + optional note).', () => {
-    if (!blockedInCell()) createGroup();
+  // The inserts (names, hints and icons: the shared vocabulary in inserts.js). Picture and
+  // Table have their own buttons; Insert ▾ lists everything.
+  let insertBtn = null;
+  const RUN = {
+    picture: () => bridge().image && bridge().image(),
+    table: () => {
+      if (blockedInCell()) return;
+      showTableGridPicker(insertBtn, (r, c) => insertBlockAfterSelection(newTableNode(r, c)));
+    },
+    block: () => { if (!blockedInCell() && bridge().element) bridge().element(); },
+    group: () => { if (!blockedInCell()) createGroup(); },
+    linked: () => relinkSelection(),
+    character: () => showSymbolPalette(),
+    divider: () => { if (!blockedInCell()) insertBlockAfterSelection(schema.nodes.horizontal_rule.create()); },
+  };
+  add(INSERTS.picture.icon, INSERTS.picture.title, 'Insert a picture from the project’s assets (or upload one).', RUN.picture);
+  const tableBtn = add(INSERTS.table.icon, INSERTS.table.title, 'Insert a table — choose its size in the grid that opens.', () => {
+    insertBtn = tableBtn;
+    RUN.table();
   });
-  addSep();
-  add(null, 'Ω', 'Insert a special character — °, ±, µ, Ø, arrows …', () => showSymbolPalette());
-  add('hrule', null, 'Insert a divider line.', () => {
-    if (!blockedInCell()) insertBlockAfterSelection(schema.nodes.horizontal_rule.create());
-  });
-  addSep();
-  // Readers of the block at the cursor (Stage 6): tag a paragraph, a step, a table … for some
-  // audiences, change who, or give it back to everyone — the same picker as the chapter's.
-  const readersBtn = add('audience', null, 'Who reads this block — tag the paragraph, step or element you are in for some audiences only.', () => {
-    if (!blockedInCell() && bridge().blockReaders) bridge().blockReaders(readersBtn);
-  }, () => { const v = getActiveView(); return !!(v && audienceBlockAt(v.state)); });
-  // Slide canvas only: turn the selected block into a live-linked chapter section.
-  if (withLinkTool) {
-    add('chapterLink', 'Link…', 'Replace the selected block with a live link to a chapter section (it stays in sync).', () => relinkSelection());
+  const insertKeys = onSlide
+    ? ['picture', 'table', 'block', 'linked', '-', 'character', 'divider']
+    : ['picture', 'table', 'block', 'group', '-', 'character', 'divider'];
+  const menuBtn = addMenu('plus', 'Insert', 'Insert something — a picture, a table, a building block, a special character, a divider line …', () =>
+    insertKeys.map((k) => k === '-' ? '-' : menuItem(INSERTS[k].icon, INSERTS[k].title + (INSERT_ASKS.has(k) ? '…' : ''), () => {
+      insertBtn = menuBtn;
+      RUN[k]();
+    }, { hint: INSERTS[k].desc })));
+  if (!onSlide) {
+    newGroup();
+    // Readers of the block at the cursor (Stage 6): tag a paragraph, a step, a table … for some
+    // audiences, change who, or give it back to everyone — the same picker as the chapter's.
+    const readersBtn = add('audience', 'Readers', 'Who reads this block — tag the paragraph, step or element you are in for some audiences only.', () => {
+      if (!blockedInCell() && bridge().blockReaders) bridge().blockReaders(readersBtn);
+    }, () => { const v = getActiveView(); return !!(v && audienceBlockAt(v.state)); });
   }
-  addSep();
-  add('anchor', null, 'Copy the selected section\'s link (click into a heading first).', () => {
-    // Chapter-only: a slide zone has no chapter anchor to copy.
-    if (!current || !current.view || getActiveView() !== current.view) {
-      contextBar.flash('Section links live in chapters — open a chapter to copy a heading link.');
-      return;
-    }
-    const { $from } = current.view.state.selection;
-    let heading = null;
-    for (let d = $from.depth; d >= 1; d--)
-      if ($from.node(d).type.name === 'heading') heading = $from.node(d);
-    if (!heading) { contextBar.flash('Section links live on headings — click into a heading first.'); return; }
-    if (heading.attrs.level === 1) { contextBar.flash('The chapter title needs no anchor — link the chapter itself as dw:' + current.dto.id + '.'); return; }
-    if (!heading.attrs.anchor) { contextBar.flash('This heading gets its permanent anchor when you Save — save, then copy the link here.'); return; }
-    const ref = 'dw:' + current.dto.id + '#' + heading.attrs.anchor;
-    if (navigator.clipboard) navigator.clipboard.writeText(ref);
-    contextBar.flash('Copied ' + ref + ' — paste it into any text or chapter-link dialog.');
-  });
-  const anchorInfo = document.createElement('span');
-  anchorInfo.className = 'e2-ctx-hint';
-  anchorInfo.id = 'e2AnchorInfo';
-  scroll.appendChild(anchorInfo);
 
   bar.appendChild(mainTrack);
 
@@ -1597,35 +1648,6 @@ function setAlign(kind) { // 'center' | 'right' | null (= left / default)
   }
   view.dispatch(view.state.tr.wrap(range, wrapping).scrollIntoView());
   view.focus();
-}
-
-/* Cursor-in-heading: show the section\'s stable anchor with one-click copy. Chapter-
-   only — a slide zone has no chapter anchor, so when a zone is the active view we just
-   clear the field (the toolbar's anchor-copy button flashes a hint instead). */
-function updateAnchorInfo() {
-  const el = document.getElementById('e2AnchorInfo');
-  if (!el) return;
-  if (!current || !current.view || getActiveView() !== current.view) { el.textContent = ''; return; }
-  const { $from } = current.view.state.selection;
-  let heading = null;
-  for (let d = $from.depth; d >= 1; d--)
-    if ($from.node(d).type.name === 'heading') heading = $from.node(d);
-  if (heading && heading.attrs.anchor) {
-    const ref = 'dw:' + current.dto.id + '#' + heading.attrs.anchor;
-    el.textContent = '';
-    const code = document.createElement('code');
-    code.textContent = '#' + heading.attrs.anchor;
-    el.appendChild(code);
-    const copy = document.createElement('button');
-    copy.type = 'button';
-    copy.appendChild(icon('link'));
-    copy.appendChild(document.createTextNode('Copy link'));
-    copy.setAttribute('data-tip', 'Copy ' + ref + ' — paste it anywhere a chapter link is asked for.');
-    copy.onclick = () => navigator.clipboard && navigator.clipboard.writeText(ref);
-    el.appendChild(copy);
-  } else {
-    el.textContent = '';
-  }
 }
 
 /* Click tools for links on the surface (M4): dw: links get Open/Change/Remove;
@@ -2032,7 +2054,6 @@ function undoAny(redoing, view) {
    zone gains focus or changes selection so the one toolbar tracks the focused zone. */
 function notifyToolbar() {
   updateToolbarState();
-  updateAnchorInfo();
 }
 
 /* Autosave waits while saving would interrupt the author: typing in Source (a save closes

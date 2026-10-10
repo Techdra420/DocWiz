@@ -122,7 +122,7 @@ dialog#modal select, .props-select, .e2-menu .mfilter, .e2-figcap, .e2-pxinput, 
 }
 
 /* CAPS label — group headings, panel heads, eyebrows (rule 12: xs, 600, tracked). */
-.hd-brand-sub, .welcome-eyebrow, .daygroup, .side-pane .grp, .vpanel-head, .imp-head, .e2-ctx-label,
+.hd-brand-sub, .welcome-eyebrow, .daygroup, .side-pane .grp, .vpanel-head, .imp-head,
 .e2-menu .mlabel, .mgroup-lbl, #setPane .set-grp, .hist-title, .hist-day, .props-list dt {
   font-size: var(--dw-fs-xs); font-weight: var(--dw-w-medium); line-height: var(--dw-lh-snug);
   text-transform: uppercase; letter-spacing: var(--dw-track-caps); color: var(--dw-muted);
@@ -135,7 +135,7 @@ svg :is(path, circle, rect, line, polyline, polygon, ellipse) { vector-effect: n
 svg[stroke="currentColor"] { stroke-width: 1.5; }
 
 /* Badge — a CAPS chip: neutral by default; variants set only colour. */
-.hd-tpl-badge, #issuesList .sev, .e2-blockpill, .dw-embed-pill, .e2-ctx-badge, .dwa-pkg-type, .dwa-status, .tcard-badge {
+.hd-tpl-badge, #issuesList .sev, .e2-blockpill, .dw-embed-pill, .e2-ctx-badge, .e2-ctx-label, .dwa-pkg-type, .dwa-status, .tcard-badge {
   display: inline-flex; align-items: center; gap: var(--dw-s1); white-space: nowrap;
   font-size: var(--dw-fs-xs); font-weight: var(--dw-w-medium); line-height: 1.5;
   text-transform: uppercase; letter-spacing: var(--dw-track-caps);
@@ -610,11 +610,20 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 0;
   padding: var(--dw-s2) var(--dw-s4) var(--dw-s2) var(--dw-s5);
   min-height: 52px;
   flex-wrap: wrap; row-gap: var(--dw-s2);
+  container: dwdocbar / inline-size;
+}
+/* Read / History / Properties keep only their icons when the bar is narrow (about 1100px
+   windows), so the bar stays one row; their tooltips still name them. */
+@container dwdocbar (max-width: 860px) {
+  .chapterbar .ib-label { display: none; }
+  .chapterbar .ib:has(> .ib-label) { padding: 0 var(--dw-s1); }
 }
 
-/* "Section / Title" — the title IS the page's H1 (Stage 6), so this is a label, not a field. */
+/* "Section / Title" — the title IS the page's H1 (Stage 6), so this is a label, not a field.
+   It grows to its full width when there is room and is cut short with "…" when not — it never
+   pushes the bar onto a second row (wrapping is judged at 12ch). */
 .cb-crumb {
-  flex: 0 1 auto; min-width: 0;
+  flex: 1 1 12ch; max-width: max-content; min-width: 0;
   display: flex; align-items: baseline; gap: var(--dw-s2);
   font-size: var(--dw-fs-sm);
 }
@@ -675,10 +684,9 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 0;
   box-shadow: 0 0 0 3px var(--dw-save-dot-halo);
 }
 
-/* Icon buttons of the document bar: History, Properties, ⋯ (pressed = its panel is open) */
-/* .cb-kebab-btn — the icon button; open menu = hovered, open panel = accent */
+/* The document bar's Read, History and Properties are toolbar buttons with their names (.ib —
+   pressed = its panel is open); ⋯ is the icon button, hovered while its menu is open. */
 .cb-kebab-btn[aria-expanded="true"] { background: var(--dw-surface-2); color: var(--dw-text); }
-.cb-kebab-btn[aria-pressed="true"] { background: var(--dw-accent-bg); color: var(--dw-accent); }
 
 /* Keep the old .fm for yaml/view editors */
 .fm { display: flex; gap: var(--dw-s3); align-items: center; flex-wrap: wrap;
@@ -967,11 +975,12 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 0;
    accent underline so a blank placeholder doesn't read as an already-set title. */
 :is(.dw-slide-edit, .dw-doc-edit) [data-slide-title].is-empty::after { display: none; }
 
-/* The shared formatting toolbar mounted once above the slide canvas. It reuses the
-   chapter editor's .e2-maintoolbar shell (built with withViewSwitch:false), so it is
-   editor chrome in the page's own theme — not on the dark slide surface. Sticky like
-   the chapter editor's .e2-top so it stays put while the deck scrolls. */
-.e2-slide-top { position: sticky; top: 0; z-index: var(--dw-z-overlay); }
+/* The shared formatting toolbar, mounted once across the output editor between the output bar
+   and the rail + canvas row (it is outside the scrolling canvas, so it stays put while the deck
+   scrolls). It reuses the chapter editor's .e2-maintoolbar shell, so it is editor chrome in
+   the page's own theme — not on the dark slide surface. The context bar hangs from it over
+   the rail and the canvas. */
+.e2-top.e2-slide-top { position: relative; flex-shrink: 0; z-index: var(--dw-z-overlay); }
 
 /* ---- Structured slide layouts: the Add-slide gallery (modal) ---- */
 /* Shared wireframe thumbnail used in the gallery cards. */
@@ -1344,8 +1353,9 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
   overflow-anchor: none;
   background: var(--dw-bg);
 }
-/* No card behind the article â€” the handover page is text directly on --dw-bg. */
-#editor2 article { min-height: 100%; }
+/* No card behind the article â€” the handover page is text directly on --dw-bg. The top
+   padding is the handover's <main> padding, so the title has the same room under the bars. */
+#editor2 article { min-height: 100%; padding-top: var(--dw-s6); }
 /* The editing surface must not clip drag handles / resize grips that extend past the content box. */
 #editor2 .ProseMirror { outline: none; overflow: visible; }
 /* PM always wraps list-item text in <p>; the pipeline renders tight lists without it.
@@ -1389,19 +1399,20 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
   z-index: var(--dw-z-handle);
   display: flex;
   align-items: center;
-  gap: var(--dw-s3);
+  gap: var(--dw-s2);
   padding: var(--dw-s2) var(--dw-s4);
-  background: var(--dw-surface);
+  /* Tinted (opaque) so it reads as "the tools for what you selected", not a second toolbar. */
+  background: var(--dw-accent-surface);
   border-bottom: 1px solid var(--dw-border);
   box-shadow: var(--dw-shadow);   /* reads as a layer floating over the content it overlays */
   flex-wrap: nowrap;
   min-height: 53px;
   box-sizing: border-box;
+  container: dwctx / inline-size; /* its words fold away when it is narrow (see .e2-grp-label) */
 }
 /* Nothing selected → no overlay at all: no permanent strip, no gap (the old reserved-height
    empty sub-row is gone now that showing tools overlays instead of reserving flow space). */
 .e2-contextbar.e2-ctx-empty { display: none; }
-.e2-ctx-label { color: var(--dw-accent); } /* the CAPS label, naming the selected element */
 .e2-ctx-hint { font-size: var(--dw-fs-xs); color: var(--dw-muted); margin-left: var(--dw-s3); }
 /* (`.e2-tools` / `.e2-tools button` — the legacy bordered-box context idiom — was deleted in
    the table/picture toolbar redesign: every context-bar control is now the borderless `.ib`
@@ -1412,7 +1423,7 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
 .dw-live-surface .dw-table-figure.e2-active td,
 .dw-live-surface .dw-table-figure.e2-active th { border: 1px solid var(--dw-border); }
 .dw-live-surface .dw-image-figure.e2-active img { box-shadow: var(--dw-focus-ring); }
-.e2-sep { width: 1px; height: 14px; background: var(--dw-border); margin: 0 var(--dw-s1); }
+.e2-sep { width: 1px; height: 20px; background: var(--dw-border); margin: 0 var(--dw-s1); flex-shrink: 0; }
 /* Caption / alt field — the ONE slack-absorbing item in the context row; shrinks to its
    90px min first so the bar stays a single nowrap row. */
 .e2-figcap { flex: 1 1 120px; min-width: 90px; max-width: 340px; } /* the field */
@@ -1678,6 +1689,7 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
   background: var(--dw-surface);
   border-bottom: 1px solid var(--dw-border);
   position: relative;
+  container: dwtoolbar / inline-size; /* its words fold away when it is narrow (below) */
 }
 .e2-maintoolbar.context {
   box-shadow: inset 0 3px 0 var(--dw-accent);
@@ -1713,7 +1725,17 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
   row-gap: var(--dw-s1);
   padding-block: var(--dw-s1);
 }
-
+/* A group of the toolbar (history, text style, lists, inserts, readers) never splits: the bar
+   wraps between groups. Each group but the last ends in its separator. */
+.tb-grp { display: inline-flex; align-items: center; flex-shrink: 0; }
+/* The words beside some toolbar icons (Link, Picture, Table, Insert, Readers; Replace…) fold
+   away when the bar is too narrow for them; every button keeps its tooltip and aria-label.
+   The width is the bar's measured content width with its words shown (935px, Segoe UI 13px):
+   a 1280px window keeps them, scroll bar or not. */
+@container dwtoolbar (max-width: 944px) {
+  .ib-label { display: none; }
+  .e2-maintoolbar .ib:has(> .ib-label) { padding: 0 var(--dw-s1); } /* as wide as its neighbours */
+}
 /* Contextual track: badge + tool strip */
 .e2-tb-ctx {
   display: flex;
@@ -1728,11 +1750,22 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
 }
 .e2-tb-tools { display: flex; align-items: center; flex-wrap: nowrap; gap: var(--dw-s2); flex: 1 1 auto; min-width: 0; }
 
-/* Context badge (IMAGE / TABLE) */
-.e2-ctx-badge { /* the badge, accent variant */
+/* Context badge — what is selected: PICTURE / TABLE / LINKED with an icon, or a callout, link,
+   block … by name (.e2-ctx-label). One look for both. */
+.e2-ctx-badge, .e2-ctx-label { /* the badge, accent variant */
   color: var(--dw-accent); background: var(--dw-accent-bg); border-color: var(--dw-accent);
   flex-shrink: 0;
 }
+/* The words naming a group of tools in the context bar ("Rows", "Place" …). */
+.e2-grp-label { font-size: var(--dw-fs-xs); color: var(--dw-muted); margin-right: var(--dw-s1); white-space: nowrap; }
+/* A narrow context bar drops its hint first, then button words ("Replace…" — the picture bar
+   needs 975px with it), then the group words (the table bar needs 868px with them). */
+@container dwctx (max-width: 1180px) { .e2-tb-hint { display: none; } }
+@container dwctx (max-width: 980px) {
+  .ib-label { display: none; }
+  .e2-contextbar .ib:has(> .ib-label) { padding: 0 var(--dw-s1); }
+}
+@container dwctx (max-width: 900px) { .e2-grp-label { display: none; } }
 
 /* ── Table/picture context-bar redesign: ONE borderless .ib family for every control ──
    The five legacy idioms (.e2-seg bordered pill, .e2-btn-grp connected frame, .e2-lbtn
@@ -1752,8 +1785,6 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
   font-weight: var(--dw-w-bold);
 }
 
-/* Taller hairline separators to match the 32px context-bar buttons. */
-.e2-contextbar .e2-sep { height: 20px; }
 
 /* Toolbar Esc/hint text (right of context bar content) */
 .e2-tb-hint {
@@ -1774,11 +1805,13 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
 }
 
 /* Icon buttons in the scrollable track */
-/* Toolbar button — ONE recipe for the main toolbar, the context bar and a menu row's tools. */
-.e2-maintoolbar .ib, .e2-contextbar .ib, .e2-menu .ib {
+/* Toolbar button — ONE recipe for the main toolbar, the context bar, a menu row's tools and
+   the document bar's History / Properties / Read. Icon-only is ctl-sm wide; with a word, s2
+   either side. */
+.e2-maintoolbar .ib, .e2-contextbar .ib, .e2-menu .ib, .chapterbar .ib {
   height: var(--dw-ctl-md);
-  min-width: var(--dw-ctl-md);
-  padding: 0 var(--dw-s2);
+  min-width: var(--dw-ctl-sm);
+  padding: 0 var(--dw-s1);
   border: none;
   border-radius: var(--dw-r1);
   background: transparent;
@@ -1792,9 +1825,12 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
   flex-shrink: 0;
   transition: background 0.12s ease, color 0.12s ease;
 }
-.e2-maintoolbar .ib:hover { background: var(--dw-surface-2); color: var(--dw-text); }
-.e2-maintoolbar .ib.active { background: var(--dw-accent-bg); color: var(--dw-accent); }
-.e2-maintoolbar .ib:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
+.ib:has(> .ib-label) { padding: 0 var(--dw-s2); }
+.ib:has(> .ib-chev) { gap: 2px; }
+.e2-maintoolbar .ib:hover, .chapterbar .ib:hover,
+.e2-maintoolbar .ib[aria-expanded="true"] { background: var(--dw-surface-2); color: var(--dw-text); }
+.e2-maintoolbar .ib.active, .chapterbar .ib[aria-pressed="true"] { background: var(--dw-accent-bg); color: var(--dw-accent); }
+.e2-maintoolbar .ib:focus-visible, .chapterbar .ib:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
 
 /* The ONE borderless icon-button family for the whole context bar (figure / table / cell
    image / linked block / container / symbol / link tools all use it). Matches the main
@@ -1895,13 +1931,11 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
   border-color: var(--dw-accent);
   box-shadow: var(--dw-focus-ring);
 }
-/* Chevron icon inside trigger */
-.dw-sel-chev {
-  color: var(--dw-muted);
-  flex-shrink: 0;
-  transition: transform 0.12s;
-}
-.dw-sel-trigger[aria-expanded="true"] .dw-sel-chev { transform: rotate(180deg); }
+/* The chevron of anything that opens a list: this trigger and the toolbar's menu buttons. */
+.ib-chev { flex-shrink: 0; transition: transform 0.12s; }
+.ib-chev svg { width: 12px; height: 12px; }
+.dw-sel-trigger .ib-chev { color: var(--dw-muted); }
+[aria-expanded="true"] > .ib-chev { transform: rotate(180deg); }
 
 /* Popup list */
 .dw-sel-popup { position: fixed; z-index: var(--dw-z-popover); min-width: 160px; overflow: hidden; } /* the menu */

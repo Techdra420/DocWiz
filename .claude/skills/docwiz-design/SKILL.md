@@ -91,6 +91,9 @@ conflicts with DESIGN_SYSTEM.md, that doc wins.
     (`caption`/`rotate`/`link`/`delete`/`adjacency`), never hand-built per node-view; adding
     a control means adding it to the shared definition (or declaring the flag with a one-line
     reason). Context-bar badges and the `:::` container labels come from ONE map per concept.
+    A context bar's group words come from contexttools' `CAP_LABEL` (bar and right-click menu);
+    its ⋯ opens the same right-click menu (`buildMenu`). What can be inserted — the toolbar's
+    Picture / Table / Insert ▾ and the slash menu — is ONE list, `editor2/inserts.js`.
     Never stand up a second toolbar / badge / label / vocabulary list kept in sync only by a
     comment (ADR-008 in `docs/ARCHITECTURE.md`).
 22. (Stage 6 step 7) Editor chrome is built from the "Recipes" block at the top of app.css —

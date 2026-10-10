@@ -229,8 +229,7 @@ class ContainerView {
       this.view.focus();
     });
     // ── Add paragraph above / below (Task 10) ────────────────────────────────
-    // `add` already appends to tools; adjacencyButtons calls mk() which returns+appends.
-    adjacencyButtons(add, this.view, this.getPos, this.node);
+    tools.append(...adjacencyButtons(this.view, this.getPos, this.node));
     add('Delete', 'Delete this block INCLUDING its content.', () => {
       const pos = this.getPos();
       if (pos == null) return;

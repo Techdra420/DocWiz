@@ -218,14 +218,19 @@ A new component joins the recipe's selector list instead of restating it (rule 2
   var(--dw-border)`, text `--dw-bad`. H: `--dw-bad-bg` + `--dw-bad` border. Never solid red at
   rest.
 - *Sized* (`.dwa-btn` lg, `.dwa-btn-sm` / the bar pills md): inline-flex, icon + label, gap s2.
-- *Icon* (the document bar's History / Properties / ⋯, the tree's and rail's ⋯, the sheet's ×,
-  the audience grip, the recent-row tools, the check panel's ×, Quit): a square of a control
-  height, borderless and `--dw-muted` until hovered (`--dw-surface-2` + `--dw-text`).
+- *Icon* (the document bar's ⋯, the tree's and rail's ⋯, the sheet's ×, the audience grip,
+  the recent-row tools, the check panel's ×, Quit): a square of a control height, borderless
+  and `--dw-muted` until hovered (`--dw-surface-2` + `--dw-text`).
 - *Chrome* (Check, Preview as, Handover, Download on the dark bar): the secondary recipe in
   chrome tokens (`--dw-chrome-border`, `--dw-chrome-text`); Build handover is the chrome
   primary on `--dw-mark`.
-- *Toolbar* (`.ib` in the main toolbar, the context bar and menu rows): md, borderless,
-  `--dw-muted`, r1.
+- *Toolbar* (`.ib` in the main toolbar, the context bar, menu rows and the document bar's
+  Read / History / Properties): md tall, `--dw-ctl-sm` wide when icon-only, borderless,
+  `--dw-muted`, r1; with a word (`.ib-label`) it gets s2 either side; a button that opens a
+  menu ends in a 12px chevron (`.ib-chev`, turned while open) and is hovered while its menu is
+  open. Pressed / on = `--dw-accent-bg` + `--dw-accent`. Every bar folds its words away with a
+  container query when it is too narrow for them (the measured widths are in app.css); the
+  tooltip and `aria-label` always name the button.
 - *Add* (+ New section, "No chapters yet", + Add slide / section, Add audience, Mark a
   version): a dashed `--dw-border-strong` outline, `--dw-muted`, at least md tall.
 - *Text link* (`.hist-link`: Restore, Copy link, Stop preview, Change): accent text, underline
@@ -238,15 +243,35 @@ Textareas share the look at their own height. The output title (`.cb-title-input
 inline field: it reads as text until hovered.
 
 **Labels and badges** — the CAPS label (rule 12; group headings, panel heads, eyebrows, menu
-labels, the context bar's element name): xs 600 tracked `--dw-muted`. The badge (template
-state, check severity, a block's type pill, a linked block's pill, the context bar's badge,
-package type / status): an xs 600 tracked CAPS chip, r0, 1px `--dw-border` on
-`--dw-surface-2`; variants (warn, accent, solid accent, ok / bad, severity) set only colour.
+labels): xs 600 tracked `--dw-muted`. The badge (template state, check severity, a block's
+type pill, a linked block's pill, the context bar's badge and element name, package type /
+status): an xs 600 tracked CAPS chip, r0, 1px `--dw-border` on `--dw-surface-2`; variants
+(warn, accent, solid accent, ok / bad, severity) set only colour.
 
 **Icons** — one set at one stroke: icons.js (16-unit grid, stroke 1.5) and the markup's own
 24-unit icons draw with a non-scaling 1.5px stroke, so every outline icon has the same weight
-at any size. Glyphs are not icons (the toolbar's Ω inserts a character; H2 / H3 are type
-labels).
+at any size. One idea, one icon: Readers is the people glyph everywhere (the eye is Preview
+as); a copy-link action is the chain. Glyphs are not icons (H2 / H3 are type labels).
+
+**Formatting toolbar** (`.e2-maintoolbar`; the chapter editor under its document bar, and the
+output editor across the whole column above the rail and the canvas) — groups that never
+split (`.tb-grp`; the bar wraps between groups): Undo · Redo | Normal text ▾ | Bold · Italic ·
+Strikethrough · Code · Clear formatting | Bulleted · Numbered · Checklist · Indent · Outdent ·
+Quote · Align ▾ | **Link ▾** (web address, chapter or section, attachment; Copy link to this
+section) · **Picture** · **Table** · **Insert ▾** | **Readers**. Bold = shown with its word. The
+inserts' names, hints and icons are one list (`editor2/inserts.js`), shared with the slide
+zones' slash menu. On a slide there is no Readers or section-link copy (a deck is already for
+one audience) and Insert ▾ adds *Linked section*. Measured: one row with words at a 1280px
+window.
+
+**Context bar** (`.e2-contextbar`, under the toolbar when a picture, table, linked block,
+callout, link … is selected) — tinted `--dw-accent-surface` so it reads as "tools for this",
+not a second toolbar: the accent badge naming the selection, a separator, then the tools.
+Groups carry their word in xs `--dw-muted` (`.e2-grp-label`: Size, Place, Rows, Columns, Align
+text — the same words as the right-click menu's rows). Rare tools are not drawn as unexplained
+icons: **⋯** opens the same menu as right-clicking the object, every tool by name. A picture's
+bar: Size | Place | Replace… · Rotate | caption | paragraph above · below · ⋯ · Delete; a
+table's: Rows · Columns | Align text | Place | caption | paragraph above · below · ⋯ · Delete.
 
 **Chrome bar** (Stage 6) — brand · the project's name as a button (`.hd-proj-btn`, chrome
 ghost: H `--dw-chrome-2` + `--dw-chrome-border`) opening the *project menu* (switch project,
@@ -257,7 +282,7 @@ after a build · quit / window controls. No other buttons live in the bar.
 **`.dw-seg`** (Stage 6) — THE segmented control: a `--dw-surface-2` well, 1px `--dw-border`,
 r1, 2px inset; buttons xs 600 `--dw-muted`, r0; selected (`aria-selected` for tabs,
 `aria-pressed` for a toggle group) = `--dw-surface` + `--dw-text` + `--dw-shadow`; the whole
-control is md tall. Used by the sidebar tabs, Edit · Source · Read, Slides · Document,
+control is md tall. Used by the sidebar tabs, Edit · Source, Slides · Document,
 History's scope, and window mode and appearance (Settings and the welcome screen) — there is
 no other segmented control.
 
@@ -300,12 +325,14 @@ renames inline (`.tree-rename`, accent border + focus ring). A dragged chapter m
 target with a 2px accent line above a row, or an `--dw-accent-bg` wash on a section.
 
 **`.chapterbar`** — the document bar (Stage 6): `Section / Title` crumb (section
-`--dw-faint`, title 600) · `.cb-readers` pill (neutral: surface, `--dw-border-strong`, r1,
-people icon + "User, Support +2" / "All readers" / "No readers" + chevron; opens the
-Readers picker) · right: save state (amber `.cb-save-dot` while edits are pending,
-`#status` xs muted text) · `.dw-seg.cb-mode` Edit · Source · Read · icon buttons
-(`.cb-kebab-btn`, 34px, r1; pressed = `--dw-accent-bg` + accent) for History, Properties and
-⋯. No ID chip, no Save button, no audience toggles.
+`--dw-faint`, title 600; cut short with "…" rather than wrapping the bar) · `.cb-readers` pill
+(neutral: surface, `--dw-border-strong`, r1, people icon + "User, Support +2" / "All readers" /
+"No readers" + chevron; opens the Readers picker) · right: save state (amber `.cb-save-dot`
+while edits are pending, `#status` xs muted text) · `.dw-seg.cb-mode` Edit · Source · *Read ↗*
+(a toolbar button beside the switch — it opens a tab, it is not a mode) | *History* ·
+*Properties* (toolbar buttons with their names, which fold away on a narrow bar; pressed =
+`--dw-accent-bg` + accent) · ⋯ (`.cb-kebab-btn`). No ID chip, no Save button, no audience
+toggles.
 
 **Output bar** (`.chapterbar.output-bar`, Stage 6) — the document bar's pattern for an output:
 `Slide deck / <title>` (the title is a `.cb-title-input` — reads as text, a hairline on hover,

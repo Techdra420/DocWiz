@@ -3,9 +3,15 @@
    block+ containers all suffer "can't place a cursor next to/between them."
 
    Exposed as adjacencyButtons() so every buildTools() can append the same two
-   buttons without duplicating the logic. */
+   buttons without duplicating the logic; ADJACENT names them for the bars and the menus. */
 
 import { TextSelection } from 'prosemirror-state';
+import { icon } from './icons.js';
+
+export const ADJACENT = {
+  before: { label: 'Add a paragraph above', icon: 'paraAbove' },
+  after: { label: 'Add a paragraph below', icon: 'paraBelow' },
+};
 
 /**
  * Insert an empty paragraph directly before or after the given block node and
@@ -27,19 +33,23 @@ export function insertAdjacentParagraph(view, getPos, node, where) {
 }
 
 /**
- * Build the two adjacency buttons (¶↑ / ¶↓) using a caller-supplied button
- * factory so each node view can use its own button style.
+ * Build the two adjacency buttons: borderless `.ib` icon buttons, the context bar's family.
+ * mousedown is prevented so a click does not steal the selection.
  *
- * @param {function(label:string, tip:string, onclick:function): HTMLElement} mk
- *   The caller's button factory.
  * @param {EditorView} view
  * @param {function(): number|null} getPos
  * @param {Node} node  ProseMirror node
  * @returns {HTMLElement[]} Array of two button elements [above, below].
  */
-export function adjacencyButtons(mk, view, getPos, node) {
-  return [
-    mk('¶↑', 'Add a paragraph above this block', () => insertAdjacentParagraph(view, getPos, node, 'before')),
-    mk('¶↓', 'Add a paragraph below this block', () => insertAdjacentParagraph(view, getPos, node, 'after')),
-  ];
+export function adjacencyButtons(view, getPos, node) {
+  return ['before', 'after'].map((where) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'ib';
+    b.appendChild(icon(ADJACENT[where].icon));
+    b.setAttribute('data-tip', ADJACENT[where].label + ' this block.');
+    b.onmousedown = (e) => e.preventDefault();
+    b.onclick = (e) => { e.preventDefault(); insertAdjacentParagraph(view, getPos, node, where); };
+    return b;
+  });
 }

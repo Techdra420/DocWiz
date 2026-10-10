@@ -434,12 +434,14 @@ export class TableView {
       focusActive: !!this.focusMode,
       onFocus: () => this.toggleFocus(),
       captionValue: (meta.model ? meta.model.caption : meta.caption) ?? '',
-      captionPlaceholder: 'Caption — shown under the table',
+      captionPlaceholder: 'Table caption',
       captionTip: 'The caption shown under the table (e.g. "Table 1 — Safety symbols").',
       onCaption: (raw) => this.setCaption(raw),
       onDelete: () => this.deleteTable(),
       deleteTip: 'Delete this table INCLUDING its content (Ctrl+Z brings it back).',
       hint: 'Click a cell to edit it · <kbd>Esc</kbd> steps out',
+      // ⋯ opens the right-click menu, aimed at the open cell (or the table's end) like the bar.
+      menuCtx: () => this.menuCtx(row(), col()),
     });
   }
 

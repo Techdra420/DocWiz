@@ -13,7 +13,6 @@ export const ICONS = {
   arrowRight: S + '<path d="M2 8h11M9 3.5L13.5 8 9 12.5"></path>' + E,
 
   // Drawn to the package's spec:
-  paragraph: S + '<path d="M9.5 2.5v11M12.5 2.5v11M12.5 2.5H8a3 3 0 0 0 0 6h1.5"></path>' + E,
   bold: S + '<path d="M5 2.5h3.75a2.5 2.5 0 0 1 0 5H5zM5 7.5h4.5a2.75 2.75 0 0 1 0 5.5H5zM5 2.5V13"></path>' + E,
   italic: S + '<path d="M9.5 2.5h4M2.5 13.5h4M11.5 2.5l-3 11"></path>' + E,
   code: S + '<path d="M5 4.5L1.5 8 5 11.5M11 4.5L14.5 8 11 11.5"></path>' + E,
@@ -22,8 +21,8 @@ export const ICONS = {
   table: S + '<rect x="1.5" y="2.5" width="13" height="11"></rect><path d="M1.5 6h13M6 6v7.5M10.5 6v7.5"></path>' + E,
   blocks: S + '<rect x="1.5" y="1.5" width="5" height="5"></rect><rect x="9.5" y="1.5" width="5" height="5"></rect><rect x="1.5" y="9.5" width="5" height="5"></rect><path d="M12 9.5v5M9.5 12h5"></path>' + E,
   image: S + '<rect x="1.5" y="2.5" width="13" height="11"></rect><path d="M1.5 11l4-4 4.5 4.5M9.5 9.5L12 7l2.5 2.5"></path><circle cx="5.5" cy="5.5" r="0.9" fill="currentColor" stroke="none"></circle>' + E,
-  chapterLink: S + '<path d="M12.5 2.5H4v11h9V7"></path><path d="M8 8l6-6M10.5 1.5h4v4"></path>' + E,
-  audience: S + '<path d="M1.5 8s2.5-4.5 6.5-4.5S14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z"></path><circle cx="8" cy="8" r="1.9"></circle>' + E,
+  // Readers — the same people glyph as the document bar's Readers pill (the eye is Preview as).
+  audience: SR + '<circle cx="6" cy="5.5" r="2.3"></circle><path d="M1.8 13c.6-2.3 2.2-3.6 4.2-3.6s3.6 1.3 4.2 3.6"></path><path d="M10.6 3.4a2.2 2.2 0 0 1 0 4.3M12 9.6c1.2.5 2 1.6 2.3 3.4"></path>' + E,
   strike: S + '<path d="M3 4.5c0-1.5 1.8-2.5 5-2.5 2.5 0 4 .8 4.5 2M3.5 11.5c.5 1.6 2.2 2.5 4.5 2.5 3.2 0 5-1 5-2.8 0-1-.6-1.7-1.8-2.2"></path><path d="M1.5 8h13"></path>' + E,
   clearFormat: S + '<path d="M3 2.5h9M7.5 2.5l-2 8"></path><path d="M10.5 10.5l4 4M14.5 10.5l-4 4"></path><path d="M2.5 13.5h5"></path>' + E,
   weblink: S + '<path d="M6.5 9.5l3-3"></path><path d="M7 5.5l1.5-1.5a2.6 2.6 0 0 1 3.7 3.7L10.5 9.4"></path><path d="M9 10.5l-1.5 1.5a2.6 2.6 0 0 1-3.7-3.7L5.5 6.6"></path>' + E,
@@ -31,7 +30,6 @@ export const ICONS = {
   hrule: S + '<path d="M2 8h12"></path><path d="M4 4h8M4 12h8" stroke-dasharray="1.5 2.5"></path>' + E,
   undo: S + '<path d="M5.5 3L2.5 6l3 3"></path><path d="M2.5 6h7a4 4 0 0 1 0 8H6"></path>' + E,
   redo: S + '<path d="M10.5 3l3 3-3 3"></path><path d="M13.5 6h-7a4 4 0 0 0 0 8H10"></path>' + E,
-  anchor: S + '<circle cx="8" cy="3" r="1.4"></circle><path d="M8 4.4V14M4.5 7h7"></path><path d="M2.5 9c0 3.4 2.4 5.3 5.5 5.3S13.5 12.4 13.5 9"></path>' + E,
   alignLeft: S + '<path d="M2 3.5h12M2 8h7.5M2 12.5h12"></path>' + E,
   alignCenter: S + '<path d="M2 3.5h12M4.5 8h7M2 12.5h12"></path>' + E,
   alignRight: S + '<path d="M2 3.5h12M6.5 8H14M2 12.5h12"></path>' + E,
@@ -87,6 +85,16 @@ export const ICONS = {
   check: SR + '<path d="M3 8.4l3.2 3.2L13 5"></path>' + E,
   chevronRight: SR + '<path d="M6.5 4L10 8l-3.5 4"></path>' + E,
   group: S + '<rect x="2.5" y="3.5" width="11" height="9" rx="1.5"></rect><path d="M5 6.5h6M5 9.5h4"></path>' + E,
+
+  // ── Toolbar menus (the Link / Insert / Align menus and a context bar's ⋯). ──
+  chevronDown: SR + '<path d="M4.5 6.5L8 10l3.5-3.5"></path>' + E,
+  more: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><circle cx="3.5" cy="8" r="1.2"></circle><circle cx="8" cy="8" r="1.2"></circle><circle cx="12.5" cy="8" r="1.2"></circle></svg>',
+  globe: S + '<circle cx="8" cy="8" r="6.25"></circle><path d="M1.75 8h12.5"></path><path d="M8 1.75c1.8 1.9 2.6 4 2.6 6.25S9.8 12.35 8 14.25C6.2 12.35 5.4 10.25 5.4 8S6.2 3.65 8 1.75z"></path>' + E,
+  book: SR + '<path d="M8 4C6.5 3 4.2 2.7 1.75 3.2v9.6C4.2 12.3 6.5 12.6 8 13.6c1.5-1 3.8-1.3 6.25-.8V3.2C11.8 2.7 9.5 3 8 4z"></path><path d="M8 4v9.6"></path>' + E,
+  omega: SR + '<path d="M2.5 13.5H6v-1.7a5 5 0 1 1 4 0v1.7h3.5"></path>' + E,
+  // A new paragraph above / below a block: a plus over (under) two text lines.
+  paraAbove: SR + '<path d="M8 1.5v4M6 3.5h4"></path><path d="M2.5 9h11M2.5 12.5h8"></path>' + E,
+  paraBelow: SR + '<path d="M2.5 3.5h11M2.5 7h8"></path><path d="M8 10.5v4M6 12.5h4"></path>' + E,
 };
 
 /* Returns a detached element for a named icon (innerHTML on a span). */

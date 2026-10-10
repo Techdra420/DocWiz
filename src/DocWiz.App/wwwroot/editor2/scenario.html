@@ -156,15 +156,25 @@
       result.checks = { boldOk, headOk, noListOk };
       result.ok = boldOk && headOk && noListOk;
     } else if (mode === 'aligncycle') {
-      // Word-style alignment regression (stakeholder feedback): center toggles
-      // on/off, center->right switches IN PLACE (never nests a second wrapper),
-      // left removes. Drives the REAL toolbar buttons.
-      const btn = (t) => Array.from(document.querySelectorAll('.e2-maintoolbar button'))
-        .find((b) => (b.getAttribute('data-tip') || '').startsWith(t));
-      const center = btn('Center the selected block');
-      const right = btn('Right-align the selected block');
-      const left = btn('Align left');
-      if (!center || !right || !left) throw new Error('align buttons not found');
+      // Word-style alignment regression (stakeholder feedback): center turns on,
+      // center->right switches IN PLACE (never nests a second wrapper), picking the
+      // alignment it already has keeps it, left removes. Drives the REAL toolbar
+      // Align menu (the toolbar design pass folded the three buttons into it).
+      const alignBtn = Array.from(document.querySelectorAll('.e2-maintoolbar button'))
+        .find((b) => (b.getAttribute('data-tip') || '').startsWith('Alignment'));
+      if (!alignBtn) throw new Error('Align menu button not found');
+      const pick = (label) => ({
+        click: () => {
+          alignBtn.click();
+          const item = Array.from(document.querySelectorAll('.e2-menu .mi'))
+            .find((m) => m.textContent.trim() === label);
+          if (!item) throw new Error('Align menu has no ' + label);
+          item.click();
+        },
+      });
+      const center = pick('Center');
+      const right = pick('Right');
+      const left = pick('Left');
       let prefix = null;
       const findP = () => {
         let r = null;
@@ -203,7 +213,7 @@
       put(); right.click(); await sleep(20);
       checks.switchNoNest = wrapOf() === 'right' && depthOf() === 1;
       put(); right.click(); await sleep(20);
-      checks.toggleOff = wrapOf() === null;
+      checks.sameKeeps = wrapOf() === 'right' && depthOf() === 1;
       put(); center.click(); await sleep(20);
       put(); left.click(); await sleep(20);
       checks.leftRemoves = wrapOf() === null && depthOf() === 0;
@@ -355,8 +365,12 @@
       // Cursor to end of cell, open Ω, click the first symbol.
       mini.dispatch(mini.state.tr.setSelection(
         TextSelection.create(mini.state.doc, mini.state.doc.content.size - 1)));
-      const omega = tbBtn('Insert a special character');
-      if (!omega) throw new Error('symbol button not found');
+      const insertBtn = tbBtn('Insert something');
+      if (!insertBtn) throw new Error('Insert menu button not found');
+      insertBtn.click();
+      const omega = Array.from(document.querySelectorAll('.e2-menu .mi'))
+        .find((m) => /Special character/.test(m.textContent));
+      if (!omega) throw new Error('Special character not in the Insert menu');
       omega.click();
       await sleep(30);
       const sym = document.querySelector('.e2-contextbar .e2-tb-tools .ib');
@@ -1252,7 +1266,7 @@
       const text = menu.textContent;
       const hasReplace = /Replace/.test(text);
       const hasRotate = /Rotate 90/.test(text);
-      const hasDelete = /Delete image/.test(text);
+      const hasDelete = /Delete picture/.test(text);
       const hasSize = Array.from(menu.querySelectorAll('.mrow .mlbl')).some((s) => s.textContent === 'Size');
       const node0 = view.state.doc.nodeAt(pos);
       const capBefore = node0.attrs.meta.showCaption !== false;
@@ -1518,10 +1532,14 @@
       await sleep(50);
       const fig = document.querySelector('#editor2 .dw-table-figure.e2-active');
       if (!fig) throw new Error('table did not activate on selection');
-      // Invoke the Focus button through the real toolbar control.
-      const focusBtn = Array.from(document.querySelectorAll('.e2-maintoolbar button, .e2-contextbar button'))
-        .find((b) => (b.getAttribute('data-tip') || '').toLowerCase().includes('expand this table'));
-      if (!focusBtn) throw new Error('Focus button not found in toolbar');
+      // Invoke Focus through the real table bar: its ⋯ menu ("Focus this table").
+      const moreBtn = Array.from(document.querySelectorAll('.e2-contextbar button'))
+        .find((b) => (b.getAttribute('data-tip') || '').startsWith('More table tools'));
+      if (!moreBtn) throw new Error('⋯ button not found in the table bar');
+      moreBtn.click();
+      const focusBtn = Array.from(document.querySelectorAll('.e2-menu .mi'))
+        .find((m) => /Focus this table/.test(m.textContent));
+      if (!focusBtn) throw new Error('Focus this table not in the ⋯ menu');
       focusBtn.click();
       await sleep(40);
       // Assert .e2-focus class is present.

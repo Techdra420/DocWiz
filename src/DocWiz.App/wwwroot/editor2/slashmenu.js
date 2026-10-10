@@ -22,6 +22,7 @@ import { Plugin, PluginKey } from 'prosemirror-state';
 import { setBlockType, wrapIn } from 'prosemirror-commands';
 import { wrapInList } from 'prosemirror-schema-list';
 import { icon } from './icons.js';
+import { INSERTS } from './inserts.js';
 
 export const slashMenuKey = new PluginKey('dwSlashMenu');
 
@@ -60,13 +61,14 @@ function items(opts) {
       match: 'quote blockquote citation',
       run: () => E.runActiveCmd(wrapIn(schema.nodes.blockquote)),
     },
+    // The inserts' words and icons come from the shared vocabulary (inserts.js, ADR-008).
     {
-      key: 'image', title: 'Image', desc: 'A picture from the project assets', svg: 'image',
+      key: 'image', title: INSERTS.picture.title, desc: INSERTS.picture.desc, svg: INSERTS.picture.icon,
       match: 'image picture photo figure asset screenshot',
       run: () => { if (bridge().image) bridge().image(); },
     },
     {
-      key: 'embed', title: 'Linked element', desc: 'Transclude a chapter section (stays in sync)', svg: 'chapterLink',
+      key: 'embed', title: INSERTS.linked.title, desc: INSERTS.linked.desc, svg: INSERTS.linked.icon,
       match: 'linked element embed transclude section chapter reference link',
       run: () => insertLinkedElement(opts),
     },
