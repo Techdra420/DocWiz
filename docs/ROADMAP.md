@@ -2,13 +2,14 @@
 
 **Current Stage:** Stage 5 — pilot on a real customer project. Stages 1, 2, and 4 complete;
 Stage 3 (editor MVP) functionally complete (live editor shipped; single exe verified on a
-clean machine).
+clean machine). Stage 6 (editor redesign) approved 2026-10-10 and in progress alongside the
+pilot — step 1 (trust fixes) first.
 **V1.0:** both agreed V1.0 features — **PDF export** and **content-only zoom** — are built and
 merged to `main`. Remaining for the v1.0 tag: close the pilot loop + release hygiene (tag, prune).
 ADR-004 (amended), ADR-005, ADR-006, ADR-007, and ADR-008 are all written in
 [ARCHITECTURE.md](ARCHITECTURE.md).
-**Last Updated:** 2026-10-10 — Claude desktop app setup: editor preview config, path-independent
-agent permissions, worktree ignores.
+**Last Updated:** 2026-10-10 — Stage 6 (editor redesign) approved with its decisions and steps;
+Claude desktop app setup.
 
 Stage transitions require human approval. Success criteria are the checkpoints.
 
@@ -143,6 +144,63 @@ editor and presents it from the handover. ✔ Met.
 **Success criteria:** the pilot project is handed over as a DocWiz package; the training
 is delivered from the generated view; feedback from a non-programmer author is collected.
 
+## Stage 6 — Editor redesign (approved 2026-10-10, in progress)
+
+Source: a user-side UX audit of the editor (38 findings: layout, structure, audiences,
+outputs, settings, trust) plus a CSS consistency count. The design system stays; the work
+is structure, consolidation, and fixing what breaks trust.
+
+**Decisions (stakeholder, 2026-10-10):**
+
+- **Sections keep their folders, and the folder name is the section name** — `020-Instalace a síť`
+  (number, then the exact name; accents, spaces, capitals allowed; the Windows-forbidden
+  characters `\ / : * ? " < > |` are refused with a message). Renaming, deleting, and moving a
+  section act on the real folder. Legacy slug names (`020-setup`) keep working. Removing folders
+  altogether stays a possible later decision.
+- **Chapter files follow their title** (same rule); links are unaffected because they use the
+  chapter `id` (ADR-005).
+- **Audiences are first-class, down to single blocks**: a Readers picker per chapter and per
+  block, quiet margin markers, "Preview as" an audience (supersedes VISION.md's plan to demote
+  audience tagging).
+- **Autosave**, shipped together with **history** — never before it.
+- **History** lives in `.docwiz/history/` inside the project (git-ignored), is kept forever, and
+  stores each snapshot as a complete copy of one file, so deleting any snapshot or the whole
+  folder breaks nothing. Size and "Clean up older than…" in Settings.
+- **Sidebar tabs**: Manual · Outputs · Files; settings becomes a sheet, not a third column.
+- **"Discipline" leaves the interface**; New chapter offers "Start from: Blank / Procedure /
+  Troubleshooting / Reference". Existing `discipline:` frontmatter is still read.
+- **Light theme by default**, following Windows dark mode.
+
+**Steps:**
+
+- [ ] 1. Trust fixes (no design decisions needed): Source edits lost when switching back to
+      Edit; new chapters always tagged user/support/admin; skeletons hardcode
+      `::: audience admin`; deleting an audience leaves stale tags; raw-YAML success shown as an
+      error; unsaved settings discarded silently; image size "undefined"; Insert element OK does
+      nothing; document-mode views show slide controls; slide-editor messages invisible; package
+      type silently replaced; toolbar scrolls sideways on laptops; settings rail height; tooltip
+      over menus and Esc; Build-label and switch-knob contrast; browser `confirm()`/`prompt()`/
+      `alert()` replaced by DocWiz dialogs with action-named buttons
+- [ ] 2. Structure you can edit: section and chapter rename/move/delete/drag in the tree acting on
+      the real folders and files; New chapter in the tree; chapter title = its H1; "Start from"
+      replaces discipline
+- [ ] 3. History, then autosave: snapshots, per-chapter timeline with highlighted changes, restore
+      (itself undoable), named project versions, Recently deleted, size + clean-up
+- [ ] 4. Shell and document bar: sidebar tabs, document bar (section / title, Readers, status,
+      Edit · Source · Read, properties, ⋯), properties panel, settings sheet, one primary per
+      screen, light default
+- [ ] 5. Audiences: Readers picker (chapter + block), manager with descriptions and usage counts,
+      margin markers, Preview as
+- [ ] 6. Outputs editor: shared header, thumbnail rail, insert anywhere, change layout later,
+      document-mode wording
+- [ ] 7. Consolidation pass: one recipe each for buttons, inputs, menus, badges, segmented
+      controls; one icon set at one stroke; three control heights; a z-index scale — verified
+      with the visual probe in both themes
+
+**Success criteria:** a non-programmer renames and reorders sections and chapters, tags a
+paragraph for one audience and previews it as that audience, and undoes a mistake from history —
+all without help, without a browser dialog, and without seeing a file path or an id.
+
 ## Backlog
 
 Open items (everything shipped is in Recent Changes):
@@ -161,6 +219,7 @@ Open items (everything shipped is in Recent Changes):
 
 | Date | Stage | Description |
 |------|-------|-------------|
+| 2026-10-10 | Stage 6 | Editor redesign approved after a user-side UX audit: decisions recorded (folder name = section name, chapter files follow titles, first-class block-level audiences, history + autosave, sidebar tabs, discipline retired from the UI, light default) and seven steps defined |
 | 2026-10-10 | Tooling | Claude desktop app setup: `.claude/launch.json` runs the editor on the Stockroom demo (port 5230) for the in-app browser preview; `.claude/settings.json` permission rules made repo-relative so they work on any clone path and in session worktrees; `.claude/worktrees/` and `.claude/settings.local.json` git-ignored |
 | 2026-09-17 | Release hygiene | Sample project replaced by the Stockroom demo (user / support / admin audiences; setup / operations / troubleshooting / reference / integration disciplines; `api_reference` / `release_notes` / `integration_guide` external packages); template library reset to the Software Handbook template; consumed planning docs removed; docs consolidated |
 | 2026-07-08 | Stage 5 | Chapter export + single-file HTML + print code-wrap fix: Export modal gains per-chapter selection and a PDF/HTML format toggle; printed code blocks wrap instead of baking a scrollbar |

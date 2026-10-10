@@ -41,6 +41,11 @@ Remaining for the v1.0 tag: close the pilot loop (deliver a training from the us
 non-programmer colleague edit unaided, collect feedback) + release hygiene (tag, prune). See
 [docs/ROADMAP.md](docs/ROADMAP.md).
 
+**Stage 6 — editor redesign** was approved on 2026-10-10 after a user-side UX audit and runs
+alongside the pilot: trust fixes first, then an editable structure (folder name = section name),
+history + autosave, a calmer shell, first-class audiences, the outputs editor, and a
+consolidation pass. Decisions and steps are in [docs/ROADMAP.md](docs/ROADMAP.md).
+
 | Stage | Scope | Status |
 |-------|-------|--------|
 | 0 | Vision, content model, architecture/ADRs, sample project, viewer mockup | Complete |
@@ -49,6 +54,7 @@ non-programmer colleague edit unaided, collect feedback) + release hygiene (tag,
 | 3 | Editor app MVP: live-surface chapters, images, links, templates, single exe | Complete (single exe verified on a clean machine) |
 | 4 | View manager in editor, single-file export, packaging | Complete |
 | 5 | Pilot on a real customer project (incl. Word import: editor Import… + New project from Word) | In progress (pilot loop) |
+| 6 | Editor redesign: trust fixes, editable structure, history + autosave, shell, audiences, outputs, consolidation | In progress (step 1) |
 | — | Live editor: one surface that IS the page (M0–M5 ✓ — flipped 2026-06-12 after stakeholder sign-off; ADRs in ARCHITECTURE.md) | Shipped |
 
 ## Start here

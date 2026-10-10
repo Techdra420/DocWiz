@@ -31,6 +31,16 @@ my-product-docs/
 - **Numeric prefixes** (`010-`, `020-`) define order. Gaps of 10 leave room for
   insertions. The editor manages renumbering.
 - Folder = section, file = chapter. One `H1` per chapter.
+- **Planned (Stage 6, step 2): the folder name is the section name.** A section folder is
+  named `NNN-<exact section name>` — e.g. `020-Instalace a síť` — and the editor shows the
+  text after the prefix verbatim (accents, spaces, capitals). Renaming, moving, or deleting
+  a section in the editor acts on the folder itself; names containing `\ / : * ? " < > |` are
+  refused. Chapter files follow their title the same way. Legacy slug names
+  (`020-setup`, `010-system-overview.md`) keep working and keep today's derived titles.
+  Links never depend on file or folder names — they use the chapter `id`.
+- **Planned (Stage 6, step 3): `.docwiz/history/`** holds the editor's change history —
+  complete copies of earlier file versions, kept until deleted. Nothing reads it except
+  the History panel, so deleting any part of it is safe. Git-ignored; never shipped.
 
 ## Manifest — `docwiz.yaml`
 
@@ -65,7 +75,7 @@ or a customer-specific audience without engine changes.
 ---
 id: system-overview          # stable ID — never changes after creation; used by links/views
 title: System Overview
-discipline: overview         # which kind of chapter it is (drives editor templates and grouping)
+discipline: overview         # optional: the skeleton the chapter started from; not used by the build
 audiences: [user, support, admin]   # who sees this chapter at all
 ---
 
