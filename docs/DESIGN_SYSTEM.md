@@ -71,7 +71,9 @@ the project tile and the grouped nav cluster sit on it (their definition comes f
 not luminance). `--dw-mark` (`#2f6cae`, both themes) is the **brand accent for dark chrome**:
 `--dw-accent` (#1f4e79) is too dark to read as a brand fill on the bar, so the brand mark and the Build
 button use `--dw-mark` (white text on it = 5.4:1). **Scope: both tokens are chrome-only — never use them
-on light `--dw-surface`.**
+on light `--dw-surface`.** Text on `--dw-mark` is `--dw-mark-text` (white) — not `--dw-accent-contrast`,
+which resolves to dark ink inside the always-dark header (3.4:1) — and its hover/pressed step is
+`--dw-mark-strong` (#255b94, white text 7.0:1). Both chrome-only, same in both themes.
 
 ---
 

@@ -1435,7 +1435,7 @@ function buildMainToolbar(opts) {
     editBtn.classList.add('active');
 
     const srcBtn = vsBtn('e2SourceBtn', 'code', 'Source',
-      'Shows the exact markdown this chapter will save as. For fixing import artifacts the visual surface cannot express. Apply replaces the whole chapter body.');
+      'Shows the exact markdown this chapter will save as. For fixing import artifacts the visual surface cannot express. Switching back to Edit saves what you changed here.');
 
     const readBtn = vsBtn('e2ReadingBtn', 'eye', 'Read',
       'Opens this chapter exactly as the built handover will render it (saves your changes first).');
@@ -1443,24 +1443,36 @@ function buildMainToolbar(opts) {
     mainTrack.appendChild(vs);
 
     // Wire view-switch handlers after bar is in the DOM tree (open() calls us).
-    srcBtn.onclick = () => {
-      const active = !current || !!current.sourceArea;
-      toggleSource(!active);
-      editBtn.classList.toggle('active', active);
-      srcBtn.classList.toggle('active', !active);
+    const markMode = (mode) => {
+      editBtn.classList.toggle('active', mode === 'edit');
+      srcBtn.classList.toggle('active', mode === 'source');
       readBtn.classList.remove('active');
+    };
+    // Leaving Source keeps what was typed there: changed text goes through the normal save
+    // (the server writes it and the surface rebuilds from it — see rebuild()); unchanged text
+    // just closes. A failed save keeps Source open; the status line says why.
+    const leaveSource = () => {
+      const area = current && current.sourceArea;
+      if (!area) { markMode('edit'); return; }
+      if (area.value === area.dataset.initial) { toggleSource(false); markMode('edit'); return; }
+      const save = window.DocWizBridge && window.DocWizBridge.saveChapter;
+      if (!save) return;
+      save().then(() => markMode('edit')).catch(() => {});
+    };
+    srcBtn.onclick = () => {
+      if (!current) return;
+      if (current.sourceArea) leaveSource();
+      else { toggleSource(true); markMode('source'); }
     };
     readBtn.onclick = () => {
       const url = '/preview-root/chapter?file=' + encodeURIComponent(current.file);
       const save = window.DocWizBridge && window.DocWizBridge.saveChapter;
-      (save ? save() : Promise.resolve()).then(() => window.open(url, '_blank'));
+      (save ? save() : Promise.resolve()).then(() => {
+        if (current && !current.sourceArea) markMode('edit'); // the save closed Source
+        window.open(url, '_blank');
+      });
     };
-    editBtn.onclick = () => {
-      if (current && current.sourceArea) toggleSource(false);
-      editBtn.classList.add('active');
-      srcBtn.classList.remove('active');
-      readBtn.classList.remove('active');
-    };
+    editBtn.onclick = leaveSource;
   }
 
   bar.appendChild(mainTrack);
@@ -1747,6 +1759,7 @@ function toggleSource(show) {
   area.className = 'e2-source';
   area.spellcheck = false;
   area.value = resolveOps(buildSavePayload());
+  area.dataset.initial = area.value; // leaving Source applies the text only if it changed
   area.addEventListener('input', () => {
     if (current.opts.onDirty) current.opts.onDirty();
   });

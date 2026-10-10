@@ -44,11 +44,13 @@ button:focus-visible, .ghost:focus-visible, a:focus-visible, input:focus-visible
 button:disabled { opacity: 0.45; cursor: default; }
 button.primary { background: var(--dw-accent); color: var(--dw-accent-contrast); border-color: var(--dw-accent); }
 button.primary:hover { background: var(--dw-accent-strong); border-color: var(--dw-accent-strong); }
-#quitBtn, #vDeleteBtn, #chDeleteBtn {
+/* Danger recipe (DESIGN_SYSTEM §5): outlined, red text, never solid at rest. The header's
+   Quit button has its own muted-until-hover style (.hd-quit-btn), so it is not listed here. */
+#vDeleteBtn, #chDeleteBtn, dialog#modal button.danger {
   color: var(--dw-bad);
   border-color: var(--dw-border);
 }
-#quitBtn:hover, #vDeleteBtn:hover, #chDeleteBtn:hover { background: var(--dw-bad-bg); border-color: var(--dw-bad); }
+#vDeleteBtn:hover, #chDeleteBtn:hover, dialog#modal button.danger:hover { background: var(--dw-bad-bg); border-color: var(--dw-bad); }
 
 /* ---- Chrome (always dark â€” header carries data-theme="dark") --------------- */
 header {
@@ -206,13 +208,13 @@ header {
   display: inline-flex; align-items: center; gap: var(--dw-s2);
   height: 34px; padding: 0 var(--dw-s4) 0 var(--dw-s3);
   border: 0; border-radius: 8px; cursor: pointer;
-  background: var(--dw-mark); color: var(--dw-accent-contrast);
+  background: var(--dw-mark); color: var(--dw-mark-text);
   font-size: var(--dw-fs-sm); font-weight: var(--dw-w-bold);
   font-family: var(--dw-font-ui); letter-spacing: 0.1px; white-space: nowrap;
   box-shadow: var(--dw-shadow);
   transition: background 0.12s, transform 0.04s;
 }
-.hd-build-btn:hover { background: var(--dw-accent); }
+.hd-build-btn:hover { background: var(--dw-mark-strong); }
 .hd-build-btn:active { transform: translateY(1px); }
 .hd-build-btn:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
 
@@ -1894,7 +1896,7 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
 .e2-maintoolbar {
   display: flex;
   align-items: center;
-  height: 48px;
+  min-height: 48px; /* grows to a second row on narrow windows — see .tb-scroll */
   padding: 0 var(--dw-s4);
   background: var(--dw-surface);
   border-bottom: 1px solid var(--dw-border);
@@ -1921,20 +1923,19 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
   height: 100%;
   gap: 0;
 }
+/* The formatting groups WRAP onto a second row when the window is narrow (a 1366px laptop
+   needs it): a sideways-scrolling toolbar hid its last buttons and its scrollbar crossed the
+   chapter title. The context bar hangs off .e2-top's bottom (top: 100%), so it follows. */
 .tb-scroll {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   flex: 1 1 auto;
   min-width: 0;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: thin;
-  scrollbar-color: var(--dw-border) transparent;
   gap: 0;
+  row-gap: var(--dw-s1);
+  padding-block: var(--dw-s1);
 }
-.tb-scroll::-webkit-scrollbar { height: 6px; }
-.tb-scroll::-webkit-scrollbar-thumb { background: var(--dw-border); border-radius: 6px; }
-.tb-scroll::-webkit-scrollbar-track { background: transparent; }
 
 /* Contextual track: badge + tool strip */
 .e2-tb-ctx {
@@ -2417,7 +2418,9 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
 .dwa-foot .dwa-mono { color: var(--dw-faint); }
 
 /* Add-package modal labels/radios */
-.mlbl { display: block; margin: var(--dw-s4) 0 var(--dw-s1); font-size: var(--dw-fs-sm); font-weight: var(--dw-w-bold); color: var(--dw-text); }
+/* Dialog field labels. Scoped to the dialog: right-click menus use .mlbl for their item
+   labels, and an unscoped rule made those bold, block-level, and pushed down. */
+dialog#modal .mlbl { display: block; margin: var(--dw-s4) 0 var(--dw-s1); font-size: var(--dw-fs-sm); font-weight: var(--dw-w-bold); color: var(--dw-text); }
 .mradio { display: flex; align-items: flex-start; gap: var(--dw-s2); margin-top: var(--dw-s2); font-size: var(--dw-fs-sm); color: var(--dw-text); }
 .mradio input { margin-top: 3px; }
 /* Export modal: section heading over a group of chapter/view checkboxes, and the indented chapter rows. */
@@ -2428,7 +2431,7 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
    Settings surface (#setPane) — interactive docwiz.yaml editor + app prefs.
    Ported from the Claude Design mock, mapped to --dw-* tokens; scoped under
    #setPane so the generic class names (.finput/.switch/.seg/.frow) can't clash. */
-#setPane { display: flex; min-width: 0; min-height: 0; overflow: hidden; }
+#setPane { display: flex; flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
 #setPane[hidden] { display: none; }
 
 #setPane .set-rail { width: 262px; flex-shrink: 0; background: var(--dw-surface); border-right: 1px solid var(--dw-border); display: flex; flex-direction: column; overflow: hidden; }
@@ -2483,10 +2486,11 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
 #setPane .inline-row { display: flex; align-items: center; gap: var(--dw-s3); flex-wrap: wrap; }
 
 /* Toggle switch */
-#setPane .switch { position: relative; width: 42px; height: 24px; border-radius: 20px; background: var(--dw-border-strong); border: 0; cursor: pointer; flex-shrink: 0; transition: background .15s; padding: 0; }
-#setPane .switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--dw-accent-contrast); box-shadow: var(--dw-shadow); transition: left .15s; }
+/* Off: surface knob on a muted track (≥6:1 both themes; the old border-strong track was ~2:1). */
+#setPane .switch { position: relative; width: 42px; height: 24px; border-radius: 20px; background: var(--dw-muted); border: 0; cursor: pointer; flex-shrink: 0; transition: background .15s; padding: 0; }
+#setPane .switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--dw-surface); box-shadow: var(--dw-shadow); transition: left .15s; }
 #setPane .switch[aria-checked="true"] { background: var(--dw-accent); }
-#setPane .switch[aria-checked="true"]::after { left: 21px; }
+#setPane .switch[aria-checked="true"]::after { left: 21px; background: var(--dw-accent-contrast); }
 #setPane .switch:focus-visible { outline: none; box-shadow: var(--dw-focus-ring); }
 #setPane .toggle-row { display: flex; align-items: center; gap: var(--dw-s3); }
 #setPane .tlabel { font-size: var(--dw-fs-sm); color: var(--dw-text); }

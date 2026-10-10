@@ -350,6 +350,12 @@
   }
 
   function init() {
+    // A success message queued before a reload (flashAfterReload).
+    try {
+      var flash = JSON.parse(sessionStorage.getItem('dwFlash') || 'null');
+      sessionStorage.removeItem('dwFlash');
+      if (flash) showToast(flash.title, flash.message, 'success');
+    } catch (e) { /* storage off or malformed — nothing to show */ }
     // Build stamp in the header: makes "which binary am I running" answerable
     // from any screenshot (stale-exe sessions are indistinguishable otherwise).
     fetch('/api/version').then(function (r) { return r.json(); }).then(function (v) {
@@ -825,7 +831,7 @@
   /* ---------- chapter editing ---------- */
 
   function openChapter(file) {
-    if (!confirmDiscard()) return;
+    if (!confirmDiscard(openChapter, arguments)) return;
     api.json('/api/chapter?file=' + encodeURIComponent(file)).then(function (ch) {
       state.currentFile = file;
       state.currentYaml = null;
@@ -937,6 +943,17 @@
     s.className = 'cb-status' + (cls ? ' ' + cls : '');
   }
 
+  // Messages from the live surface (link, image, embed tools) go to the status line of the
+  // editor that is on screen — the chapter bar's line is hidden while a view is edited.
+  function editorStatus(text, cls) {
+    if (!$('viewEditor').hidden) {
+      $('vStatus').textContent = text;
+      $('vStatus').className = cls || '';
+    } else {
+      setStatus(text, cls);
+    }
+  }
+
   // True when the slide-zone editors hold edits not yet saved (Task 7c). state.dirty is
   // the primary signal (zone edits flip it via onZoneDirty), but the slideedit module
   // owns its own per-zone dirty flags with a separate lifecycle; consulting both here
@@ -946,8 +963,30 @@
     return !!(window.DocWizSlideEdit && window.DocWizSlideEdit.isDirty && window.DocWizSlideEdit.isDirty());
   }
 
-  function confirmDiscard() {
-    return (!state.dirty && !slideZonesDirty()) || window.confirm('Discard unsaved changes?');
+  function settingsDirty() {
+    var pane = $('setPane');
+    return !!pane && pane.classList.contains('dirty');
+  }
+
+  // Unsaved-work guard for every navigation. Returns true when nothing is unsaved (chapter,
+  // view, slide zones, Project settings). Otherwise it asks in a DocWiz dialog and returns
+  // false; "Discard changes" then re-runs retry(...args) once with the guard satisfied.
+  var discardConfirmed = false;
+  function confirmDiscard(retry, args) {
+    if (discardConfirmed) { discardConfirmed = false; return true; }
+    if (!state.dirty && !slideZonesDirty() && !settingsDirty()) return true;
+    confirmDialog('Discard unsaved changes?',
+      settingsDirty() && !state.dirty
+        ? 'Your Project settings changes haven’t been saved yet.'
+        : 'Your latest changes haven’t been saved yet.',
+      'Discard changes', function () {
+        setDirty(false);
+        state.dirty = false; // the next screen replaces the edited content
+        if (window.DocWizSlideEdit && window.DocWizSlideEdit.markClean) window.DocWizSlideEdit.markClean();
+        discardConfirmed = true;
+        try { retry.apply(null, args || []); } finally { discardConfirmed = false; }
+      }, true);
+    return false;
   }
 
   /* ---------- insert helpers ---------- */
@@ -1278,7 +1317,7 @@
   // via DocWizEditor2.presets) — the px values exist in exactly one place. The
   // dialog lists them descending; Medium is the default.
   function imgSizeOptions() {
-    var names = { S: 'Small', M: 'Medium', L: 'Large' };
+    var names = { XS: 'Icon', S: 'Small', M: 'Medium', L: 'Large' };
     var rows = window.DocWizEditor2.presets.figure.slice().reverse();
     return '<option value="">Original size</option>' + rows.map(function (p) {
       return '<option value="' + p[1] + '"' + (p[0] === 'M' ? ' selected' : '') + '>' +
@@ -1316,7 +1355,8 @@
               setStatus('Element inserted — replace the placeholder text.', 'ok');
             };
           });
-        });
+        },
+        { hideOk: true }); // a row click inserts and closes; an OK button would do nothing
     },
 
     image: function () {
@@ -1578,19 +1618,19 @@
         window.DocWizEditor2.patchActiveGroup({ label: name || null, desc: desc || null });
     }); },
     groupEdit: groupDialog,   // (current, onOk) — used by the group node's right-click Edit
-    toast: setStatus,
+    toast: editorStatus,
     saveChapter: function () { return saveChapter(); }, // Reading view saves first
     openChapterById: function (id) {
       var file = chapterFileFor(id);
       if (file) openChapter(file);
-      else setStatus('No chapter with id "' + id + '" in this project.', 'err');
+      else editorStatus('No chapter with id "' + id + '" in this project.', 'err');
     },
   };
 
   /* ---------- yaml editing ---------- */
 
   function openYaml(path) {
-    if (!confirmDiscard()) return;
+    if (!confirmDiscard(openYaml, arguments)) return;
     api.json('/api/yaml?path=' + encodeURIComponent(path)).then(function (res) {
       state.currentYaml = path;
       state.currentFile = null;
@@ -1717,6 +1757,12 @@
     if (!panel || !list) return;
     var slidesMode = $('vMode').value === 'slides';
     panel.hidden = !slidesMode;
+    // The "+ Add slide" belt and its slide-canvas hint mean nothing on a document page.
+    var belt = document.querySelector('#viewEditor .toolbelt');
+    if (belt) belt.hidden = !slidesMode;
+    $('vReadBtn').setAttribute('data-tip', slidesMode
+      ? 'Open the deck the way your audience sees it — full-screen-ready slides, one at a time.'
+      : 'Open this document the way your audience sees it — one tidy page, exactly like the handover.');
     if (!slidesMode) return;
 
     var slides = state.viewSlides || [];
@@ -1859,7 +1905,7 @@
       '<p class="mhelp">Delete slide <b>' + (i + 1) + '</b> (' + esc(slideLabelFor(slide)) + ')? ' +
       'Its content is removed from this view. Linked blocks just stop being shown here — ' +
       'the source chapter is not touched.</p>',
-      function () { proceed(); });
+      function () { proceed(); }, null, { okLabel: 'Delete slide', danger: true });
   }
 
 
@@ -1919,7 +1965,7 @@
   }
 
   function openView(file) {
-    if (!confirmDiscard()) return;
+    if (!confirmDiscard(openView, arguments)) return;
     api.json('/api/view?file=' + encodeURIComponent(file)).then(function (v) {
       state.currentView = file;
       state.currentFile = null;
@@ -2196,8 +2242,8 @@
         '</button>';
     }).join('');
     openModal('Add a slide',
-      '<p class="mhelp">Pick a layout for the new slide. You can change it later, ' +
-      'and fill in its content directly on the slide canvas.</p>' +
+      '<p class="mhelp">Pick a layout for the new slide, then fill in its content ' +
+      'directly on the slide canvas.</p>' +
       '<div class="vlay-gallery">' + cards + '</div>',
       null,
       function (root) {
@@ -2239,7 +2285,13 @@
         if (window.DocWizSlideEdit && window.DocWizSlideEdit.markClean) window.DocWizSlideEdit.markClean();
         $('vStatus').textContent = 'Saved ✓';
         $('vStatus').className = 'ok';
-        return loadProject().then(runCheck);
+        // Re-check after a save, but only interrupt with the panel when something is broken
+        // (the Check button shows the full list, warnings included, any time).
+        return loadProject()
+          .then(function () { return api.json('/api/check'); })
+          .then(function (issues) {
+            if (issues.some(function (i) { return i.severity === 'Error'; })) showIssues('Check results', issues);
+          });
       })
       .catch(function (e) {
         $('vStatus').textContent = e.message;
@@ -2257,9 +2309,8 @@
     if (!state.currentFile) return;
     var title = $('fmTitle').value || state.currentFile;
     openModal('Delete chapter',
-      '<p class="mhelp">This permanently deletes "<b>' + esc(title) + '</b>" (' +
-      esc(state.currentFile) + '). If other chapters or views still link to it, the ' +
-      'delete is refused so nothing ends up broken.</p>',
+      '<p class="mhelp">This permanently deletes “<b>' + esc(title) + '</b>”. If other ' +
+      'chapters or views still link to it, the delete is refused so nothing ends up broken.</p>',
       function (root) {
         api.send('DELETE', '/api/chapter?file=' + encodeURIComponent(state.currentFile))
           .then(function () {
@@ -2271,7 +2322,7 @@
           })
           .catch(function (e) { modalWarn(root, e.message); });
         return false; // async: the dialog closes itself on success, warns on refusal
-      });
+      }, null, { okLabel: 'Delete chapter', danger: true });
   }
 
   // Duplicate = the template workflow: build one proven view structure, stamp out a
@@ -2311,7 +2362,12 @@
   }
 
   function deleteView() {
-    if (!window.confirm('Delete this view? Its file will be removed.')) return;
+    confirmDialog('Delete this view?',
+      '“' + ($('vTitle').value || 'This view') + '” and all its slides will be removed. The chapters it shows are not affected.',
+      'Delete view', deleteViewConfirmed, true);
+  }
+
+  function deleteViewConfirmed() {
     api.send('DELETE', '/api/view?file=' + encodeURIComponent(state.currentView))
       .then(function () {
         state.currentView = null;
@@ -2326,7 +2382,7 @@
   }
 
   function newView() {
-    if (!confirmDiscard()) return;
+    if (!confirmDiscard(newView, arguments)) return;
     var audiences = state.project.audiences.map(function (a) {
       return '<option value="' + esc(a.id) + '">' + esc(a.title) + '</option>';
     }).join('');
@@ -2348,8 +2404,10 @@
           audience: root.querySelector('#nvAud').value,
           mode: root.querySelector('#nvMode').value,
         }).then(function (res) {
+          root.close();
           return loadProject().then(function () { openView(res.file); });
-        }).catch(function (e) { window.alert(e.message); });
+        }).catch(function (e) { modalWarn(root, e.message); });
+        return false; // async: closes on success, keeps the input and warns on failure
       },
       function (root) {
         var t = root.querySelector('#nvTitle');
@@ -2364,7 +2422,7 @@
   // the `docwiz draft-view` CLI verb uses. Audience defaults to the chapter's first
   // tagged audience so the embeds stay clean; the author can override it here.
   function draftFromManual() {
-    if (!confirmDiscard()) return;
+    if (!confirmDiscard(draftFromManual, arguments)) return;
     var picker = chapterOptgroups();
     var chapters = picker.chapters;
     var groups = picker.html;
@@ -2384,8 +2442,10 @@
           chapter: id,
           audience: root.querySelector('#dvAud').value,
         }).then(function (res) {
+          root.close();
           return loadProject().then(function () { openView(res.file); });
-        }).catch(function (e) { window.alert(e.message); });
+        }).catch(function (e) { modalWarn(root, e.message); });
+        return false; // async: closes on success, keeps the input and warns on failure
       },
       function (root) {
         // Default the audience to the chosen chapter's first tagged audience (keeps the
@@ -2468,8 +2528,11 @@
           title: title,
           discipline: root.querySelector('#mDisc').value,
           audiences: [],
-        }).then(function (res) { return loadProject().then(function () { openChapter(res.file); }); })
-          .catch(function (e) { window.alert(e.message); });
+        }).then(function (res) {
+          root.close();
+          return loadProject().then(function () { openChapter(res.file); });
+        }).catch(function (e) { modalWarn(root, e.message); });
+        return false; // async: closes on success, keeps the input and warns on failure
       },
       function (root) {
         var sel = root.querySelector('#mSection');
@@ -2508,20 +2571,27 @@
   function convertEmf() {
     var n = state.project && state.project.emfCount;
     if (!n) return;
-    if (!window.confirm('Convert ' + n + ' EMF/WMF image(s) to PNG?\n\n' +
-        'Originals are moved to _emf-originals/ (kept, not shipped).')) return;
-    var btn = $('convertEmfBtn');
-    btn.disabled = true;
-    $('convertEmfLabel').textContent = 'Converting…';
-    api.send('POST', '/api/convert-emf', {}).then(function (r) {
-      window.alert('Converted ' + r.converted + ' image(s) to PNG; rewrote ' + r.linksRewritten + ' link(s).' +
-        (r.failed ? '\n' + r.failed + ' could not be converted and were left in place.' : ''));
-      location.reload();
-    }).catch(function (e) {
-      btn.disabled = false;
-      $('convertEmfLabel').textContent = 'Convert ' + n + ' EMF/WMF…';
-      window.alert('Conversion failed: ' + e.message);
-    });
+    confirmDialog('Convert ' + n + ' Word image' + (n === 1 ? '' : 's') + ' to PNG?',
+      'Browsers can’t show EMF/WMF images. The originals are moved to _emf-originals/ (kept, not shipped).',
+      'Convert images', function () {
+        var btn = $('convertEmfBtn');
+        btn.disabled = true;
+        $('convertEmfLabel').textContent = 'Converting…';
+        api.send('POST', '/api/convert-emf', {}).then(function (r) {
+          flashAfterReload('Images converted', 'Converted ' + r.converted + ' image(s) to PNG and updated ' +
+            r.linksRewritten + ' link(s).' + (r.failed ? ' ' + r.failed + ' could not be converted and were left in place.' : ''));
+          location.reload();
+        }).catch(function (e) {
+          btn.disabled = false;
+          $('convertEmfLabel').textContent = 'Convert ' + n + ' EMF/WMF…';
+          showToast('Conversion failed', e.message, 'error');
+        });
+      });
+  }
+
+  // A success message that must survive a page reload (shown by init()).
+  function flashAfterReload(title, message) {
+    try { sessionStorage.setItem('dwFlash', JSON.stringify({ title: title, message: message })); } catch (e) { /* storage off */ }
   }
 
   /* ---------- Export PDF (background job) ----------
@@ -2616,7 +2686,7 @@
 
   // Header Import…: the cherry-pick dialog for the mounted project.
   function importDocx() {
-    if (!confirmDiscard()) return;
+    if (!confirmDiscard(importDocx, arguments)) return;
     var sections = state.project.sections.map(function (s) {
       return '<option value="' + esc(s.folder) + '">' + esc(s.title) + '</option>';
     }).join('');
@@ -2728,9 +2798,9 @@
       discipline: '', audiences: allAudiences, // None + all by default; the walkthrough refines
     }).then(function (outcome) {
       state.importToken = null;
-      if (outcome.error) { window.alert(outcome.error); return; }
+      if (outcome.error) { noticeDialog('Import didn’t finish', outcome.error); return; }
       loadProject().then(function () { afterImport(outcome); });
-    }).catch(function (e) { window.alert(e.message); });
+    }).catch(function (e) { noticeDialog('Import didn’t finish', e.message); });
   }
 
   function afterImport(outcome) {
@@ -2790,7 +2860,7 @@
           api.send('POST', '/api/chapter-frontmatter', {
             file: ch.file, discipline: root.querySelector('#wtDisc').value, audiences: picked,
           }).then(function () { root.close(); runWalkthrough(chapters, i + 1, done); })
-            .catch(function (e) { window.alert(e.message); });
+            .catch(function (e) { modalWarn(root, e.message); });
         };
       },
       { hideOk: true });
@@ -2855,16 +2925,22 @@
 
   /* ---------- modal ---------- */
 
-  // opts: { hideOk: true } — suppresses the primary OK button for click-to-pick
-  // galleries where the card click both acts and closes. All other callers omit opts
-  // and get the original two-button footer unchanged.
+  // opts (all optional; callers that omit opts get the original Cancel / OK footer):
+  //   hideOk     — no primary button, for click-to-pick galleries where the card click acts and closes;
+  //   okLabel    — name the action ("Delete chapter"), never a bare OK on a step that changes things;
+  //   danger     — the action destroys something: danger outline, never a primary (DESIGN_SYSTEM rule 8);
+  //   hideCancel — a notice with a single button.
   function openModal(title, bodyHtml, onOk, onMounted, opts) {
-    var hideOk = opts && opts.hideOk;
+    opts = opts || {};
+    var hideOk = opts.hideOk;
     var modal = $('modal');
     modal.innerHTML = '<h3>' + title + '</h3>' + bodyHtml +
-      '<div class="buttons"><button type="button" id="mCancel">Cancel</button>' +
-      (hideOk ? '' : '<button type="button" id="mOk" class="primary">OK</button>') + '</div>';
-    modal.querySelector('#mCancel').onclick = function () { modal.close(); };
+      '<div class="buttons">' +
+      (opts.hideCancel ? '' : '<button type="button" id="mCancel">Cancel</button>') +
+      (hideOk ? '' : '<button type="button" id="mOk" class="' + (opts.danger ? 'danger' : 'primary') + '">' +
+        esc(opts.okLabel || 'OK') + '</button>') + '</div>';
+    var cancel = modal.querySelector('#mCancel');
+    if (cancel) cancel.onclick = function () { modal.close(); };
     if (!hideOk) {
       modal.querySelector('#mOk').onclick = function () {
         // onOk returning false = validation failed: keep the dialog open (it shows
@@ -2875,6 +2951,34 @@
     }
     if (onMounted) onMounted(modal);
     modal.showModal();
+  }
+
+  // In-app replacements for the browser's confirm() / alert() / prompt(): same dialog, same
+  // look, and the button names the action. onConfirm / onValue run after the dialog has
+  // closed, so they may open the next dialog (the one #modal element is reused).
+  function confirmDialog(title, message, actionLabel, onConfirm, danger) {
+    openModal(esc(title), '<p class="mhelp">' + esc(message) + '</p>',
+      function () { setTimeout(onConfirm, 0); },
+      null, { okLabel: actionLabel, danger: !!danger });
+  }
+  function noticeDialog(title, message) {
+    openModal(esc(title), '<p class="mhelp">' + esc(message) + '</p>',
+      function () {}, null, { okLabel: 'OK', hideCancel: true });
+  }
+  function promptDialog(title, label, placeholder, actionLabel, onValue) {
+    openModal(esc(title),
+      '<div class="row"><label>' + esc(label) + '</label><input id="mPrompt" placeholder="' + esc(placeholder) + '"></div>',
+      function (root) {
+        var v = root.querySelector('#mPrompt').value.trim();
+        if (!v) return modalWarn(root, 'Type a ' + label.toLowerCase() + ' first.');
+        setTimeout(function () { onValue(v); }, 0);
+      },
+      function (root) {
+        var input = root.querySelector('#mPrompt');
+        input.onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); root.querySelector('#mOk').click(); } };
+        setTimeout(function () { input.focus(); }, 0);
+      },
+      { okLabel: actionLabel });
   }
 
   /// Shows an inline warning at the top of an open dialog and returns false
@@ -2911,7 +3015,7 @@
   }
 
   function openDocs() {
-    if (!confirmDiscard()) return;
+    if (!confirmDiscard(openDocs, arguments)) return;
     state.currentArtifact = 'docs';
     state.currentFile = null; state.currentView = null; state.currentYaml = null;
     show('viewDocs');
@@ -2924,6 +3028,7 @@
   }
 
   function renderPkgList(pkgs) {
+    state.packages = pkgs; // addPackage warns before replacing one of these
     var list = $('pkgList'), empty = $('pkgEmpty');
     list.innerHTML = '';
     empty.hidden = pkgs.length > 0;
@@ -2967,9 +3072,14 @@
   }
 
   function removePackage(p) {
-    if (!window.confirm('Remove the "' + p.title + '" documentation package from the handover?')) return;
-    api.send('DELETE', '/api/external-docs?key=' + encodeURIComponent(p.key))
-      .then(loadPkgList).catch(function (e) { reportError(e.message || String(e)); });
+    confirmDialog('Remove “' + p.title + '” from the handover?',
+      p.source === 'embedded'
+        ? 'Its copy inside the project is deleted. The folder you originally added it from is not touched.'
+        : 'The handover stops including it. The referenced folder is left in place.',
+      'Remove package', function () {
+        api.send('DELETE', '/api/external-docs?key=' + encodeURIComponent(p.key))
+          .then(loadPkgList).catch(function (e) { reportError(e.message || String(e)); });
+      }, true);
   }
 
   function addPackage() {
@@ -2982,6 +3092,7 @@
         'It must contain an <span class="mono">index.html</span> or <span class="mono">handover.html</span> entry point.</p>' +
         '<label class="mlbl">Type (becomes the handover tab)</label>' +
         '<select id="pkgTypeSel" style="width:100%">' + opts + '</select>' +
+        '<p class="mhelp warn" id="pkgReplaceNote" hidden></p>' +
         '<label class="mlbl">How to bundle it</label>' +
         '<label class="mradio"><input type="radio" name="pkgCopy" value="copy" checked> ' +
         'Copy into the project (self-contained — recommended)</label>' +
@@ -2994,6 +3105,20 @@
           .then(loadPkgList)
           .catch(function (e) { reportError(e.message || String(e)); });
         return true;
+      }, function (modal) {
+        // Adding a type that already exists replaces it (and deletes its embedded copy) —
+        // say so before it happens, and name the button for what it does.
+        var sel = modal.querySelector('#pkgTypeSel'), note = modal.querySelector('#pkgReplaceNote');
+        var ok = modal.querySelector('#mOk');
+        var sync = function () {
+          var existing = (state.packages || []).filter(function (p) { return p.key === sel.value; })[0];
+          note.hidden = !existing;
+          if (existing) note.textContent = 'This project already has an “' + existing.title + '” package. Adding this folder replaces it' +
+            (existing.source === 'embedded' ? ' and deletes the current copy inside the project.' : '.');
+          ok.textContent = existing ? 'Replace package' : 'Add package';
+        };
+        sel.onchange = sync;
+        sync();
       });
     }).catch(function (e) { reportError(e.message || String(e)); });
   }
@@ -3002,7 +3127,7 @@
   var ATTACH_ICON = '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h11l3 3v13H5z"/><path d="M8 12h8M8 15.5h5"/></svg>';
 
   function openAttach() {
-    if (!confirmDiscard()) return;
+    if (!confirmDiscard(openAttach, arguments)) return;
     state.currentFile = null; state.currentView = null; state.currentYaml = null;
     show('viewAttach');
     state.currentArtifact = 'attach';
@@ -3035,9 +3160,12 @@
   }
 
   function deleteAttach(name) {
-    if (!window.confirm('Delete attachment "' + name + '"?')) return;
-    api.send('DELETE', '/api/attachment?name=' + encodeURIComponent(name))
-      .then(loadAttachList).catch(function (e) { reportError(e.message || String(e)); });
+    confirmDialog('Delete “' + name + '”?',
+      'The file is removed from the project’s attachments folder. Links to it in chapters will stop working.',
+      'Delete attachment', function () {
+        api.send('DELETE', '/api/attachment?name=' + encodeURIComponent(name))
+          .then(loadAttachList).catch(function (e) { reportError(e.message || String(e)); });
+      }, true);
   }
 
   function uploadAttach(file) {
@@ -3054,7 +3182,9 @@
   ];
 
   function openSettings(section) {
-    if (!confirmDiscard()) return;
+    if (!confirmDiscard(openSettings, arguments)) return;
+    // "Back to editor" returns to whatever was open before Settings.
+    if (state.currentFile || state.currentView) state.settingsReturn = { file: state.currentFile, view: state.currentView };
     state.currentFile = null; state.currentView = null; state.currentYaml = null;
     show('setPane');
     state.currentArtifact = 'settings';
@@ -3158,36 +3288,43 @@
     setDirty(true);
   }
 
-  function audienceRefs(id) {
-    var n = 0;
-    (state.project.sections || []).forEach(function (s) {
-      (s.chapters || []).forEach(function (c) { if ((c.audiences || []).indexOf(id) >= 0) n++; });
-    });
-    (state.project.views || []).forEach(function (v) { if (v.audience === id) n++; });
-    return n;
-  }
-
+  // Deleting an audience: the server reports what it touches (GET /api/audience-usage). A view
+  // filtered by it blocks the delete; chapter tags are removed on Save; `::: audience` blocks
+  // naming it are left for the author (Check lists them).
   function deleteAudience(id) {
-    var refs = audienceRefs(id);
-    var msg = refs > 0
-      ? 'Audience "' + id + '" is referenced by ' + refs + ' chapter(s)/view(s). Removing it will untag that content. Continue?'
-      : 'Remove audience "' + id + '"?';
-    if (!window.confirm(msg)) return;
-    renderAudiences(collectAudiences().filter(function (a) { return a.id !== id; }));
-    setDirty(true);
+    var aud = collectAudiences().filter(function (a) { return a.id === id; })[0];
+    var name = (aud && aud.title) || id;
+    api.json('/api/audience-usage?id=' + encodeURIComponent(id)).then(function (u) {
+      if (u.views.length) {
+        noticeDialog('“' + name + '” is still in use',
+          'The output “' + u.views[0].title + '” is for ' + name + '. Pick another audience for it first, then delete ' + name + '.');
+        return;
+      }
+      var nCh = u.chapters.length;
+      var nBl = u.blocks.reduce(function (n, b) { return n + b.count; }, 0);
+      var msg = nCh
+        ? nCh + ' chapter' + (nCh === 1 ? '' : 's') + ' will lose this tag when you save.'
+        : 'No chapter is tagged with it.';
+      if (nBl) msg += ' ' + nBl + ' “only for” block' + (nBl === 1 ? '' : 's') + ' in ' +
+        u.blocks.map(function (b) { return '“' + b.title + '”'; }).join(', ') +
+        ' still name' + (nBl === 1 ? 's' : '') + ' it; Check will list ' + (nBl === 1 ? 'it' : 'them') + ' so you can decide what to keep.';
+      confirmDialog('Delete “' + name + '”?', msg, 'Delete audience', function () {
+        renderAudiences(collectAudiences().filter(function (a) { return a.id !== id; }));
+        setDirty(true);
+      }, true);
+    }).catch(function (e) { reportError(e.message || String(e)); });
   }
 
   function addAudience() {
-    var auds = collectAudiences();
-    var title = window.prompt('New audience name:', '');
-    if (title === null) return;
-    title = title.trim(); if (!title) return;
-    var base = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'audience';
-    var id = base, n = 2;
-    while (auds.some(function (a) { return a.id === id; })) { id = base + '-' + (n++); }
-    auds.push({ id: id, title: title });
-    renderAudiences(auds);
-    setDirty(true);
+    promptDialog('Add audience', 'Name', 'e.g. Trainer', 'Add audience', function (title) {
+      var auds = collectAudiences();
+      var base = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'audience';
+      var id = base, n = 2;
+      while (auds.some(function (a) { return a.id === id; })) { id = base + '-' + (n++); }
+      auds.push({ id: id, title: title });
+      renderAudiences(auds);
+      setDirty(true);
+    });
   }
 
   function validateVersion() {
@@ -3216,7 +3353,7 @@
       state.project = p; setProjectHeader(p); renderTree(p);
       return api.json('/api/yaml?path=docwiz.yaml');
     }).then(function (r) { $('setRawText').value = r.text || ''; })
-      .catch(function (e) { reportError(e.message || String(e)); });
+      .catch(function (e) { showToast('Settings not saved', e.message || String(e), 'error'); });
   }
 
   function setWindowMode(mode) {
@@ -3278,17 +3415,26 @@
       current = null;
     }
 
+    // The element just clicked gets no tip until the pointer leaves it: a click opens menus
+    // and dialogs, and a late tip would land on top of them.
+    var clicked = null;
     document.addEventListener('mouseover', function (e) {
       var target = e.target.closest && e.target.closest('[data-tip]');
+      if (target && target === clicked) return;
+      clicked = null;
       if (target) show(target, TIP_HOVER_DELAY); // see the constant for the rationale
       else if (current) hide();
     });
     document.addEventListener('focusin', function (e) {
       var target = e.target.closest && e.target.closest('[data-tip]');
-      if (target) show(target, TIP_FOCUS_DELAY);
+      // Keyboard focus only — a mouse click also focuses, and that is not a request for help.
+      if (target && target !== clicked && target.matches(':focus-visible')) show(target, TIP_FOCUS_DELAY);
     });
     document.addEventListener('focusout', hide);
-    document.addEventListener('mousedown', hide);
+    document.addEventListener('mousedown', function (e) {
+      hide();
+      clicked = e.target.closest ? e.target.closest('[data-tip]') : null;
+    });
     window.addEventListener('scroll', hide, true);
   })();
 
@@ -3301,12 +3447,12 @@
   // Copy the whole project to a folder you pick, then switch to the copy (the original
   // is left as it is). Server runs the native folder picker.
   function saveAs() {
-    if (!confirmDiscard()) return;
+    if (!confirmDiscard(saveAs, arguments)) return;
     api.send('POST', '/api/save-as', { path: null }).then(function (res) {
       if (res.cancelled) return;
       if (res.ok) { location.reload(); return; }
-      window.alert(res.error || 'Could not save a copy.');
-    }).catch(function (e) { window.alert(e.message); });
+      noticeDialog('Copy not saved', res.error || 'Could not save a copy.');
+    }).catch(function (e) { noticeDialog('Copy not saved', e.message); });
   }
 
   // Copy the current project into the Templates library + a template.yaml wrapper.
@@ -3327,8 +3473,9 @@
           name: name,
           description: root.querySelector('#stDesc').value.trim(),
         }).then(function (res) {
-          if (!res.ok) return window.alert(res.error || 'Could not save the template.');
-        }).catch(function (e) { window.alert(e.message); });
+          if (!res.ok) noticeDialog('Template not saved', res.error || 'Could not save the template.');
+          else showToast('Template saved', '“' + name + '” is now in your Templates folder.', 'success');
+        }).catch(function (e) { noticeDialog('Template not saved', e.message); });
       },
       function (root) { root.querySelector('#stName').value = defName; });
   }
@@ -3338,8 +3485,8 @@
     if (elm) elm.onclick = handler;
   }
 
-  on('homeBtn', function () {
-    if (!confirmDiscard()) return;
+  on('homeBtn', function closeProject() {
+    if (!confirmDiscard(closeProject, arguments)) return;
     api.send('POST', '/api/close-project', {}).then(function () { location.reload(); });
   });
   on('openFolderBtn', function () { api.send('POST', '/api/open-folder', {}).catch(quiet); });
@@ -3357,7 +3504,13 @@
     });
   })();
   // Settings surface wiring (static elements in index.html).
-  on('setBack', function () { show('welcome'); });
+  on('setBack', function backFromSettings() {
+    if (!confirmDiscard(backFromSettings, arguments)) return;
+    var back = state.settingsReturn; state.settingsReturn = null;
+    if (back && back.file) openChapter(back.file);
+    else if (back && back.view) openView(back.view);
+    else show('welcome');
+  });
   on('setOpenFolder', function () { api.send('POST', '/api/open-folder', {}).catch(quiet); });
   on('setSave', saveSettings);
   on('addAud', addAudience);
@@ -3366,7 +3519,7 @@
   });
   on('setRawSave', function () {
     api.send('PUT', '/api/yaml?path=docwiz.yaml', { text: $('setRawText').value })
-      .then(function () { reportError('Raw YAML saved.'); loadSettings(); })
+      .then(function () { showToast('Saved', 'docwiz.yaml was saved.', 'success'); loadSettings(); })
       .catch(function (e) { reportError(e.message || String(e)); });
   });
   (function wireSettingsStatic() {
@@ -3445,7 +3598,16 @@
     // just dismisses. (The toggle handler above stops its own click from reaching here.)
     if (!menu.contains(e.target) || e.target.closest('.hd-cbtn')) closeMore();
   });
-  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeMore(); });
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    closeMore();
+    var kebab = $('cbKebabMenu');
+    if (kebab && kebab.classList.contains('cb-open')) {
+      kebab.classList.remove('cb-open');
+      var kb = $('cbKebabBtn');
+      if (kb) { kb.setAttribute('aria-expanded', 'false'); kb.focus(); }
+    }
+  });
   on('vAddSlide', addSlide);
   on('vPanelAdd', addSlide);
   on('checkBtn', runCheck);
@@ -3458,7 +3620,7 @@
   on('exportPdfBtn', openExportPdf);
   on('wImportBtn', newProjectFromWord);
   function requestQuit() {
-    if (!confirmDiscard()) return;
+    if (!confirmDiscard(requestQuit, arguments)) return;
     fetch('/api/shutdown', { method: 'POST' }).finally(function () {
       document.body.innerHTML =
         '<div style="max-width:520px;margin:80px auto;font:15px/1.6 \'Segoe UI\',sans-serif">' +
@@ -3506,7 +3668,7 @@
     }
   });
   window.addEventListener('beforeunload', function (e) {
-    if (state.dirty) e.preventDefault();
+    if (state.dirty || slideZonesDirty() || settingsDirty()) e.preventDefault();
   });
 
   init();

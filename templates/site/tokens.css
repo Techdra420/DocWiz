@@ -38,6 +38,8 @@
   --dw-chrome-muted: #8da0b2;   /* NEW — secondary text in the chrome bar */
   --dw-chrome-border: #253443;  /* NEW — separators inside the chrome bar */
   --dw-mark: #2f6cae;           /* NEW — brand-mark fill / Build button on chrome (white text 5.4:1) */
+  --dw-mark-text: #ffffff;      /* text on --dw-mark (chrome-only; the dark header resolves --dw-accent-contrast to dark ink, 3.4:1) */
+  --dw-mark-strong: #255b94;    /* hover/pressed --dw-mark; white text 7.0:1 (chrome-only) */
 
   /* ---- Type -------------------------------------------------------------- */
   --dw-font-ui: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
@@ -132,6 +134,8 @@
   --dw-chrome-muted: #7e92a5;
   --dw-chrome-border: #1d2935;
   --dw-mark: #2f6cae;           /* NEW — same on dark; sits on the dark chrome */
+  --dw-mark-text: #ffffff;
+  --dw-mark-strong: #255b94;
 
   --dw-shadow: 0 1px 3px rgba(0, 0, 0, 0.45);
   --dw-shadow-2: 0 10px 32px rgba(0, 0, 0, 0.55);
