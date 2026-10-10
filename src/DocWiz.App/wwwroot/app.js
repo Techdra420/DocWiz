@@ -127,26 +127,61 @@
     // groups stay unnumbered — same scheme as the generated handover.
     var num = p.numbering;
     var chNo = 0;
-    p.sections.forEach(function (s) {
-      var grp = el('div', 'grp');
-      grp.appendChild(el('span', 'tree-label', s.title));
-      grp.appendChild(moveTools('section', function (dir) {
-        moveItem('/api/section-move', { folder: s.folder, direction: dir });
-      }));
+    p.sections.forEach(function (s, si) {
+      // Section header: the name (double-click renames the folder it IS), + adds a chapter
+      // here, ⋯ holds the rest. Dropping a dragged chapter on it appends it to this section.
+      var grp = el('div', 'grp tree-sec');
+      var secLabel = el('span', 'tree-label', s.title);
+      secLabel.title = s.title;
+      secLabel.ondblclick = function () {
+        renameInline(secLabel, s.title, function (name) {
+          return structureChange('POST', '/api/section-rename', { folder: s.folder, name: name });
+        });
+      };
+      grp.appendChild(secLabel);
+      grp.appendChild(treeAction('plus', 'Add a chapter to “' + s.title + '”', function () { newChapter(s.folder); }));
+      grp.appendChild(treeAction('more', 'Section actions', function (btn) { sectionMenu(btn, s, si, p.sections, secLabel); }));
+      dropTarget(grp, s, function () { return s.chapters.length; });
       tree.appendChild(grp);
-      s.chapters.forEach(function (c) {
+      if (!s.chapters.length) {
+        var empty = el('button', 'tree-empty', 'No chapters yet — add one');
+        empty.type = 'button';
+        empty.onclick = function () { newChapter(s.folder); };
+        dropTarget(empty, s, function () { return 0; });
+        tree.appendChild(empty);
+      }
+      s.chapters.forEach(function (c, ci) {
         chNo++;
+        // Chapter row: the link opens it; ⋯ for rename/move/delete; drag to move it (within
+        // or between sections); double-click the name to rename (title, H1 and file follow).
+        var row = el('div', 'tree-row');
+        row.draggable = true;
+        if (c.file === state.currentFile) row.classList.add('current');
         var a = el('a');
-        a.appendChild(el('span', 'tree-label',
-          (num ? chNo + ' ' : '') + (c.title || c.file)));
-        a.appendChild(moveTools('chapter', function (dir) {
-          moveItem('/api/chapter-move', { file: c.file, direction: dir });
-        }));
+        var label = el('span', 'tree-label', (num ? chNo + ' ' : '') + (c.title || c.file));
+        label.title = c.title || c.file;
+        a.appendChild(label);
         a.href = '#';
         a.dataset.file = c.file;
-        if (c.file === state.currentFile) a.classList.add('current');
         a.onclick = function (e) { e.preventDefault(); openChapter(c.file); };
-        tree.appendChild(a);
+        label.ondblclick = function (e) {
+          e.preventDefault();
+          row.draggable = false;
+          renameInline(label, c.title, function (title) {
+            return structureChange('POST', '/api/chapter-rename', { file: c.file, title: title },
+              { reopen: c.file === state.currentFile });
+          });
+        };
+        row.appendChild(a);
+        row.appendChild(treeAction('more', 'Chapter actions', function (btn) { chapterMenu(btn, c, s, ci, p.sections, label); }));
+        row.addEventListener('dragstart', function (e) {
+          dragging = { file: c.file, folder: s.folder, index: ci };
+          e.dataTransfer.effectAllowed = 'move';
+          try { e.dataTransfer.setData('text/plain', c.title || c.file); } catch (x) { /* some hosts refuse */ }
+        });
+        row.addEventListener('dragend', function () { dragging = null; clearDropMarks(); });
+        dropTarget(row, s, function () { return ci; });
+        tree.appendChild(row);
         // Subchapter outline (H2s and H3s), expanded for the open chapter only —
         // numbers match the handover's in-page heading numbers (N.1, N.1.1 …).
         if (c.file === state.currentFile) {
@@ -167,6 +202,16 @@
         }
       });
     });
+    var addSection = el('button', 'tree-new-section', '+ New section');
+    addSection.type = 'button';
+    addSection.setAttribute('data-tip', 'Add a section to the manual. Its name becomes the folder name, so any name works except \\ / : * ? " < > |.');
+    addSection.onclick = function () {
+      promptDialog('New section', 'Name', 'e.g. Údržba', 'Create section', function (name) {
+        structureChange('POST', '/api/section', { name: name }).catch(quiet);
+      });
+    };
+    tree.appendChild(addSection);
+
     tree.appendChild(el('div', 'grp', 'Views'));
     p.views.forEach(function (v) {
       var a = el('a', null, v.title + ' · ' + v.mode);
@@ -215,22 +260,183 @@
     tree.appendChild(m);
   }
 
-  // ▲▼ reorder handles, revealed on hover. Spans, not <button>s — a button inside
-  // the chapter <a> would be invalid HTML and steal the row click.
-  function moveTools(what, onMove) {
-    var span = el('span', 'tree-tools');
-    [['▲', -1, 'up'], ['▼', 1, 'down']].forEach(function (d) {
-      var b = el('span', 'tbtn', d[0]);
-      b.setAttribute('data-tip', 'Move this ' + what + ' one position ' + d[2] +
-        '. Only the order number changes — links and views keep working (stable IDs).');
-      b.onclick = function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        onMove(d[1]);
-      };
-      span.appendChild(b);
+  /* ---------- structure editing in the tree (Stage 6 step 2) ----------
+     Sections and chapters are renamed, added, moved and deleted where the author sees them.
+     The folder name IS the section name and a chapter file follows its title, so each change
+     renames real folders and files; links use ids (ADR-005) and keep working. */
+
+  var TREE_ICONS = {
+    plus: '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M8 3v10M3 8h10"/></svg>',
+    more: '<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="3.5" cy="8" r="1.1"/><circle cx="8" cy="8" r="1.1"/><circle cx="12.5" cy="8" r="1.1"/></svg>',
+  };
+
+  // A hover-revealed action button on a tree row (always reachable by keyboard).
+  function treeAction(icon, label, onClick) {
+    var b = el('button', 'tree-act');
+    b.type = 'button';
+    b.innerHTML = TREE_ICONS[icon];
+    b.setAttribute('aria-label', label);
+    b.setAttribute('data-tip', label);
+    if (icon === 'more') b.setAttribute('aria-haspopup', 'menu');
+    b.onclick = function (e) { e.preventDefault(); e.stopPropagation(); onClick(b); };
+    return b;
+  }
+
+  // Runs a structure change. Pending edits of the open chapter are saved first (a rename or
+  // move renames its file); afterwards the tree reloads and the open chapter is found again by
+  // its id — re-opened when its file moved or opts.reopen says its content changed.
+  function structureChange(method, url, body, opts) {
+    var before = state.dirty && state.currentFile ? saveChapter() : Promise.resolve();
+    return before
+      .then(function () { return api.send(method, url, body); })
+      .then(function (res) {
+        return loadProject().then(function () {
+          if (state.currentId && state.currentFile) {
+            var file = chapterFileFor(state.currentId);
+            if (!file) { state.currentFile = null; state.currentId = null; show('welcome'); }
+            else if (file !== state.currentFile || (opts && opts.reopen)) {
+              state.currentFile = file;
+              mountLiveEditor();
+            }
+            if (file) { renderTree(state.project); updateCrumb(); }
+          }
+          return res;
+        });
+      })
+      .catch(function (e) {
+        showToast('Not changed', e.message || String(e), 'error');
+        renderTree(state.project);
+        throw e;
+      });
+  }
+
+  // Inline rename in the tree: Enter or leaving the field saves, Esc cancels.
+  function renameInline(labelEl, current, commit) {
+    var input = el('input', 'tree-rename');
+    input.type = 'text';
+    input.value = current;
+    input.setAttribute('aria-label', 'New name');
+    labelEl.replaceWith(input);
+    input.focus();
+    input.select();
+    var done = false;
+    function finish(save) {
+      if (done) return;
+      done = true;
+      var v = input.value.trim();
+      if (save && v && v !== current) commit(v).catch(quiet);
+      else renderTree(state.project);
+    }
+    input.onkeydown = function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); finish(false); }
+    };
+    input.onblur = function () { finish(true); };
+    input.onclick = function (e) { e.preventDefault(); e.stopPropagation(); };
+  }
+
+  // Drag a chapter onto another chapter (lands before it) or onto a section header (lands at
+  // its end). Indexes are positions in the target section without the dragged chapter.
+  var dragging = null;
+  function clearDropMarks() {
+    Array.prototype.forEach.call(document.querySelectorAll('#tree .drop-target'), function (n) {
+      n.classList.remove('drop-target');
     });
-    return span;
+  }
+  function dropTarget(elm, section, indexOf) {
+    elm.addEventListener('dragover', function (e) {
+      if (!dragging) return;
+      e.preventDefault();
+      if (!elm.classList.contains('drop-target')) { clearDropMarks(); elm.classList.add('drop-target'); }
+    });
+    elm.addEventListener('drop', function (e) {
+      e.preventDefault();
+      clearDropMarks();
+      var d = dragging; dragging = null;
+      if (!d) return;
+      var index = indexOf();
+      if (d.folder === section.folder && d.index < index) index--; // it leaves its old slot first
+      if (d.folder === section.folder && d.index === index) return;
+      structureChange('POST', '/api/chapter-move-to', { file: d.file, folder: section.folder, index: index }).catch(quiet);
+    });
+  }
+
+  // Tree ⋯ menus use the shared context-menu recipe (.e2-menu), not a new menu style.
+  var openTreeMenu = null;
+  function closeTreeMenu() {
+    if (!openTreeMenu) return;
+    openTreeMenu.menu.remove();
+    openTreeMenu.anchor.setAttribute('aria-expanded', 'false');
+    openTreeMenu = null;
+  }
+  function treeMenu(anchor, items) {
+    closeTreeMenu();
+    var menu = el('div', 'e2-menu tree-menu');
+    menu.setAttribute('role', 'menu');
+    items.forEach(function (it) {
+      if (it === '-') { menu.appendChild(el('div', 'msep')); return; }
+      if (!it.run) { menu.appendChild(el('div', 'mlabel', it.text)); return; }
+      var b = el('button', 'mi' + (it.danger ? ' danger' : ''));
+      b.type = 'button';
+      b.setAttribute('role', 'menuitem');
+      b.appendChild(el('span', 'mlbl', it.text));
+      b.onclick = function () { closeTreeMenu(); it.run(); };
+      menu.appendChild(b);
+    });
+    document.body.appendChild(menu);
+    var r = anchor.getBoundingClientRect();
+    var top = r.bottom + 4;
+    if (top + menu.offsetHeight > window.innerHeight - 8) top = Math.max(8, r.top - menu.offsetHeight - 4);
+    menu.style.top = top + 'px';
+    menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - menu.offsetWidth - 8)) + 'px';
+    anchor.setAttribute('aria-expanded', 'true');
+    openTreeMenu = { menu: menu, anchor: anchor };
+    var first = menu.querySelector('button');
+    if (first) first.focus();
+  }
+  document.addEventListener('mousedown', function (e) {
+    if (openTreeMenu && !openTreeMenu.menu.contains(e.target) && !openTreeMenu.anchor.contains(e.target)) closeTreeMenu();
+  });
+  window.addEventListener('scroll', closeTreeMenu, true);
+
+  function sectionMenu(anchor, s, si, sections, labelEl) {
+    var items = [
+      { text: 'Rename section', run: function () { labelEl.ondblclick(); } },
+      { text: 'Add a chapter here', run: function () { newChapter(s.folder); } },
+    ];
+    if (si > 0) items.push({ text: 'Move up', run: function () { structureChange('POST', '/api/section-move', { folder: s.folder, direction: -1 }).catch(quiet); } });
+    if (si < sections.length - 1) items.push({ text: 'Move down', run: function () { structureChange('POST', '/api/section-move', { folder: s.folder, direction: 1 }).catch(quiet); } });
+    items.push('-', { text: 'Delete section…', danger: true, run: function () { deleteSection(s); } });
+    treeMenu(anchor, items);
+  }
+
+  function chapterMenu(anchor, c, s, ci, sections, labelEl) {
+    var items = [{ text: 'Rename', run: function () { labelEl.ondblclick(new Event('dblclick')); } }];
+    if (ci > 0) items.push({ text: 'Move up', run: function () { structureChange('POST', '/api/chapter-move', { file: c.file, direction: -1 }).catch(quiet); } });
+    if (ci < s.chapters.length - 1) items.push({ text: 'Move down', run: function () { structureChange('POST', '/api/chapter-move', { file: c.file, direction: 1 }).catch(quiet); } });
+    var others = sections.filter(function (x) { return x.folder !== s.folder; });
+    if (others.length) {
+      items.push('-', { text: 'Move to section' });
+      others.forEach(function (o) {
+        items.push({ text: o.title, run: function () {
+          structureChange('POST', '/api/chapter-move-to', { file: c.file, folder: o.folder, index: o.chapters.length }).catch(quiet);
+        } });
+      });
+    }
+    items.push('-', { text: 'Delete chapter…', danger: true, run: function () { deleteChapter(c.file); } });
+    treeMenu(anchor, items);
+  }
+
+  function deleteSection(s) {
+    if (s.chapters.length) {
+      noticeDialog('“' + s.title + '” still has chapters',
+        'Move its ' + s.chapters.length + ' chapter' + (s.chapters.length === 1 ? '' : 's') +
+        ' to another section or delete ' + (s.chapters.length === 1 ? 'it' : 'them') + ' first, then delete the section.');
+      return;
+    }
+    confirmDialog('Delete “' + s.title + '”?', 'The empty section and its folder are removed.', 'Delete section', function () {
+      structureChange('DELETE', '/api/section?folder=' + encodeURIComponent(s.folder)).catch(quiet);
+    }, true);
   }
 
   // By POSITION, not text — heading text differs between surfaces (markdown
@@ -248,26 +454,6 @@
     var bar = scroller && scroller.querySelector('.e2-top');
     if (scroller) scroller.style.scrollPaddingTop = (bar ? bar.offsetHeight : 0) + 'px';
     target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-
-  function moveItem(url, body) {
-    // fmId is now a chip div; read the slug span for the chapter id.
-    var fmIdEl = $('fmId');
-    var openId = state.currentFile ? (fmIdEl && fmIdEl.querySelector('.cb-id-slug') ? fmIdEl.querySelector('.cb-id-slug').textContent : null) : null;
-    api.send('POST', url, body)
-      .then(loadProject)
-      .then(function () {
-        // Renumbering may have renamed the open chapter's file — re-resolve by id.
-        if (!openId) return;
-        (state.project.sections || []).forEach(function (s) {
-          s.chapters.forEach(function (c) {
-            if (c.id === openId) state.currentFile = c.file;
-          });
-        });
-        renderTree(state.project);
-        mountLiveEditor(); // reload — the open chapter's number may have changed
-      })
-      .catch(function (e) { reportError(e.message); });
   }
 
   function el(tag, cls, text) {
@@ -381,7 +567,9 @@
         if (h.indexOf('#chapter=') === 0) {
           var rest = h.slice(9);
           var amp = rest.indexOf('&'); // old &v2=1 links still open fine — v2 IS the editor
-          openChapter(decodeURIComponent(amp >= 0 ? rest.slice(0, amp) : rest));
+          var linked = decodeURIComponent(amp >= 0 ? rest.slice(0, amp) : rest);
+          // Files follow their titles now, so an old link may name a renamed chapter: skip it.
+          if (findChapterByFile(linked)) openChapter(linked);
         } else if (h.indexOf('#view=') === 0) {
           openView(decodeURIComponent(h.slice(6)));
         } else if (h === '#docs') {
@@ -663,197 +851,20 @@
     box.hidden = false;
   }
 
-  /* ---------- discipline dropdown (custom — native <select> is OS-rendered) ----------
-     Standard discipline values; unknown values (imported chapters) are added at open time.
-     API: discDropdown.setVal(v) syncs trigger + hidden input.
-          discDropdown.ensureVal(v) adds a dynamic option if v is not in the list.
-          The hidden input #fmDiscipline.value is always the canonical value. */
-
-  var DISC_OPTS = [
-    '',
-    'overview', 'setup', 'operations',
-    'troubleshooting', 'reference', 'integration',
-  ];
-
-  var discDropdown = (function buildDisciplineDropdown() {
-    var mountEl = $('fmDisciplineDropdown');
-    var hiddenInput = $('fmDiscipline');
-    if (!mountEl || !hiddenInput) return null;
-
-    // Dynamic option list (starts as the standard set; extras pushed at runtime)
-    var optList = DISC_OPTS.slice();
-    var onChangeCb = null; // set by openChapter
-
-    // DOM
-    var trigger = document.createElement('button');
-    trigger.type = 'button';
-    trigger.className = 'dw-sel-trigger cb-disc-trigger';
-    trigger.setAttribute('data-tip', 'Which kind of chapter this is (setup, operations, troubleshooting, …).');
-    trigger.setAttribute('aria-haspopup', 'listbox');
-    trigger.setAttribute('aria-expanded', 'false');
-
-    var trigLabel = document.createElement('span');
-    trigger.appendChild(trigLabel);
-
-    // Inline chevron SVG — use setAttribute for class on SVGElement (className is read-only)
-    var chevSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    chevSvg.setAttribute('viewBox', '0 0 10 6');
-    chevSvg.setAttribute('width', '10');
-    chevSvg.setAttribute('height', '6');
-    chevSvg.setAttribute('aria-hidden', 'true');
-    chevSvg.setAttribute('class', 'dw-sel-chev');
-    var chevPath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    chevPath.setAttribute('d', 'M1 1l4 4 4-4');
-    chevPath.setAttribute('fill', 'none');
-    chevPath.setAttribute('stroke', 'currentColor');
-    chevPath.setAttribute('stroke-width', '1.7');
-    chevPath.setAttribute('stroke-linecap', 'round');
-    chevPath.setAttribute('stroke-linejoin', 'round');
-    chevSvg.appendChild(chevPath);
-    trigger.appendChild(chevSvg);
-
-    mountEl.appendChild(trigger);
-
-    var popup = document.createElement('div');
-    popup.className = 'dw-sel-popup';
-    popup.setAttribute('role', 'listbox');
-    popup.setAttribute('aria-label', 'Discipline');
-    popup.hidden = true;
-
-    var optEls = []; // rebuilt on open
-    var hiIdx = 0;
-
-    function buildOptEls() {
-      popup.innerHTML = '';
-      optEls = optList.map(function (v, idx) {
-        var optEl = document.createElement('div');
-        optEl.className = 'dw-sel-opt';
-        optEl.setAttribute('role', 'option');
-        optEl.setAttribute('data-v', v);
-        optEl.setAttribute('aria-selected', hiddenInput.value === v ? 'true' : 'false');
-        optEl.textContent = v === '' ? '(none)' : v;
-        optEl.onmousedown = function (e) { e.preventDefault(); };
-        optEl.onclick = function () { select(v); closePopup(); };
-        optEl.onmouseenter = function () { setHi(idx); };
-        popup.appendChild(optEl);
-        return optEl;
-      });
-    }
-
-    function setHi(idx) {
-      hiIdx = idx;
-      optEls.forEach(function (el, i) { el.classList.toggle('dw-sel-hi', i === idx); });
-    }
-
-    function setVal(v) {
-      hiddenInput.value = v;
-      trigLabel.textContent = v === '' ? '(none)' : v;
-      optEls.forEach(function (el) {
-        el.setAttribute('aria-selected', el.getAttribute('data-v') === v ? 'true' : 'false');
-      });
-    }
-
-    function ensureVal(v) {
-      if (!v) return;
-      var found = optList.some(function (o) { return o === v; });
-      if (!found) optList.push(v);
-    }
-
-    function select(v) {
-      setVal(v);
-      if (onChangeCb) onChangeCb();
-    }
-
-    function openPopup() {
-      buildOptEls();
-      document.body.appendChild(popup);
-      popup.hidden = false;
-      trigger.setAttribute('aria-expanded', 'true');
-      var rect = trigger.getBoundingClientRect();
-      popup.style.left = Math.round(rect.left) + 'px';
-      popup.style.top = Math.round(rect.bottom + 2) + 'px';
-      popup.style.minWidth = Math.round(rect.width) + 'px';
-      var pw = popup.offsetWidth;
-      var vw = window.innerWidth;
-      if (rect.left + pw > vw - 8) popup.style.left = Math.max(8, vw - pw - 8) + 'px';
-      var ci = optList.indexOf(hiddenInput.value);
-      setHi(ci >= 0 ? ci : 0);
-      document.addEventListener('mousedown', outsideClick, true);
-      document.addEventListener('keydown', popupKey, true);
-    }
-
-    function closePopup() {
-      popup.hidden = true;
-      trigger.setAttribute('aria-expanded', 'false');
-      document.removeEventListener('mousedown', outsideClick, true);
-      document.removeEventListener('keydown', popupKey, true);
-      if (document.body.contains(popup)) document.body.removeChild(popup);
-      trigger.focus();
-    }
-
-    function outsideClick(e) {
-      if (!popup.contains(e.target) && e.target !== trigger) closePopup();
-    }
-
-    function popupKey(e) {
-      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closePopup(); return; }
-      if (e.key === 'ArrowDown') { e.preventDefault(); setHi((hiIdx + 1) % optEls.length); return; }
-      if (e.key === 'ArrowUp') { e.preventDefault(); setHi((hiIdx - 1 + optEls.length) % optEls.length); return; }
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        if (optList[hiIdx] !== undefined) { select(optList[hiIdx]); closePopup(); }
-        return;
-      }
-    }
-
-    trigger.onclick = function (e) {
-      e.preventDefault();
-      if (!popup.hidden) { closePopup(); } else { openPopup(); }
-    };
-
-    trigger.addEventListener('keydown', function (e) {
-      if ((e.key === 'ArrowDown' || e.key === 'Enter' || e.key === ' ') && popup.hidden) {
-        e.preventDefault();
-        openPopup();
-      }
-    });
-
-    // Initialise display
-    trigLabel.textContent = '(none)';
-
-    return {
-      setVal: setVal,
-      ensureVal: ensureVal,
-      setOnChange: function (cb) { onChangeCb = cb; },
-    };
-  })();
-
   /* ---------- chapter editing ---------- */
 
   function openChapter(file) {
     if (!confirmDiscard(openChapter, arguments)) return;
     api.json('/api/chapter?file=' + encodeURIComponent(file)).then(function (ch) {
       state.currentFile = file;
+      state.currentId = ch.id;
       state.currentYaml = null;
       state.currentView = null;
       show('chapterEditor');
       // fmId is now a read-only chip (div > .cb-id-slug span), not an input.
       var slugEl = $('fmId').querySelector('.cb-id-slug');
       if (slugEl) slugEl.textContent = ch.id;
-      $('fmTitle').value = ch.title;
-      // Disciplines outside the standard list (imported projects use section names)
-      // get added dynamically so nothing is lost on save.
-      if (discDropdown) {
-        discDropdown.ensureVal(ch.discipline);
-        discDropdown.setVal(ch.discipline || '');
-        discDropdown.setOnChange(function () { state.dirty = true; });
-      } else {
-        // Fallback: if the custom dropdown failed to init (missing mount element),
-        // write directly to the hidden input so chapterFormValues still works.
-        $('fmDiscipline').value = ch.discipline || '';
-      }
-      // Wire dirty tracking for the metadata fields (audience toggles wire inside renderAudienceChecks).
-      $('fmTitle').oninput = function () { state.dirty = true; };
+      updateCrumb();
       renderAudienceChecks(ch.audiences);
       state.dirty = false;
       setStatus('');
@@ -911,24 +922,43 @@
     });
   }
 
+  // The title is the chapter's H1 (the server reads it on save), so only the audiences
+  // travel with the body. `discipline` is no longer edited — it records the skeleton the
+  // chapter started from and the server leaves it as it is.
   function chapterFormValues() {
     return {
-      title: $('fmTitle').value,
-      discipline: $('fmDiscipline').value,
+      title: '',
       audiences: Array.prototype.slice
         .call($('fmAudiences').querySelectorAll('[data-on="1"]'))
         .map(function (btn) { return btn.dataset.aud; }),
     };
   }
 
+  // The chapter bar's "Section / Title" label, from the loaded project (titles follow the H1).
+  function updateCrumb() {
+    var where = findChapterByFile(state.currentFile);
+    $('fmCrumbSec').textContent = where ? where.section.title : '';
+    $('fmCrumbTitle').textContent = where ? where.chapter.title : '';
+  }
+
+  function findChapterByFile(file) {
+    var found = null;
+    ((state.project && state.project.sections) || []).forEach(function (s) {
+      s.chapters.forEach(function (c) { if (c.file === file) found = { section: s, chapter: c }; });
+    });
+    return found;
+  }
+
   function saveChapter() {
     if (!state.currentFile) return Promise.resolve();
-    // Byte-surgical save through the live surface (only edited blocks re-emit).
+    // Byte-surgical save through the live surface (only edited blocks re-emit). A changed H1
+    // renames the chapter file — the returned document carries the new path.
     return window.DocWizEditor2.save(chapterFormValues())
-      .then(function () {
+      .then(function (doc) {
+        if (doc && doc.file) state.currentFile = doc.file;
         state.dirty = false;
         setStatus('Saved ✓', 'ok');
-        return loadProject();
+        return loadProject().then(updateCrumb);
       })
       .catch(function (e) {
         setStatus('Save failed: ' + e.message, 'err');
@@ -1178,8 +1208,11 @@
     };
   }
 
+  // Accented letters keep their base letter ("Školení" → "skoleni"), like the server's
+  // HeadingScanner.Slug, instead of vanishing.
   function slugify(text) {
-    return text.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    return text.trim().normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   }
 
   function baseName(path) {
@@ -2305,19 +2338,26 @@
     return v ? v.id : baseName(file).replace(/\.yaml$/, '');
   }
 
-  function deleteChapter() {
-    if (!state.currentFile) return;
-    var title = $('fmTitle').value || state.currentFile;
+  // Deletes the given chapter (from the tree's ⋯ menu) or, when called from the chapter
+  // bar's menu (an event argument), the open one.
+  function deleteChapter(file) {
+    if (typeof file !== 'string') file = state.currentFile;
+    if (!file) return;
+    var where = findChapterByFile(file);
+    var title = where ? where.chapter.title : file;
     openModal('Delete chapter',
       '<p class="mhelp">This permanently deletes “<b>' + esc(title) + '</b>”. If other ' +
       'chapters or views still link to it, the delete is refused so nothing ends up broken.</p>',
       function (root) {
-        api.send('DELETE', '/api/chapter?file=' + encodeURIComponent(state.currentFile))
+        api.send('DELETE', '/api/chapter?file=' + encodeURIComponent(file))
           .then(function () {
             $('modal').close();
-            state.currentFile = null;
-            state.dirty = false;
-            show('welcome');
+            if (file === state.currentFile) {
+              state.currentFile = null;
+              state.currentId = null;
+              state.dirty = false;
+              show('welcome');
+            }
             return loadProject();
           })
           .catch(function (e) { modalWarn(root, e.message); });
@@ -2501,32 +2541,46 @@
       });
   }
 
-  function newChapter() {
+  // "Start from": the chapter skeletons by what they are for. The key is stored as the
+  // chapter's `discipline` (it records where the chapter started; the build ignores it).
+  var START_FROM = [
+    ['blank', 'Blank page', 'just the title'],
+    ['overview', 'Overview', 'purpose and scope'],
+    ['setup', 'Installation', 'requirements, steps, configuration'],
+    ['operations', 'Procedure', 'daily tasks and a procedures table'],
+    ['troubleshooting', 'Troubleshooting', 'symptoms, causes, actions'],
+    ['reference', 'Reference', 'an overview and a details table'],
+    ['integration', 'Integration', 'endpoints and data exchange'],
+  ];
+
+  // New chapter: section (preselected when started from a section's +), title, and what to
+  // start from. The id is derived from the title on the server; the file is named after it.
+  function newChapter(folder) {
+    var preset = typeof folder === 'string' ? folder : null;
     var sections = state.project.sections.map(function (s) {
-      return '<option value="' + s.folder + '">' + s.title + '</option>';
+      return '<option value="' + esc(s.folder) + '"' + (s.folder === preset ? ' selected' : '') + '>' + esc(s.title) + '</option>';
+    }).join('');
+    var starts = START_FROM.map(function (t) {
+      return '<option value="' + t[0] + '">' + esc(t[1]) + ' — ' + esc(t[2]) + '</option>';
     }).join('');
     openModal('New chapter',
       '<div class="row"><label>Section</label><select id="mSection">' + sections +
       '<option value="__new">— new section —</option></select></div>' +
-      '<div class="row" id="mNewSecRow" style="display:none"><label>New section</label><input id="mNewSec" placeholder="integrations"></div>' +
-      '<div class="row"><label>Title</label><input id="mTitle" placeholder="Integration Guide"></div>' +
-      '<div class="row"><label>ID</label><input id="mId" placeholder="integration-guide"></div>' +
-      '<div class="row"><label>Discipline</label><select id="mDisc"><option>overview</option><option>setup</option>' +
-      '<option>operations</option><option>troubleshooting</option><option>reference</option>' +
-      '<option>integration</option></select></div>',
+      '<div class="row" id="mNewSecRow" style="display:none"><label>New section</label><input id="mNewSec" placeholder="e.g. Údržba"></div>' +
+      '<div class="row"><label>Title</label><input id="mTitle" placeholder="e.g. Cleaning the scanner"></div>' +
+      '<div class="row"><label>Start from</label><select id="mStart">' + starts + '</select></div>',
       function (root) {
         var secSel = root.querySelector('#mSection').value;
-        var section = secSel === '__new' ? root.querySelector('#mNewSec').value : secSel;
+        var section = secSel === '__new' ? root.querySelector('#mNewSec').value.trim() : secSel;
         var title = root.querySelector('#mTitle').value.trim();
-        var id = root.querySelector('#mId').value.trim();
-        if (!section || !title || !id)
-          return modalWarn(root, 'Section, title, and ID are all required.');
+        if (!section) return modalWarn(root, 'Name the new section.');
+        if (!title) return modalWarn(root, 'Give the chapter a title.');
         api.send('POST', '/api/chapter', {
           section: section,
-          slug: id,
-          id: id,
+          slug: '',
+          id: '',
           title: title,
-          discipline: root.querySelector('#mDisc').value,
+          discipline: root.querySelector('#mStart').value,
           audiences: [],
         }).then(function (res) {
           root.close();
@@ -2536,8 +2590,6 @@
       },
       function (root) {
         var sel = root.querySelector('#mSection');
-        var titleInput = root.querySelector('#mTitle');
-        var idInput = root.querySelector('#mId');
         sel.onchange = function () {
           root.querySelector('#mNewSecRow').style.display = sel.value === '__new' ? '' : 'none';
         };
@@ -2545,10 +2597,9 @@
         // preselected and no change event ever fires — the name input must show
         // immediately or the dialog is a dead end (stakeholder bug, 2026-06-12).
         sel.onchange();
-        titleInput.oninput = function () {
-          idInput.value = slugify(titleInput.value);
-        };
-      });
+        setTimeout(function () { root.querySelector('#mTitle').focus(); }, 0);
+      },
+      { okLabel: 'Create chapter' });
   }
 
   /* ---------- Word import (two-phase: preview → cherry-pick → commit) ---------- */
@@ -2815,7 +2866,7 @@
   function offerWalkthrough(created, done) {
     var n = created.length;
     openModal('Imported ' + n + ' chapter' + (n === 1 ? '' : 's'),
-      '<p class="mhelp">They were added with <b>all audiences</b> and no discipline. Want to set ' +
+      '<p class="mhelp">They were added for <b>all audiences</b>. Want to set ' +
       'who each chapter is for now? You can also change it later per chapter.</p>',
       null,
       function (root) {
@@ -2829,23 +2880,15 @@
       { hideOk: true });
   }
 
-  var WALK_DISCIPLINES = ['', 'overview', 'setup', 'operations', 'troubleshooting', 'reference', 'integration'];
-
   function runWalkthrough(chapters, i, done) {
     if (i >= chapters.length) { if (done) done(); return; }
     var ch = chapters[i];
     var auds = state.project.audiences.map(function (a) {
       return '<label class="wt-aud"><input type="checkbox" class="wt-aud-cb" value="' + esc(a.id) + '" checked> ' + esc(a.title) + '</label>';
     }).join('');
-    var guess = guessDiscipline(ch.title);
-    var discOpts = WALK_DISCIPLINES.map(function (d) {
-      return '<option value="' + d + '"' + (d === guess ? ' selected' : '') + '>' + (d === '' ? 'None' : d) + '</option>';
-    }).join('');
     openModal('Chapter ' + (i + 1) + ' of ' + chapters.length + ': ' + esc(ch.title),
-      '<p class="mhelp">Who is this chapter for? Audiences decide which views it can appear in. ' +
-      'Discipline is just a label — leave it as None if unsure.</p>' +
-      '<div class="row"><label>Audiences</label><div class="wt-auds">' + auds + '</div></div>' +
-      '<div class="row"><label>Discipline</label><select id="wtDisc">' + discOpts + '</select></div>',
+      '<p class="mhelp">Who is this chapter for? Audiences decide which views it can appear in.</p>' +
+      '<div class="row"><label>Audiences</label><div class="wt-auds">' + auds + '</div></div>',
       null,
       function (root) {
         var bar = root.querySelector('.buttons');
@@ -2857,30 +2900,11 @@
         root.querySelector('#wtNext').onclick = function () {
           var picked = Array.prototype.slice.call(root.querySelectorAll('.wt-aud-cb'))
             .filter(function (c) { return c.checked; }).map(function (c) { return c.value; });
-          api.send('POST', '/api/chapter-frontmatter', {
-            file: ch.file, discipline: root.querySelector('#wtDisc').value, audiences: picked,
-          }).then(function () { root.close(); runWalkthrough(chapters, i + 1, done); })
+          api.send('POST', '/api/chapter-frontmatter', { file: ch.file, audiences: picked }).then(function () { root.close(); runWalkthrough(chapters, i + 1, done); })
             .catch(function (e) { modalWarn(root, e.message); });
         };
       },
       { hideOk: true });
-  }
-
-  // Keyword guess for the discipline label — a suggestion the human confirms in the
-  // walkthrough, never a silent default (discipline is inert in the build).
-  function guessDiscipline(title) {
-    var t = (title || '').toLowerCase();
-    var map = [
-      ['install', 'setup'], ['setup', 'setup'], ['configur', 'setup'], ['requirement', 'setup'],
-      ['procedure', 'operations'], ['daily', 'operations'], ['how to', 'operations'], ['operation', 'operations'],
-      ['troubleshoot', 'troubleshooting'], ['error', 'troubleshooting'], ['faq', 'troubleshooting'], ['problem', 'troubleshooting'],
-      ['api', 'integration'], ['integration', 'integration'], ['import', 'integration'], ['export', 'integration'],
-      ['reference', 'reference'], ['schema', 'reference'], ['glossary', 'reference'],
-      ['overview', 'overview'], ['introduction', 'overview'],
-    ];
-    for (var k = 0; k < map.length; k++)
-      if (t.indexOf(map[k][0]) >= 0) return map[k][1];
-    return '';
   }
 
   // Review worklist after an import: the converter's review items (deep-linked to the
@@ -3318,7 +3342,7 @@
   function addAudience() {
     promptDialog('Add audience', 'Name', 'e.g. Trainer', 'Add audience', function (title) {
       var auds = collectAudiences();
-      var base = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'audience';
+      var base = slugify(title) || 'audience';
       var id = base, n = 2;
       while (auds.some(function (a) { return a.id === id; })) { id = base + '-' + (n++); }
       auds.push({ id: id, title: title });
@@ -3601,6 +3625,7 @@
   document.addEventListener('keydown', function (e) {
     if (e.key !== 'Escape') return;
     closeMore();
+    if (openTreeMenu) { var anchor = openTreeMenu.anchor; closeTreeMenu(); anchor.focus(); }
     var kebab = $('cbKebabMenu');
     if (kebab && kebab.classList.contains('cb-open')) {
       kebab.classList.remove('cb-open');

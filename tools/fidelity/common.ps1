@@ -5,6 +5,10 @@
 # kill a listener on it - every sweep below checks first.
 $ProtectedPort = 5210
 
+# Headless runs use their own browser profile. Without one, headless Edge shares the
+# user's default profile and can stall indefinitely while their own Edge is open.
+$HeadlessProfile = Join-Path $env:TEMP 'dw-fidelity-edge'
+
 function Get-Edge {
     $candidates = @(
         "${env:ProgramFiles(x86)}\Microsoft\Edge\Application\msedge.exe",

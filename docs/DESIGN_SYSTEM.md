@@ -204,6 +204,11 @@ Controls (`Prev/Next/Fullscreen`) live *outside* the frame, secondary-button sty
   H: `background: var(--dw-bad-bg)`, border-color `--dw-bad`. Never solid red at rest.
 
 **`#tree`** — same recipe as handover `#sidebar`. Active file: accent-bg + inset bar.
+Structure editing (Stage 6): section headers carry `+` (add chapter) and `⋯`, chapter rows
+carry `⋯` — `.tree-act` buttons, revealed on row hover but always in the layout and
+keyboard-reachable; their menus reuse the `.e2-menu` context-menu recipe. Double-click renames
+inline (`.tree-rename`, accent border + focus ring). A dragged chapter marks its drop target
+with a 2px accent line above a row, or an `--dw-accent-bg` wash on a section.
 
 **`.fm`** — frontmatter row: labels `--dw-fs-sm` 600 `--dw-muted`; inputs surface bg,
 `--dw-border-strong` border, r1, padding s2 s3, mono for `ID`. F: accent border + ring.

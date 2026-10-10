@@ -550,18 +550,49 @@ html.dw-native header { cursor: default; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* â–²â–¼ reorder handles â€” present in the layout, revealed on row hover */
-.tree-tools { display: inline-flex; gap: 2px; flex: none; visibility: hidden; }
-#tree a:hover .tree-tools, #tree .grp:hover .tree-tools { visibility: visible; }
-.tree-tools .tbtn {
-  font-size: var(--dw-fs-xs);
-  line-height: 1;
-  padding: 1px 2px;
-  border-radius: var(--dw-r0);
-  color: var(--dw-muted);
-  cursor: pointer;
+/* Structure editing (Stage 6 step 2): section headers and chapter rows carry hover-revealed
+   actions (+, ⋯) that stay in the layout (no shift) and are always keyboard-reachable. */
+#tree .tree-act {
+  flex: none; display: inline-grid; place-items: center;
+  width: 24px; height: 24px; padding: 0;
+  border: 0; border-radius: var(--dw-r0);
+  background: transparent; color: var(--dw-muted); cursor: pointer;
+  opacity: 0;
 }
-.tree-tools .tbtn:hover { color: var(--dw-accent); background: var(--dw-accent-bg); }
+#tree .tree-sec:hover .tree-act, #tree .tree-row:hover .tree-act,
+#tree .tree-act:focus-visible, #tree .tree-act[aria-expanded="true"] { opacity: 1; }
+#tree .tree-sec .tree-act:hover { background: var(--dw-surface); color: var(--dw-text); }
+#tree .tree-row .tree-act:hover { background: var(--dw-surface-2); color: var(--dw-text); }
+/* Chapter row = link + ⋯ (a button can't live inside the <a>). */
+#tree .tree-row { display: flex; align-items: center; border-radius: var(--dw-r1); padding-right: var(--dw-s1); }
+#tree .tree-row > a { flex: 1; min-width: 0; }
+#tree .tree-row > a:hover { background: transparent; }
+#tree .tree-row:hover { background: var(--dw-surface); }
+#tree .tree-row.current { background: var(--dw-accent-bg); box-shadow: inset 3px 0 0 var(--dw-accent); }
+#tree .tree-row.current > a { color: var(--dw-accent); font-weight: var(--dw-w-medium); }
+/* Drop targets while a chapter is dragged: a line above a row, a wash on a section. */
+#tree .tree-row.drop-target { box-shadow: inset 0 2px 0 var(--dw-accent); }
+#tree .tree-sec.drop-target, #tree .tree-empty.drop-target { background: var(--dw-accent-bg); border-radius: var(--dw-r1); }
+#tree .tree-empty, #tree .tree-new-section {
+  display: block; width: 100%; text-align: left;
+  padding: var(--dw-s2) var(--dw-s3);
+  border: 1px dashed var(--dw-border-strong); border-radius: var(--dw-r1);
+  background: transparent; color: var(--dw-muted);
+  font-size: var(--dw-fs-sm); cursor: pointer;
+}
+#tree .tree-empty { margin-bottom: var(--dw-s1); }
+#tree .tree-new-section { margin-top: var(--dw-s4); }
+#tree .tree-empty:hover, #tree .tree-new-section:hover { color: var(--dw-text); border-color: var(--dw-muted); background: var(--dw-surface); }
+/* Inline rename field (also inside the CAPS section header, so it resets the label type). */
+#tree .tree-rename {
+  flex: 1; min-width: 0;
+  font: inherit; font-size: var(--dw-fs-sm); font-weight: var(--dw-w-regular);
+  text-transform: none; letter-spacing: 0;
+  color: var(--dw-text); background: var(--dw-surface);
+  border: 1px solid var(--dw-accent); border-radius: var(--dw-r0);
+  padding: 2px var(--dw-s2);
+  box-shadow: var(--dw-focus-ring); outline: none;
+}
 /* Subchapter outline (H2/H3 of the open chapter) */
 #tree a.tree-sub {
   padding: 2px var(--dw-s3) 2px calc(var(--dw-s3) + 16px);
@@ -639,42 +670,18 @@ main { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 0;
 .cb-id-hash { color: var(--dw-accent); font-weight: var(--dw-w-bold); flex-shrink: 0; }
 .cb-id-slug { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* Title input */
-.cb-title-input {
-  flex: 1 1 140px; min-width: 140px;
-  font: inherit; font-size: var(--dw-fs-sm); font-weight: var(--dw-w-medium); color: var(--dw-text);
-  background: var(--dw-surface); border: 1px solid var(--dw-border-strong);
-  border-radius: var(--dw-r0); padding: var(--dw-s2) var(--dw-s3); outline: none;
-  transition: border-color 0.12s, box-shadow 0.12s;
+/* "Section / Title" — the title IS the page's H1 (Stage 6), so this is a label, not a field. */
+.cb-crumb {
+  flex: 1 1 200px; min-width: 0;
+  display: flex; align-items: baseline; gap: var(--dw-s2);
+  font-size: var(--dw-fs-sm);
 }
-.cb-title-input:focus { border-color: var(--dw-accent); box-shadow: var(--dw-focus-ring); }
-.cb-title-input:focus-visible { outline: none; }
-
-/* Discipline select-wrap (wraps the tag icon + the custom .dw-sel-trigger) */
-.cb-sel-wrap {
-  display: inline-flex; align-items: center; gap: var(--dw-s2);
-  border: 1px solid var(--dw-border-strong); border-radius: var(--dw-r0);
-  padding-left: var(--dw-s3); background: var(--dw-surface); flex-shrink: 0;
-  transition: border-color 0.12s, box-shadow 0.12s;
+.cb-crumb-sec { color: var(--dw-faint); white-space: nowrap; }
+.cb-crumb-sep { color: var(--dw-border-strong); }
+.cb-crumb-title {
+  color: var(--dw-text); font-weight: var(--dw-w-medium);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-/* The wrapper ring activates when the inner trigger has focus */
-.cb-sel-wrap:focus-within { border-color: var(--dw-accent); box-shadow: var(--dw-focus-ring); }
-.cb-sel-ico { color: var(--dw-muted); flex-shrink: 0; }
-
-/* Mount point for the discipline custom dropdown (JS appends the trigger here) */
-#fmDisciplineDropdown { display: inline-flex; align-items: center; }
-
-/* .cb-disc-trigger: the discipline custom dropdown trigger sits inside .cb-sel-wrap
-   so it inherits the wrapper's border/radius; the trigger itself is borderless here. */
-.cb-disc-trigger {
-  border: 0; border-radius: 0;
-  height: auto; padding: var(--dw-s2) var(--dw-s3) var(--dw-s2) var(--dw-s1);
-  background: transparent;
-  font-size: var(--dw-fs-xs);
-}
-.cb-disc-trigger:hover { background: transparent; }
-.cb-disc-trigger:focus-visible { outline: none; box-shadow: none; }
-.cb-disc-trigger[aria-expanded="true"] { border-color: transparent; box-shadow: none; }
 
 
 /* Segmented audience multi-toggle */
@@ -2099,6 +2106,8 @@ dialog#modal .imp-cb, dialog#modal .wt-aud-cb, dialog#modal .exp-cb { flex: none
   padding: var(--dw-s1);
 }
 .e2-menu { position: fixed; z-index: 1000; min-width: 220px; max-width: 268px; }
+/* The tree's ⋯ menus reuse this recipe with real <button> items (keyboard-operable). */
+.e2-menu button.mi { width: 100%; border: 0; background: transparent; text-align: left; }
 .e2-menu .mlabel {
   font: var(--dw-w-bold) var(--dw-fs-xs)/1 var(--dw-font-ui);
   letter-spacing: var(--dw-track-caps);

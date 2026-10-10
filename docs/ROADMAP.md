@@ -3,13 +3,14 @@
 **Current Stage:** Stage 5 — pilot on a real customer project. Stages 1, 2, and 4 complete;
 Stage 3 (editor MVP) functionally complete (live editor shipped; single exe verified on a
 clean machine). Stage 6 (editor redesign) approved 2026-10-10 and in progress alongside the
-pilot — step 1 (trust fixes) done; step 2 (structure you can edit) next.
+pilot — steps 1 (trust fixes) and 2 (structure you can edit) done; step 3 (history, then
+autosave) next.
 **V1.0:** both agreed V1.0 features — **PDF export** and **content-only zoom** — are built and
 merged to `main`. Remaining for the v1.0 tag: close the pilot loop + release hygiene (tag, prune).
 ADR-004 (amended), ADR-005, ADR-006, ADR-007, and ADR-008 are all written in
 [ARCHITECTURE.md](ARCHITECTURE.md).
-**Last Updated:** 2026-10-10 — Stage 6 step 1 (trust fixes) shipped; Stage 6 (editor redesign)
-approved with its decisions and steps; Claude desktop app setup.
+**Last Updated:** 2026-10-10 — Stage 6 step 2 (structure you can edit) and step 1 (trust fixes)
+shipped; Stage 6 (editor redesign) approved with its decisions and steps; Claude desktop app setup.
 
 Stage transitions require human approval. Success criteria are the checkpoints.
 
@@ -181,7 +182,7 @@ is structure, consolidation, and fixing what breaks trust.
       type silently replaced; toolbar scrolls sideways on laptops; settings rail height; tooltip
       over menus and Esc; Build-label and switch-knob contrast; browser `confirm()`/`prompt()`/
       `alert()` replaced by DocWiz dialogs with action-named buttons
-- [ ] 2. Structure you can edit: section and chapter rename/move/delete/drag in the tree acting on
+- [x] 2. Structure you can edit: section and chapter rename/move/delete/drag in the tree acting on
       the real folders and files; New chapter in the tree; chapter title = its H1; "Start from"
       replaces discipline
 - [ ] 3. History, then autosave: snapshots, per-chapter timeline with highlighted changes, restore
@@ -219,6 +220,7 @@ Open items (everything shipped is in Recent Changes):
 
 | Date | Stage | Description |
 |------|-------|-------------|
+| 2026-10-10 | Stage 6 | Step 2 structure you can edit: the folder name is the section name (accents, spaces, capitals; legacy slug folders keep their titles) and chapter files follow their title; the tree renames sections and chapters inline (double-click or ⋯), adds sections and chapters (+), moves chapters by drag-and-drop or "Move to section", reorders and deletes (empty sections only) — all on the real folders and files; empty sections show in the tree; the chapter title is its H1 (save derives it, rename rewrites it); "Start from" replaces discipline in New chapter (no ID field — ids derive from the title, accented letters folded); the chapter bar shows Section / Title instead of a title field; fidelity harness runs headless Edge on its own profile |
 | 2026-10-10 | Stage 6 | Step 1 trust fixes: Source edits are kept when switching back to Edit; new chapters default to the project's audiences and skeletons only carry an admin note for admin-tagged chapters; deleting an audience strips its chapter tags, reports blocks, and is refused while a view uses it; every browser `confirm()`/`prompt()`/`alert()` in the editor replaced by DocWiz dialogs with action-named (danger) buttons, and failed create dialogs keep their input; unsaved settings are guarded and "Back to editor" returns to the open chapter; raw-YAML save reports success; toolbar wraps instead of scrolling on laptops; settings rail fills the window; tooltips no longer cover menus and Esc closes the chapter menu; Build label and settings switch meet contrast (`--dw-mark-text`/`--dw-mark-strong`); image size "Icon" label; Insert element without a dead OK; document views lose slide controls; slide-editor messages visible; package replacement announced; view saves open Check only on errors; menu-label and Quit-button CSS collisions fixed |
 | 2026-10-10 | Stage 6 | Editor redesign approved after a user-side UX audit: decisions recorded (folder name = section name, chapter files follow titles, first-class block-level audiences, history + autosave, sidebar tabs, discipline retired from the UI, light default) and seven steps defined |
 | 2026-10-10 | Tooling | Claude desktop app setup: `.claude/launch.json` runs the editor on the Stockroom demo (port 5230) for the in-app browser preview; `.claude/settings.json` permission rules made repo-relative so they work on any clone path and in session worktrees; `.claude/worktrees/` and `.claude/settings.local.json` git-ignored |

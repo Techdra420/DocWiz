@@ -21,6 +21,7 @@ public static partial class ChapterTemplates
 
     private static string Skeleton(string discipline) => discipline switch
     {
+        "blank" => "",
         "setup" =>
             """
             ## Requirements {#requirements}

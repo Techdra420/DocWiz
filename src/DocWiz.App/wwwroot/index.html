@@ -332,19 +332,13 @@
           <span class="cb-id-slug"></span>
         </div>
 
-        <!-- Title input -->
-        <input id="fmTitle" class="cb-title-input" type="text" placeholder="Chapter title"
-          data-tip="The chapter title shown in the navigation tree and as the page heading. Safe to change any time.">
-
-        <!-- Discipline custom dropdown wrapped with tag icon -->
-        <div class="cb-sel-wrap" id="fmDisciplineWrap"
-          data-tip="Which kind of chapter this is (setup, operations, troubleshooting, …). Also selects the structure template when creating new chapters.">
-          <!-- tag icon -->
-          <svg class="cb-sel-ico" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
-          <!-- Hidden input keeps the .value contract for app.js read/write paths -->
-          <input type="hidden" id="fmDiscipline">
-          <!-- Custom dropdown trigger + popup are injected by app.js buildDisciplineDropdown() -->
-          <div id="fmDisciplineDropdown"></div>
+        <!-- Where you are: "Section / Title". The title IS the page's heading (H1) — change it
+             there, or double-click the chapter in the tree (Stage 6). -->
+        <div class="cb-crumb" id="fmCrumb"
+          data-tip="The chapter's title is its heading on the page. Change it there, or double-click the chapter in the tree.">
+          <span class="cb-crumb-sec" id="fmCrumbSec"></span>
+          <span class="cb-crumb-sep" aria-hidden="true">/</span>
+          <span class="cb-crumb-title" id="fmCrumbTitle"></span>
         </div>
 
         <!-- Segmented audience multi-toggle -->

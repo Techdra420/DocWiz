@@ -22,6 +22,9 @@ namespace DocWiz.App;
 public sealed record NewChapterDto(string Section, string Slug, string Id, string Title, string Discipline, List<string> Audiences);
 public sealed record MoveChapterDto(string File, int Direction);
 public sealed record MoveSectionDto(string Folder, int Direction);
+public sealed record MoveChapterToDto(string File, string Folder, int Index);
+public sealed record RenameChapterDto(string File, string Title);
+public sealed record SectionNameDto(string? Folder, string Name);
 public sealed record TextDto(string Text);
 public sealed record PreviewDto(string Markdown);
 public sealed record OpenProjectDto(string? Path);
@@ -32,7 +35,7 @@ public sealed record ImportTokenDto(string Token);
 public sealed record AddExternalDto(string Key, string Folder, bool CopyIn);
 public sealed record ProjectSettingsDto(string? Project, string? Code, string? Customer, string? Version, string? Language, bool Numbering, List<AudienceDto>? Audiences);
 public sealed record AudienceDto(string Id, string Title);
-public sealed record ChapterFrontmatterDto(string File, string Discipline, List<string> Audiences);
+public sealed record ChapterFrontmatterDto(string File, string? Discipline, List<string> Audiences);
 public sealed record ViewSlideDto(string? Layout, string? Include, string? Title, string? Subtitle, string? Markdown,
     Dictionary<string, string>? Regions);
 public sealed record ViewDto(string Id, string Title, string Audience, string Mode, List<ViewSlideDto> Slides);
@@ -326,13 +329,15 @@ public static class EditorServer
                 isTemplate,
                 numbering = project.Manifest.Numbering,
                 audiences = project.Manifest.Audiences.Select(a => new { a.Id, a.Title }),
-                sections = project.Chapters
-                    .GroupBy(c => Path.GetFileName(Path.GetDirectoryName(c.FilePath))!)
-                    .Select(g => new
+                // Every section folder, empty ones too — an empty section is a place to add
+                // the first chapter, not something to hide.
+                sections = SectionFolders(project.Root)
+                    .Select(dir => new
                     {
-                        folder = g.Key,
-                        title = g.First().SectionTitle,
-                        chapters = g.Select(c => new
+                        folder = Path.GetFileName(dir),
+                        title = ContentNames.SectionTitle(Path.GetFileName(dir)),
+                        chapters = project.Chapters.Where(c => string.Equals(
+                            Path.GetDirectoryName(Path.GetFullPath(c.FilePath)), dir, StringComparison.OrdinalIgnoreCase)).Select(c => new
                         {
                             c.Id,
                             c.Title,
@@ -384,14 +389,91 @@ public static class EditorServer
             if (NoProject() is { } guard)
                 return guard;
             var dto = await request.ReadFromJsonAsync<NewChapterDto>();
-            if (dto is null || dto.Slug.Length == 0 || dto.Id.Length == 0)
-                return Results.BadRequest("section, slug, id, and title are required.");
+            if (dto is null || string.IsNullOrWhiteSpace(dto.Title) || string.IsNullOrWhiteSpace(dto.Section))
+                return Results.BadRequest("Give the chapter a title and a section.");
             var (project, _) = LoadParsed(holder.Root!);
-            if (project.FindChapter(dto.Id) is not null)
-                return Results.BadRequest($"Chapter id '{dto.Id}' already exists.");
+            // The id is derived from the title when the request has none (authors never type it).
+            var id = string.IsNullOrWhiteSpace(dto.Id) ? ChapterFactory.UniqueId(project, dto.Title) : dto.Id.Trim();
+            if (project.FindChapter(id) is not null)
+                return Results.BadRequest($"Chapter id '{id}' already exists.");
 
-            var path = ChapterFactory.Create(holder.Root!, dto, project.Manifest.Audiences.Select(a => a.Id));
-            return Results.Json(new { file = RelPath(holder.Root!, path) });
+            return StructureChange(() => new
+            {
+                file = RelPath(holder.Root!, ChapterFactory.Create(holder.Root!, dto with { Id = id, Title = dto.Title.Trim() },
+                    project.Manifest.Audiences.Select(a => a.Id))),
+            });
+        });
+
+        // Structure editing (Stage 6 step 2): sections and chapters are renamed, created, moved and
+        // deleted where the author sees them. The folder name IS the section name and a chapter
+        // file follows its title (ContentNames); links use ids, so none of this breaks them.
+        app.MapPost("/api/chapter-rename", async (HttpRequest request) =>
+        {
+            if (NoProject() is { } guard)
+                return guard;
+            var dto = await request.ReadFromJsonAsync<RenameChapterDto>();
+            if (dto is null || string.IsNullOrWhiteSpace(dto.Title))
+                return Results.BadRequest("Give the chapter a title.");
+            var path = ResolveChapterPath(holder.Root!, dto.File);
+            if (path is null)
+                return Results.BadRequest("Not a chapter file inside this project.");
+            var title = dto.Title.Trim();
+            return StructureChange(() =>
+            {
+                // The title IS the H1: rewrite both, then let the file follow.
+                var (yaml, rawBody) = FrontmatterParser.Split(File.ReadAllText(path));
+                var fm = ChapterYaml.Parse(yaml);
+                fm["title"] = title;
+                File.WriteAllText(path, ChapterYaml.Compose(fm, ChapterTitle.SetH1(rawBody.TrimStart('\n'), title)));
+                return new { file = RelPath(holder.Root!, ContentOrganizer.RenameChapterFile(path, title)) };
+            });
+        });
+
+        app.MapPost("/api/chapter-move-to", async (HttpRequest request) =>
+        {
+            if (NoProject() is { } guard)
+                return guard;
+            var dto = await request.ReadFromJsonAsync<MoveChapterToDto>();
+            var path = dto is null ? null : ResolveChapterPath(holder.Root!, dto.File);
+            if (dto is null || path is null)
+                return Results.BadRequest("Not a chapter file inside this project.");
+            return StructureChange(() =>
+            {
+                var target = SectionFolders(holder.Root!).FirstOrDefault(d => Path.GetFileName(d) == dto.Folder)
+                    ?? throw new DocWizLoadException($"No section folder '{dto.Folder}' in this project.");
+                return new { file = RelPath(holder.Root!, ContentOrganizer.MoveChapterTo(path, target, dto.Index)) };
+            });
+        });
+
+        app.MapPost("/api/section", async (HttpRequest request) =>
+        {
+            if (NoProject() is { } guard)
+                return guard;
+            var dto = await request.ReadFromJsonAsync<SectionNameDto>();
+            return dto is null
+                ? Results.BadRequest("Give the section a name.")
+                : StructureChange(() => new { folder = ContentOrganizer.CreateSection(holder.Root!, dto.Name) });
+        });
+
+        app.MapPost("/api/section-rename", async (HttpRequest request) =>
+        {
+            if (NoProject() is { } guard)
+                return guard;
+            var dto = await request.ReadFromJsonAsync<SectionNameDto>();
+            return dto?.Folder is null
+                ? Results.BadRequest("folder and name are required.")
+                : StructureChange(() => new { folder = ContentOrganizer.RenameSection(holder.Root!, dto.Folder, dto.Name) });
+        });
+
+        app.MapDelete("/api/section", (string folder) =>
+        {
+            if (NoProject() is { } guard)
+                return guard;
+            return StructureChange(() =>
+            {
+                ContentOrganizer.DeleteSection(holder.Root!, folder);
+                return new { ok = true };
+            });
         });
 
         // Reordering renames filename/folder prefixes only — ids are stable (ADR-005),
@@ -1006,7 +1088,8 @@ public static class EditorServer
                 return Results.BadRequest("Not a chapter file inside this project.");
             var (yaml, rawBody) = FrontmatterParser.Split(File.ReadAllText(path));
             var fm = ChapterYaml.Parse(yaml);
-            fm["discipline"] = dto.Discipline;
+            if (dto.Discipline is not null) // the editor no longer asks for it (Stage 6)
+                fm["discipline"] = dto.Discipline;
             fm["audiences"] = dto.Audiences;
             File.WriteAllText(path, ChapterYaml.Compose(fm, rawBody.TrimStart('\n')));
             return Results.Json(new { ok = true });
@@ -1066,10 +1149,28 @@ public static class EditorServer
             newBody = DataImageRescue.Rewrite(newBody, holder.Root!);
 
             var fm = ChapterYaml.Parse(yaml);
-            fm["title"] = dto.Title;
-            fm["discipline"] = dto.Discipline;
+            var oldTitle = fm.GetValueOrDefault("title") as string ?? "";
+            // The title IS the H1 (Stage 6): the heading on the page wins. A body without an H1
+            // keeps the title it has (or one an older client sent). `discipline` is left as it
+            // is — it only records the skeleton a chapter started from.
+            var title = ChapterTitle.FromBody(newBody)
+                        ?? (string.IsNullOrWhiteSpace(dto.Title) ? oldTitle : dto.Title);
+            fm["title"] = title;
             fm["audiences"] = dto.Audiences;
             File.WriteAllText(path, ChapterYaml.Compose(fm, newBody));
+
+            // Chapter files follow their title; only an actual title change renames the file, so
+            // ordinary saves never touch the name (and legacy slug names stay until a rename).
+            if (title != oldTitle)
+            {
+                try { path = ContentOrganizer.RenameChapterFile(path, title); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // The content IS saved, so the save must not report failure; the file keeps its
+                    // old name (renamed again on the next title change). Logged, not swallowed.
+                    Console.Error.WriteLine($"WARN chapter saved but its file was not renamed to follow the title ({path}): {ex}");
+                }
+            }
 
             var project = ProjectLoader.Load(holder.Root!);
             return Results.Json(EditorDoc.Build(project, RelPath(holder.Root!, path)));
@@ -1416,6 +1517,38 @@ public static class EditorServer
         catch (DocWizLoadException ex)
         {
             return ex.Message;
+        }
+    }
+
+    /// <summary>The project's section folders in order (full paths), the same order the loader
+    /// numbers chapters in.</summary>
+    private static IEnumerable<string> SectionFolders(string root)
+    {
+        var contentDir = Path.GetFullPath(Path.Combine(root, ProjectLayout.ContentFolder));
+        return Directory.Exists(contentDir)
+            ? Directory.GetDirectories(contentDir).OrderBy(d => d, StringComparer.Ordinal)
+            : [];
+    }
+
+    /// <summary>A structure change (rename/move/create/delete) as an HTTP result: a refusal
+    /// explains itself (400); Windows refusing to rename because a file is open elsewhere
+    /// becomes a plain-language 409.</summary>
+    private static IResult StructureChange(Func<object> change)
+    {
+        try
+        {
+            return Results.Json(change());
+        }
+        catch (DocWizLoadException ex)
+        {
+            return Results.Text(ex.Message, "text/plain", statusCode: 400);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return Results.Text(
+                "Windows couldn't rename or move it — a file in it is probably open in another program " +
+                "(Explorer preview, Word, an editor). Close it and try again.",
+                "text/plain", statusCode: 409);
         }
     }
 

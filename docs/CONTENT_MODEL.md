@@ -31,13 +31,16 @@ my-product-docs/
 - **Numeric prefixes** (`010-`, `020-`) define order. Gaps of 10 leave room for
   insertions. The editor manages renumbering.
 - Folder = section, file = chapter. One `H1` per chapter.
-- **Planned (Stage 6, step 2): the folder name is the section name.** A section folder is
-  named `NNN-<exact section name>` — e.g. `020-Instalace a síť` — and the editor shows the
-  text after the prefix verbatim (accents, spaces, capitals). Renaming, moving, or deleting
-  a section in the editor acts on the folder itself; names containing `\ / : * ? " < > |` are
-  refused. Chapter files follow their title the same way. Legacy slug names
-  (`020-setup`, `010-system-overview.md`) keep working and keep today's derived titles.
-  Links never depend on file or folder names — they use the chapter `id`.
+- **The folder name is the section name** (Stage 6). A section folder is named
+  `NNN-<exact section name>` — e.g. `020-Instalace a síť` — and everything after the prefix is
+  shown verbatim (accents, spaces, capitals). Renaming, moving, or deleting a section in the
+  editor acts on the folder itself; names containing `\ / : * ? " < > |` are refused, and a
+  section that still holds chapters can't be deleted. Legacy slug folders (`020-setup`,
+  `050-api-reference`) keep their derived titles ("Setup", "API Reference"). Empty sections
+  are kept (and shown in the editor) until deleted.
+- **A chapter file follows its title**: `NNN-<title>.md`, with characters Windows forbids
+  turned into spaces (the title itself keeps them). Renaming a chapter — or changing its H1 —
+  renames the file. Links never depend on file or folder names; they use the chapter `id`.
 - **Planned (Stage 6, step 3): `.docwiz/history/`** holds the editor's change history —
   complete copies of earlier file versions, kept until deleted. Nothing reads it except
   the History panel, so deleting any part of it is safe. Git-ignored; never shipped.
@@ -86,7 +89,14 @@ audiences: [user, support, admin]   # who sees this chapter at all
 
 **`id` is the stability anchor.** Links and view transclusions reference `id`, not file
 paths or heading text, so renaming files, retitling headings, or reordering never breaks
-references. The editor generates IDs and keeps them immutable.
+references. The editor generates IDs from the title (accented letters keep their base
+letter: "Čištění skeneru" → `cisteni-skeneru`) and keeps them immutable.
+
+**The title is the H1.** `title` and the chapter's `# heading` are one thing: the editor's
+save sets `title` from the H1, and renaming a chapter rewrites both. `discipline` records
+the skeleton a chapter started from ("Start from" in the New chapter dialog: `blank`,
+`overview`, `setup`, `operations`, `troubleshooting`, `reference`, `integration`); the
+editor no longer changes it after creation.
 
 ## Block-level audience filtering
 

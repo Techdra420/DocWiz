@@ -1715,6 +1715,7 @@ async function save(frontmatter) {
   });
   if (!res.ok) throw new Error((await res.text()) || res.statusText);
   const dto = await res.json();
+  current.file = dto.file; // a changed H1 renames the chapter file (Stage 6)
   rebuild(dto);
   return dto;
 }

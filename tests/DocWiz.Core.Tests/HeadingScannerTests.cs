@@ -41,6 +41,14 @@ public class HeadingScannerTests
         Assert.Equal("section", HeadingScanner.Slug("???"));
     }
 
+    [Theory]
+    [InlineData("Čištění skeneru", "cisteni-skeneru")]
+    [InlineData("Einführung & Überblick", "einfuhrung-uberblick")]
+    [InlineData("Straße", "strasse")]
+    [InlineData("Łódź", "lodz")]
+    public void Slug_AccentedLettersKeepTheirBaseLetter(string text, string slug) =>
+        Assert.Equal(slug, HeadingScanner.Slug(text));
+
     [Fact]
     public void UniqueAnchor_AppendsCounter()
     {
