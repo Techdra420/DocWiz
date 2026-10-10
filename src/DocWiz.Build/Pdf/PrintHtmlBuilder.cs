@@ -55,12 +55,13 @@ public sealed class PrintHtmlBuilder
             });
         }
 
+        // RenderDocument emits the view's <h1> itself (as on every other surface): don't add another.
         var docHtml = Absolutize(ViewRenderer.RenderDocument(project, view, pipeline, linkSources: false, edit: false));
         return Render("document.print.html", new()
         {
             ["TITLE"] = view.Title,
             ["LANG"] = project.Manifest.Language,
-            ["CONTENT"] = $"<h1>{Esc(view.Title)}</h1>{docHtml}",
+            ["CONTENT"] = docHtml,
             ["PAGEDJS"] = "",
         });
     }

@@ -2,6 +2,7 @@ using System.Linq;
 using DocWiz.Build.Pdf;
 using DocWiz.Core.Markdown;
 using DocWiz.Core.Models;
+using Markdig;
 using Xunit;
 
 namespace DocWiz.Core.Tests.Pdf;
@@ -136,4 +137,58 @@ public class PrintHtmlBuilderTests
         Assert.DoesNotContain("class=\"pdf-cover\"", html);
         Assert.Contains(view.Title, html);
     }
+
+    [Fact]
+    public void DocumentView_ShowsItsTitleOnce()
+    {
+        // Regression: the template's title span, BuildView's own <h1> and RenderDocument's <h1>
+        // each printed the title — three times at the top of page 1.
+        var (project, pipeline) = TitleFreeProject();
+        var view = new ViewDefinition
+        {
+            Id = "qr", Title = "Quick Reference", Audience = "author", Mode = "document",
+            Slides = [new SlideDef { Title = "About this page", Markdown = "One page for authors." }],
+        };
+        var html = Builder(project).BuildView(project, view, pipeline);
+        Assert.Equal(1, BodyCount(html, view.Title));
+    }
+
+    [Fact]
+    public void Manual_ShowsProjectTitleOnlyOnTheCover()
+    {
+        // Regression: an unstyled title span printed the project name above the cover.
+        var (project, pipeline) = TitleFreeProject();
+        var html = Builder(project).BuildManual(project, pipeline);
+        Assert.Contains("class=\"pdf-cover\"", html);
+        Assert.Equal(1, BodyCount(html, project.Manifest.Project));
+    }
+
+    /// <summary>A one-chapter project whose content never mentions the project or a view
+    /// title, so a title count measures the print chrome alone.</summary>
+    private static (DocProject, MarkdownPipeline) TitleFreeProject() => (new DocProject
+    {
+        Root = @"C:\work\proj",
+        Manifest = new ProjectManifest { Project = "Stockroom Handbook", Code = "C", Language = "en" },
+        Chapters =
+        [
+            new Chapter
+            {
+                Id = "ch1",
+                Title = "Chapter One",
+                FilePath = @"C:\work\proj\content\010-s\010-ch1.md",
+                SectionSlug = "s",
+                SectionTitle = "S",
+                SortKey = "010-010",
+                Markdown = "# Chapter One\n\nBody text.",
+            }
+        ],
+        Views = [],
+    }, DocWizMarkdown.CreatePipeline());
+
+    /// <summary>Occurrences of <paramref name="text"/> on the printed page: the &lt;body&gt;,
+    /// not the &lt;title&gt; (that one only becomes the PDF's Title metadata).</summary>
+    private static int BodyCount(string html, string text) =>
+        System.Text.RegularExpressions.Regex.Matches(
+            html[html.IndexOf("<body", System.StringComparison.Ordinal)..],
+            System.Text.RegularExpressions.Regex.Escape(text)).Count;
 }

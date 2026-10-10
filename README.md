@@ -27,7 +27,7 @@ live surface IS the page) and DocWiz publishes as a self-contained single-file
   inlined, images base64 — HTML mode needs no Edge). It runs as a non-blocking background job with a
   completion toast. Chapters export as one combined file in book order; the manual is A4 portrait
   with a cover, "Page X of Y" footers, PDF bookmarks, and a page break per chapter; slides views are
-  16:9 (one page per slide); document views portrait; attached PDFs (which single-file HTML
+  16:9 (one page per slide); document views portrait, with each title printed once; attached PDFs (which single-file HTML
   can't embed) become a "see attachment" note. The engine is another rendering of the ONE Markdig
   pipeline (ADR-004/008) — a shared `ChapterDocumentAssembler` feeds both the native Chromium print
   path (`Page.printToPDF`, paginates in C++ so it stays fast at any scale) and the single-file HTML
