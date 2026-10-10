@@ -58,6 +58,18 @@ accent-on-surface contrast is roughly equal across themes.
 ### Semantic
 `--dw-ok / warn / bad` each gain a `-bg` tint for fills (issue rows, toasts, audience tags).
 **`--dw-warn` changed from `#b26a00` (3.6:1 — failed AA as text) to `#8f5400` (6.1:1).**
+**`--dw-ok` changed from `#2e7d32` to `#276b2b` (same hue, darker).** `#2e7d32` passes on white
+(5.1:1) but not where it is actually used: the Tip callout label sits on `--dw-ok-bg` over the
+page, and that was 4.13:1. The check for a light semantic colour is therefore its **own tint
+over each light plane**, not white:
+
+| As text on its `-bg` tint over → | `--dw-surface` | `--dw-bg` | `--dw-surface-2` |
+|---|---|---|---|
+| `--dw-ok` `#276b2b` | 5.6:1 | 5.2:1 | 4.8:1 |
+| `--dw-warn` `#8f5400` | 5.3:1 | 4.9:1 | 4.55:1 |
+| `--dw-bad` `#b3261e` | 5.8:1 | 5.3:1 | 4.9:1 |
+
+Each `-bg` tint is its colour at 8–10% alpha, so a new value re-derives the tint.
 Dark equivalents are desaturated pastels (`#79c47e`, `#d9a05b`, `#e5736c`) — saturated
 darks vibrate on dark surfaces.
 
