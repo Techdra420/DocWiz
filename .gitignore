@@ -20,6 +20,10 @@ obj/
 .vscode/
 .idea/
 
+# Claude desktop app: per-session worktrees and machine-local settings
+.claude/worktrees/
+.claude/settings.local.json
+
 # OS
 Thumbs.db
 .DS_Store

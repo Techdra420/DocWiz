@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "docwiz-editor",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "src/DocWiz.Cli", "--", "edit", "samples/stockroom-demo", "--port", "5230", "--no-browser"],
+      "port": 5230,
+      "url": "http://127.0.0.1:5230"
+    }
+  ]
+}
