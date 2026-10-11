@@ -139,7 +139,7 @@ samples/     example DocWiz content projects used for development and tests
 src/         DocWiz.Core, DocWiz.Build, DocWiz.App (editor), DocWiz.Cli
 templates/   handover site templates (embedded into DocWiz.Build) + project templates
 tests/       unit tests
-tools/       authoring-time conversion tools and the fidelity/probe harness
+tools/       authoring-time conversion tools and the fidelity/probe harness (layout, overflow, contrast)
 output/      generated handovers — git-ignored
 dist/        published DocWiz.exe — git-ignored
 ```

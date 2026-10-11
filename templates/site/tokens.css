@@ -25,9 +25,10 @@
   --dw-accent-surface: #eef2f6; /* NEW — OPAQUE audience-callout fill (alpha-free so contrast is real on any container); --dw-text 13:1, --dw-accent 7.8:1 */
   --dw-accent-glow: rgba(31, 78, 121, 0.25);
 
-  /* ---- Semantic (light) — all pass 4.5:1 on white as text ---------------- */
-  --dw-ok: #2e7d32;
-  --dw-ok-bg: rgba(46, 125, 50, 0.10);     /* NEW */
+  /* ---- Semantic (light) — as text each passes 4.5:1 on surface, bg and surface-2,
+     and on its own -bg tint over each (the tint is the colour at 8–10% alpha) ---- */
+  --dw-ok: #276b2b;                         /* was #2e7d32 (4.13:1 on its tint over --dw-bg, failed AA) */
+  --dw-ok-bg: rgba(39, 107, 43, 0.10);      /* NEW */
   --dw-warn: #8f5400;                       /* was #b26a00 (3.6:1, failed AA) */
   --dw-warn-bg: rgba(143, 84, 0, 0.10);     /* NEW */
   --dw-bad: #b3261e;

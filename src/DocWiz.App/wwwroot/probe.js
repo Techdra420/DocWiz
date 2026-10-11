@@ -65,27 +65,43 @@
     return (hi + 0.05) / (lo + 0.05);
   }
 
-  // Parse computed rgb()/rgba(); returns [r,g,b,a] or null.
+  // Parse a computed colour; returns [r,g,b,a] (0-255 channels) or null. Most colours compute
+  // to rgb()/rgba(), but a color-mix() result computes to color(srgb r g b / a) with 0-1
+  // channels (e.g. site.css's translucent table stripes) — read both, or that layer is lost.
   function parseColor(s) {
     var m = /rgba?\(([^)]+)\)/.exec(s || '');
+    if (m) {
+      var p = m[1].split(',').map(function (x) { return parseFloat(x); });
+      return [p[0], p[1], p[2], p.length > 3 ? p[3] : 1];
+    }
+    m = /color\(srgb ([^)]+)\)/.exec(s || '');
     if (!m) return null;
-    var p = m[1].split(',').map(function (x) { return parseFloat(x); });
-    return [p[0], p[1], p[2], p.length > 3 ? p[3] : 1];
+    var q = m[1].split(/[\s\/]+/).map(function (x) { return parseFloat(x); });
+    return [Math.round(q[0] * 255), Math.round(q[1] * 255), Math.round(q[2] * 255), q.length > 3 ? q[3] : 1];
   }
 
-  // Effective background: walk ancestors until a non-transparent background-color. If any
-  // ancestor paints a background-image we cannot reason about the pixel behind the text, so
-  // we report that honestly rather than guess.
+  // Effective background: the colour actually painted behind the text. Walk ancestors
+  // collecting background-colors until an opaque one (the page background at the latest), then
+  // composite the translucent ones over it bottom-up — a 13% callout tint must read as tinted
+  // page, not as the solid accent. If an ancestor paints a background-image before an opaque
+  // colour we cannot reason about the pixel behind the text, so we report that honestly rather
+  // than guess.
   function effectiveBg(el) {
-    var node = el;
-    while (node && node.nodeType === 1) {
+    var tints = [];
+    var rgb = [255, 255, 255]; // assume a white canvas if nothing opaque is painted
+    for (var node = el; node && node.nodeType === 1; node = node.parentElement) {
       var cs = getComputedStyle(node);
       if (cs.backgroundImage && cs.backgroundImage !== 'none') return { image: true };
       var c = parseColor(cs.backgroundColor);
-      if (c && c[3] > 0) return { rgb: [c[0], c[1], c[2]] };
-      node = node.parentElement;
+      if (!c || c[3] <= 0) continue;
+      if (c[3] >= 1) { rgb = c.slice(0, 3); break; }
+      tints.push(c);
     }
-    return { rgb: [255, 255, 255] }; // assume white page if nothing painted
+    for (var i = tints.length - 1; i >= 0; i--) {
+      var t = tints[i];
+      rgb = [0, 1, 2].map(function (k) { return t[k] * t[3] + rgb[k] * (1 - t[3]); });
+    }
+    return { rgb: rgb.map(Math.round) };
   }
 
   function isLargeText(cs) {
