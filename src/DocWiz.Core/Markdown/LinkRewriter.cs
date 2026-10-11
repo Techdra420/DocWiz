@@ -1,4 +1,5 @@
 using DocWiz.Core.Models;
+using Markdig.Renderers.Html;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
 
@@ -10,6 +11,8 @@ namespace DocWiz.Core.Markdown;
 /// - paths into assets/ and attachments/ → flat output folders
 /// - images whose source file is missing → visible placeholder box (never a broken img)
 /// Mutates the AST in place; run after validation, before rendering.
+/// A dwResolver/fragmentResolver returns null when the output has no such target; the link
+/// then becomes plain text (<see cref="Unlink"/>).
 /// </summary>
 public static class LinkRewriter
 {
@@ -26,8 +29,8 @@ public static class LinkRewriter
         MarkdownDocument doc,
         DocProject project,
         Func<string, string> chapterHref,
-        Func<string, string?, string>? dwResolver = null,
-        Func<string, string>? fragmentResolver = null)
+        Func<string, string?, string?>? dwResolver = null,
+        Func<string, string?>? fragmentResolver = null)
     {
         foreach (var link in doc.Descendants().OfType<LinkInline>().ToList())
         {
@@ -37,16 +40,16 @@ public static class LinkRewriter
             {
                 var (chapterId, anchor) = SplitRef(url[3..]);
                 if (project.FindChapter(chapterId) is not null)
-                    link.Url = dwResolver is not null
+                    SetOrUnlink(link, dwResolver is not null
                         ? dwResolver(chapterId, anchor)
-                        : chapterHref(chapterId) + (anchor is null ? "" : $"#{anchor}");
+                        : chapterHref(chapterId) + (anchor is null ? "" : $"#{anchor}"));
                 // Unresolvable dw: links are reported by the validator; leave them untouched here.
                 continue;
             }
 
             if (fragmentResolver is not null && url.StartsWith('#') && url.Length > 1)
             {
-                link.Url = fragmentResolver(url[1..]);
+                SetOrUnlink(link, fragmentResolver(url[1..]));
                 continue;
             }
 
@@ -70,6 +73,38 @@ public static class LinkRewriter
             if (TryGetLocalFile(url, ProjectLayout.AttachmentsFolder, out var attachmentName))
                 link.Url = $"{ProjectLayout.AttachmentsFolder}/{attachmentName}";
         }
+    }
+
+    private static void SetOrUnlink(LinkInline link, string? href)
+    {
+        if (href is null)
+            Unlink(link);
+        else
+            link.Url = href;
+    }
+
+    /// <summary>Replaces a link with its text, for a target the output does not contain. The
+    /// link's id (an explicit {#id} or attachment-N anchor) moves to a &lt;span&gt; so dw: links
+    /// and embeds that address it still resolve; <paramref name="note"/> is appended to the
+    /// text and <paramref name="cssClass"/> set on the span.</summary>
+    public static void Unlink(LinkInline link, string? note = null, string? cssClass = null)
+    {
+        var id = link.TryGetAttributes()?.Id;
+        var span = id is not null || cssClass is not null;
+        if (span)
+            link.InsertBefore(new HtmlInline("<span" +
+                (id is null ? "" : $" id=\"{System.Net.WebUtility.HtmlEncode(id)}\"") +
+                (cssClass is null ? "" : $" class=\"{cssClass}\"") + ">"));
+        while (link.FirstChild is { } child)
+        {
+            child.Remove();
+            link.InsertBefore(child);
+        }
+        if (note is not null)
+            link.InsertBefore(new LiteralInline(note));
+        if (span)
+            link.InsertBefore(new HtmlInline("</span>"));
+        link.Remove();
     }
 
     /// <summary>"cell-overview#daily-startup" → ("cell-overview", "daily-startup").</summary>

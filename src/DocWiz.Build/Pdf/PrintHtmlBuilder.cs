@@ -45,7 +45,7 @@ public sealed class PrintHtmlBuilder
         {
             // Slides reuse the on-screen layout engine: slides.js runs paginate() in print mode
             // (body.dw-pdf) then signals window.__slidesReady; the driver waits for that.
-            var rendered = Absolutize(ViewRenderer.RenderSlides(project, view, pipeline, edit: false));
+            var rendered = Absolutize(ViewRenderer.RenderSlides(project, view, pipeline, standalone: true));
             return Render("slides.print.html", new()
             {
                 ["TITLE"] = view.Title,
@@ -55,7 +55,7 @@ public sealed class PrintHtmlBuilder
             });
         }
 
-        var docHtml = Absolutize(ViewRenderer.RenderDocument(project, view, pipeline, linkSources: false, edit: false));
+        var docHtml = Absolutize(ViewRenderer.RenderDocument(project, view, pipeline, standalone: true));
         return Render("document.print.html", new()
         {
             ["TITLE"] = view.Title,

@@ -26,9 +26,13 @@ public static class ViewRenderer
     /// include heading, which the author must not silently inherit as explicit text). The
     /// present/handover deck (edit: false) is unchanged: empty regions are omitted and only a
     /// non-empty heading/subtitle render.</param>
+    /// <param name="standalone">True for a deck with no chapter pages next to it (PDF,
+    /// single-file HTML): its links follow <see cref="StandaloneLinks"/>, and a deck has no
+    /// in-document targets, so links to chapters become plain text.</param>
     public static string RenderSlides(DocProject project, ViewDefinition view, MarkdownPipeline pipeline,
-        bool edit = false)
+        bool edit = false, bool standalone = false)
     {
+        var links = standalone ? new StandaloneLinks() : null;
         var total = view.Slides.Count + 1; // + auto title slide
         var sb = new StringBuilder();
 
@@ -46,7 +50,7 @@ public static class ViewRenderer
             // Whole-chapter link expands to one slide per H2/H3 (always current with the manual).
             if (!string.IsNullOrWhiteSpace(slide.Chapter))
             {
-                AppendChapterSlides(project, view, slide.Chapter!, pipeline, sb, total, i, edit);
+                AppendChapterSlides(project, view, slide.Chapter!, pipeline, sb, total, i, edit, links);
                 continue;
             }
 
@@ -77,7 +81,7 @@ public static class ViewRenderer
             }
 
             RenderRegions(project, view, slide, pipeline, sb,
-                wrapRegions: true, emitSrcLines: false, indent: "      ", edit: edit);
+                wrapRegions: true, emitSrcLines: false, indent: "      ", edit: edit, links: links);
 
             sb.AppendLine($"      <div class=\"src\">{i + 2} of {total}</div>");
             sb.AppendLine("    </div>");
@@ -129,7 +133,7 @@ public static class ViewRenderer
     /// data-chapter-slide so the editor treats it as read-only — the content is the chapter's,
     /// changed by editing the chapter (the zone-mounter skips chapter entries).</summary>
     private static void AppendChapterSlides(DocProject project, ViewDefinition view, string chapterId,
-        MarkdownPipeline pipeline, StringBuilder sb, int total, int index, bool edit)
+        MarkdownPipeline pipeline, StringBuilder sb, int total, int index, bool edit, StandaloneLinks? links)
     {
         var chapter = project.FindChapter(chapterId)
             ?? throw new DocWizBuildException($"View '{view.Id}': chapter '{chapterId}' not found — run 'docwiz check'.");
@@ -151,7 +155,7 @@ public static class ViewRenderer
             sb.AppendLine($"    <div class=\"slide\" data-layout=\"{SlideLayout.TitleContent}\" data-src-anchor=\"{Escape(chapterId)}#{Escape(anchor)}\"{editAttrs}>");
             sb.AppendLine($"      <h1>{Escape(h.Text)}</h1>");
             sb.AppendLine("      <div class=\"slide-region\" data-region=\"body\">");
-            sb.AppendLine(RenderRegionContent(project, view, StripLeadingHeading(sectionMd), pipeline));
+            sb.AppendLine(RenderRegionContent(project, view, StripLeadingHeading(sectionMd), pipeline, links));
             sb.AppendLine("      </div>");
             sb.AppendLine($"      <div class=\"src\">{index + 2} of {total}</div>");
             sb.AppendLine("    </div>");
@@ -182,11 +186,14 @@ public static class ViewRenderer
         return null;
     }
 
-    /// <summary>linkSources: false for the standalone single-file export — the manual's
-    /// pages don't exist next to that file, so source references render as plain text.</summary>
+    /// <summary>linkSources: false omits the "open in manual" source references (the editor's
+    /// previews). standalone: true for a page with no chapter pages next to it (PDF, single-file
+    /// HTML) — source references are omitted, and links follow <see cref="StandaloneLinks"/>: a
+    /// link to a section this view embeds jumps to it, any other becomes plain text.</summary>
     public static string RenderDocument(DocProject project, ViewDefinition view, MarkdownPipeline pipeline,
-        bool linkSources = true, bool edit = false)
+        bool linkSources = true, bool edit = false, bool standalone = false)
     {
+        var links = standalone ? DocumentTargets(project, view, pipeline) : null;
         var sb = new StringBuilder();
         sb.AppendLine($"      <h1>{Escape(view.Title)}</h1>");
         sb.AppendLine($"      <p class=\"lead\">Filtered view for the {Escape(view.Audience)} audience — " +
@@ -208,7 +215,7 @@ public static class ViewRenderer
                 // slides surface mounts. No srclines (the live embed IS the content).
                 EmitEditableTitle(sb, project, view, slide, pipeline, indent: "        ", titleTag: "h2");
                 RenderRegions(project, view, slide, pipeline, sb,
-                    wrapRegions: true, emitSrcLines: false, indent: "        ", edit: true);
+                    wrapRegions: true, emitSrcLines: false, indent: "        ", edit: true, links: links);
             }
             else
             {
@@ -219,13 +226,43 @@ public static class ViewRenderer
                     sb.AppendLine($"        <p class=\"slide-sub\">{Escape(slide.Subtitle)}</p>");
 
                 RenderRegions(project, view, slide, pipeline, sb,
-                    wrapRegions: false, emitSrcLines: linkSources, indent: "        ");
+                    wrapRegions: false, emitSrcLines: linkSources && links is null, indent: "        ", links: links);
             }
 
             sb.AppendLine("      </section>");
         }
 
         return sb.ToString();
+    }
+
+    /// <summary>The sections a standalone document view contains, for its in-document links.
+    /// A lone embed's own target jumps to its section card (sec-N: the embedded heading itself
+    /// is not rendered, the card's title is); every id inside it, namespaced by
+    /// <see cref="RenderEmbedGrouped"/>, to itself. Reads the same resolved embeds the render
+    /// does (<see cref="ResolvedEmbed"/>), so a recorded id is a rendered id.</summary>
+    private static StandaloneLinks DocumentTargets(DocProject project, ViewDefinition view, MarkdownPipeline pipeline)
+    {
+        var links = new StandaloneLinks();
+        for (var i = 0; i < view.Slides.Count; i++)
+        {
+            var slide = view.Slides[i];
+            var regions = slide.EffectiveRegions();
+            foreach (var name in SlideLayout.RegionsFor(slide.EffectiveLayout))
+            {
+                if (!regions.TryGetValue(name, out var markdown))
+                    continue;
+                foreach (var block in Markdig.Markdown.Parse(markdown, pipeline))
+                {
+                    if (LoneBlockEmbed(block) is not { } embed)
+                        continue;
+                    var (chapterId, anchor) = LinkRewriter.SplitRef(embed.Reference);
+                    links.Add(chapterId, anchor, $"sec-{i}");
+                    links.AddAnchors(chapterId,
+                        DocWizMarkdown.CollectAnchors(ResolvedEmbed(project, view, embed.Reference, pipeline)));
+                }
+            }
+        }
+        return links;
     }
 
     /// <summary>
@@ -275,7 +312,7 @@ public static class ViewRenderer
     /// </summary>
     private static void RenderRegions(DocProject project, ViewDefinition view, SlideDef slide,
         MarkdownPipeline pipeline, StringBuilder sb, bool wrapRegions, bool emitSrcLines, string indent,
-        bool edit = false)
+        bool edit = false, StandaloneLinks? links = null)
     {
         var layout = slide.EffectiveLayout;
         var regions = slide.EffectiveRegions();
@@ -293,12 +330,12 @@ public static class ViewRenderer
             if (wrapRegions)
             {
                 sb.AppendLine($"{indent}<div class=\"slide-region\" data-region=\"{Escape(name)}\">");
-                sb.AppendLine(RenderRegionContent(project, view, markdown ?? "", pipeline));
+                sb.AppendLine(RenderRegionContent(project, view, markdown ?? "", pipeline, links));
                 sb.AppendLine($"{indent}</div>");
             }
             else
             {
-                sb.AppendLine(RenderRegionContent(project, view, markdown ?? "", pipeline));
+                sb.AppendLine(RenderRegionContent(project, view, markdown ?? "", pipeline, links));
                 if (emitSrcLines)
                     foreach (var reference in DocWizEmbed.FindRefs(markdown ?? "", pipeline))
                         sb.AppendLine($"{indent}<p class=\"srcline\"><a href=\"{SourceHref(reference)}\">open in manual: {Escape(reference)} →</a></p>");
@@ -318,16 +355,16 @@ public static class ViewRenderer
     /// "Is a lone embed" is the shared parse-based test (<see cref="LoneEmbedRef"/> →
     /// <see cref="DocWizEmbed.FindRefs"/>), never a hand-rolled regex.</summary>
     private static string RenderRegionContent(DocProject project, ViewDefinition view, string regionMarkdown,
-        MarkdownPipeline pipeline)
+        MarkdownPipeline pipeline, StandaloneLinks? links)
     {
         var doc = Markdig.Markdown.Parse(regionMarkdown ?? "", pipeline);
         var sb = new StringBuilder();
         foreach (var block in doc.ToList())
         {
             if (LoneBlockEmbed(block) is { } embed)
-                sb.Append(RenderEmbedGrouped(project, view, embed.Reference, embed.Width, embed.Align, pipeline));
+                sb.Append(RenderEmbedGrouped(project, view, embed.Reference, embed.Width, embed.Align, pipeline, links));
             else
-                sb.Append(RenderBlockInline(project, view, block, pipeline));
+                sb.Append(RenderBlockInline(project, view, block, pipeline, links));
         }
         return sb.ToString();
     }
@@ -348,32 +385,57 @@ public static class ViewRenderer
     /// <summary>Renders one lone embed RESOLVED — expanded, audience-filtered,
     /// link-rewritten through the one pipeline — wrapped in the SAME single
     /// <c>.dw-embed</c> container the editor's embed node uses, so edit DOM == ship DOM.
-    /// <paramref name="width"/>/<paramref name="align"/> (L205) size and place the box.</summary>
+    /// <paramref name="width"/>/<paramref name="align"/> (L205) size and place the box.
+    /// Standalone, its ids are namespaced by its chapter (<see cref="DocumentTargets"/>).</summary>
     private static string RenderEmbedGrouped(DocProject project, ViewDefinition view, string reference,
-        string? width, string? align, MarkdownPipeline pipeline)
+        string? width, string? align, MarkdownPipeline pipeline, StandaloneLinks? links)
+    {
+        var doc = ResolvedEmbed(project, view, reference, pipeline);
+        var (chapterId, _) = LinkRewriter.SplitRef(reference);
+        RewriteLinks(doc, project, links, chapterId);
+        var html = DocWizMarkdown.RenderHtml(doc, pipeline);
+        if (links is not null)
+            html = StandaloneLinks.NamespaceIds(html, chapterId);
+        return DocWizEmbed.WrapResolved(html, width, align);
+    }
+
+    /// <summary>One embed resolved and audience-filtered, links not yet rewritten — shared by
+    /// the render and <see cref="DocumentTargets"/> so both see the same ids.</summary>
+    private static Markdig.Syntax.MarkdownDocument ResolvedEmbed(DocProject project, ViewDefinition view,
+        string reference, MarkdownPipeline pipeline)
     {
         // Re-parse the canonical directive so resolution acts on a clean rooted document
         // (the block we matched still belongs to the region doc — a block has one parent).
         var doc = Markdig.Markdown.Parse(DocWizEmbed.DirectiveFor(reference), pipeline);
         DocWizEmbed.Resolve(doc, project, pipeline);
         AudienceFilter.Apply(doc, view.Audience);
-        LinkRewriter.Rewrite(doc, project, id => $"{id}.html");
-        return DocWizEmbed.WrapResolved(DocWizMarkdown.RenderHtml(doc, pipeline), width, align);
+        return doc;
     }
 
     /// <summary>Renders a single non-embed block inline through the one pipeline: any inline
     /// embed it holds is resolved, then audience-filtered and link-rewritten (a freshly
     /// rooted one-block document so the shared mutating passes act on it safely).</summary>
     private static string RenderBlockInline(DocProject project, ViewDefinition view, Markdig.Syntax.Block block,
-        MarkdownPipeline pipeline)
+        MarkdownPipeline pipeline, StandaloneLinks? links)
     {
         var doc = new Markdig.Syntax.MarkdownDocument();
         block.Parent?.Remove(block);
         doc.Add(block);
         DocWizEmbed.Resolve(doc, project, pipeline);
         AudienceFilter.Apply(doc, view.Audience);
-        LinkRewriter.Rewrite(doc, project, id => $"{id}.html");
+        RewriteLinks(doc, project, links, chapterId: null);
         return DocWizMarkdown.RenderHtml(doc, pipeline);
+    }
+
+    /// <summary>Handover (links null): a dw: link goes to the chapter page next to the view
+    /// page. Standalone: <see cref="StandaloneLinks"/>.</summary>
+    private static void RewriteLinks(Markdig.Syntax.MarkdownDocument doc, DocProject project,
+        StandaloneLinks? links, string? chapterId)
+    {
+        if (links is null)
+            LinkRewriter.Rewrite(doc, project, id => $"{id}.html");
+        else
+            links.Rewrite(doc, project, chapterId);
     }
 
     /// <summary>

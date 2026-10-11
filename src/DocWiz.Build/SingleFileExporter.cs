@@ -22,9 +22,9 @@ public static partial class SingleFileExporter
         string html = view.Mode == "slides"
             ? HandoverBuilder.ApplyBase(SiteTemplates.Read("slides.html")
                 .Replace("{{TABS}}", "")
-                .Replace("{{SLIDES}}", ViewRenderer.RenderSlides(project, view, pipeline)),
+                .Replace("{{SLIDES}}", ViewRenderer.RenderSlides(project, view, pipeline, standalone: true)),
                 HandoverBuilder.SiteBase, HandoverBuilder.SiteHome)
-            : DocumentShell(ViewRenderer.RenderDocument(project, view, pipeline, linkSources: false));
+            : DocumentShell(ViewRenderer.RenderDocument(project, view, pipeline, standalone: true));
 
         html = html
             .Replace("{{TITLE}}", Escape(view.Title))
