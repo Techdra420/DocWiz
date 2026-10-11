@@ -2,6 +2,7 @@ using System.Linq;
 using DocWiz.Build.Pdf;
 using DocWiz.Core.Markdown;
 using DocWiz.Core.Models;
+using Markdig;
 using Xunit;
 
 namespace DocWiz.Core.Tests.Pdf;
@@ -135,5 +136,81 @@ public class PrintHtmlBuilderTests
         // markup, not the bare "pdf-cover" substring — the inlined print.css contains the selector.
         Assert.DoesNotContain("class=\"pdf-cover\"", html);
         Assert.Contains(view.Title, html);
+    }
+
+    [Fact]
+    public void DocumentView_ShowsItsTitleOnce()
+    {
+        // Regression: the template's title span, BuildView's own <h1> and RenderDocument's <h1>
+        // each printed the title — three times at the top of page 1.
+        var (project, pipeline) = TitleFreeProject();
+        var view = new ViewDefinition
+        {
+            Id = "qr", Title = "Quick Reference", Audience = "author", Mode = "document",
+            Slides = [new SlideDef { Title = "About this page", Markdown = "One page for authors." }],
+        };
+        var html = Builder(project).BuildView(project, view, pipeline);
+        Assert.Equal(1, BodyCount(html, view.Title));
+    }
+
+    [Fact]
+    public void Manual_ShowsProjectTitleOnlyOnTheCover()
+    {
+        // Regression: an unstyled title span printed the project name above the cover.
+        var (project, pipeline) = TitleFreeProject();
+        var html = Builder(project).BuildManual(project, pipeline);
+        Assert.Contains("class=\"pdf-cover\"", html);
+        Assert.Equal(1, BodyCount(html, project.Manifest.Project));
+    }
+
+    /// <summary>A one-chapter project whose content never mentions the project or a view
+    /// title, so a title count measures the print chrome alone.</summary>
+    private static (DocProject, MarkdownPipeline) TitleFreeProject() => (new DocProject
+    {
+        Root = @"C:\work\proj",
+        Manifest = new ProjectManifest { Project = "Stockroom Handbook", Code = "C", Language = "en" },
+        Chapters =
+        [
+            new Chapter
+            {
+                Id = "ch1",
+                Title = "Chapter One",
+                FilePath = @"C:\work\proj\content\010-s\010-ch1.md",
+                SectionSlug = "s",
+                SectionTitle = "S",
+                SortKey = "010-010",
+                Markdown = "# Chapter One\n\nBody text.",
+            }
+        ],
+        Views = [],
+    }, DocWizMarkdown.CreatePipeline());
+
+    /// <summary>Occurrences of <paramref name="text"/> on the printed page: the &lt;body&gt;,
+    /// not the &lt;title&gt; (that one only becomes the PDF's Title metadata).</summary>
+    private static int BodyCount(string html, string text) =>
+        System.Text.RegularExpressions.Regex.Matches(
+            html[html.IndexOf("<body", System.StringComparison.Ordinal)..],
+            System.Text.RegularExpressions.Regex.Escape(text)).Count;
+
+    [Fact]
+    public void ManualAndDocumentView_KeepEveryHeadingWithWhatFollows()
+    {
+        // A table or figure may not split (break-inside: avoid), so without break-after: avoid
+        // on headings it moved to the next page and left its heading alone at the bottom of
+        // this one (DocWiz Guide quick reference, page 1). Every heading level, both page kinds.
+        var (project, pipeline) = TestRepo.LoadDemoProject();
+        var view = project.Views.First(v => v.Mode == "document");
+        foreach (var html in new[] { Builder(project).BuildManual(project, pipeline),
+                                     Builder(project).BuildView(project, view, pipeline) })
+        {
+            var css = System.Text.RegularExpressions.Regex.Replace(html, @"/\*.*?\*/", "",
+                System.Text.RegularExpressions.RegexOptions.Singleline);
+            var rules = System.Text.RegularExpressions.Regex.Matches(css, @"([^{}]*)\{([^{}]*)\}")
+                .Where(m => m.Groups[2].Value.Contains("break-after: avoid"))
+                .Select(m => m.Groups[1].Value.Split(',').Select(s => s.Trim()).ToHashSet())
+                .ToList();
+            foreach (var h in new[] { "h1", "h2", "h3", "h4", "h5", "h6" })
+                Assert.Contains(rules, selectors => selectors.Contains(h));
+        }
     }
 }

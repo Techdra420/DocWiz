@@ -2683,6 +2683,7 @@
   // section name, else an excerpt of the first authored region, else the layout name.
   // Mirrors the v1 slideThumbLabel idea adapted to the markdown-string region model.
   function slideLabelFor(slide) {
+    if (slide.chapter) return (chapterTitleFor(slide.chapter) || slide.chapter) + ' — whole chapter';
     if (slide.title && slide.title.trim()) return slide.title.trim();
     var names = SLIDE_REGIONS[slide.layout] || [];
     for (var i = 0; i < names.length; i++) {
@@ -2700,6 +2701,12 @@
       if (line) return line.slice(0, 48);
     }
     return layoutLabel(slide.layout) + ' slide';
+  }
+
+  // The hint on a whole-chapter entry, in the rail and on each of its slides on the canvas.
+  function chapterSlideTip(slide) {
+    return 'The whole chapter “' + (chapterTitleFor(slide.chapter) || slide.chapter) + '”, one slide per ' +
+      'section — always as current as the chapter. To change these slides, edit the chapter.';
   }
 
   // Index (into state.viewSlides) of the slide currently highlighted in the panel and
@@ -2750,6 +2757,7 @@
       item.draggable = true;
       item.dataset.i = i;
       item.setAttribute('aria-label', (deck ? 'Slide ' : 'Section ') + slideNo(i) + ': ' + slideLabelFor(slide));
+      if (slide.chapter) item.setAttribute('data-tip', chapterSlideTip(slide));
       item.appendChild(el('span', 'vpanel-num', String(slideNo(i))));
       if (deck) item.appendChild(thumbFor(i));
       else {
@@ -2762,7 +2770,8 @@
       more.innerHTML = TREE_ICONS.more;
       more.setAttribute('aria-label', (deck ? 'Slide ' : 'Section ') + slideNo(i) + ' actions');
       more.setAttribute('aria-haspopup', 'menu');
-      more.setAttribute('data-tip', deck ? 'Move this slide, change its layout, or delete it.' : 'Move or delete this section.');
+      more.setAttribute('data-tip', slide.chapter ? 'Move or delete this chapter’s slides.'
+        : deck ? 'Move this slide, change its layout, or delete it.' : 'Move or delete this section.');
       more.onclick = function (e) { e.stopPropagation(); slideMenu(more, i); };
       item.appendChild(more);
       item.onclick = function () { gotoSlide(i); };
@@ -2842,7 +2851,8 @@
     var items = [];
     if (i > 0) items.push({ text: 'Move up', run: function () { moveSlide(i, -1); } });
     if (i < state.viewSlides.length - 1) items.push({ text: 'Move down', run: function () { moveSlide(i, 1); } });
-    if (deck) {
+    // A whole-chapter entry has no layout of its own: its slides follow the chapter.
+    if (deck && !state.viewSlides[i].chapter) {
       if (items.length) items.push('-');
       items.push({ text: 'Layout' });
       LAYOUT_ORDER.forEach(function (name) {
@@ -2964,6 +2974,7 @@
   // cheap mistake to undo). Collect zone edits first so a delete never strands an edit to
   // another slide; then drop it, clamp the active index, mark dirty, re-render.
   function slideHasContent(slide) {
+    if (slide.chapter) return true;
     if (slide.title && slide.title.trim()) return true;
     if (slide.subtitle && slide.subtitle.trim()) return true;
     return Object.keys(slide.regions || {}).some(function (k) {
@@ -3000,6 +3011,9 @@
   // inspector always works in terms of regions. Unknown layouts pass through so the
   // author can see and re-pick them rather than silently losing content.
   function normalizeSlide(s) {
+    // A whole-chapter entry ('- chapter: <id>': one slide per section of that chapter, made
+    // by the renderer) is read-only here — keep its key verbatim so a save never drops it.
+    if (s.chapter) return { chapter: s.chapter, layout: null, title: null, subtitle: null, regions: {} };
     var layout = s.layout || null;
     var regions = {};
     if (s.regions && Object.keys(s.regions).length > 0) {
@@ -3033,6 +3047,7 @@
   // SlideDef.Regions contract). Prunes regions that are blank or not valid for the
   // layout so the YAML stays clean (an empty valid region is only a warning).
   function slidePayload(slide) {
+    if (slide.chapter) return { chapter: slide.chapter }; // exclusive with every other key
     var valid = SLIDE_REGIONS[slide.layout] || [];
     var regions = {};
     var any = false;
@@ -3305,6 +3320,11 @@
           // the `.slide.active[data-layout]` layout rules from site.css.
           Array.prototype.forEach.call(surface.querySelectorAll('.slide'), function (s) {
             s.classList.add('active');
+            // A whole-chapter entry's slides are read-only (no zone editors mount on them).
+            if (s.hasAttribute('data-chapter-slide')) {
+              var entry = state.viewSlides[parseInt(s.getAttribute('data-slide-index'), 10)];
+              if (entry) s.setAttribute('data-tip', chapterSlideTip(entry));
+            }
           });
           // Scale every 1920×1080 frame to the column (WYSIWYG with Read) before mounting
           // zones, so the zones mount inside an already-zoomed frame and carets are correct.

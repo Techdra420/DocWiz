@@ -312,15 +312,16 @@ public static class HandoverBuilder
     // (base "", home ".."); the entry/home page sits at the root (base "_site/", home "").
     private const string BaseToken = "{{BASE}}";
     private const string HomeToken = "{{HOME}}";
-    private const string SiteBase = "";
-    private const string SiteHome = "../";
+    internal const string SiteBase = "";
+    internal const string SiteHome = "../";
     private const string EntryBase = SiteFolder + "/";
     private const string EntryHome = "";
 
     /// <summary>Resolves the {{BASE}}/{{HOME}} link prefixes for one page. MUST run after
     /// {{TABS}}/{{NAV}}/{{CONTENT}}/{{PREVNEXT}} are substituted — those fragments carry the
-    /// tokens. One helper so RenderPage and the slides branch can't drift (ADR-008).</summary>
-    private static string ApplyBase(string html, string @base, string home) =>
+    /// tokens. One helper so RenderPage, the slides branch and SingleFileExporter can't drift
+    /// (ADR-008).</summary>
+    internal static string ApplyBase(string html, string @base, string home) =>
         html.Replace(BaseToken, @base).Replace(HomeToken, home);
 
     private static string RenderPage(string template, DocProject project, string generated, string tabs,

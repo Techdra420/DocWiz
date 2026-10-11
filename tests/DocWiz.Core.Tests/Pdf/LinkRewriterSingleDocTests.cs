@@ -39,6 +39,20 @@ public class LinkRewriterSingleDocTests
     }
 
     [Fact]
+    public void ResolverReturningNull_LeavesTheTextAndKeepsTheId()
+    {
+        var (project, pipeline) = TestRepo.LoadDemoProject();
+        var cid = project.Chapters[0].Id;
+        var doc = Parse($"See [the intro](dw:{cid}#intro){{#keep}} now.", pipeline);
+
+        LinkRewriter.Rewrite(doc, project, id => $"{id}.html", dwResolver: (_, _) => null);
+
+        var html = DocWizMarkdown.RenderHtml(doc, pipeline);
+        Assert.DoesNotContain("<a", html);
+        Assert.Contains("<span id=\"keep\">the intro</span> now.", html);
+    }
+
+    [Fact]
     public void Default_NoResolvers_KeepsHandoverBehavior()
     {
         var (project, pipeline) = TestRepo.LoadDemoProject();

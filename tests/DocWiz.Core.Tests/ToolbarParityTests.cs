@@ -114,6 +114,19 @@ public class ToolbarParityTests
     }
 
     [Fact]
+    public void LinkedSection_ToolbarAndSlashMenu_InsertTheSameWay()
+    {
+        // Same name, same behaviour: the toolbar's Insert ▾ › Linked section… once ran the
+        // relink (replace the block the cursor is in — the author's text was discarded) while
+        // the slash menu's inserted. Both now call the slash menu's one insert.
+        Assert.Contains("export function insertLinkedElement", Editor2("slashmenu.js"));
+        var main = Editor2("main.js");
+        Assert.Contains("import { insertLinkedElement } from './slashmenu.js'", main);
+        Assert.Contains("linked: () => { if (!blockedInCell()) insertLinkedElement(", main);
+        Assert.DoesNotContain("linked: () => relinkSelection()", main);
+    }
+
+    [Fact]
     public void ContextBar_More_OpensTheSharedMenu()
     {
         // The bar's ⋯ opens the kind's right-click menu (buildMenu), so a tool moved off the bar

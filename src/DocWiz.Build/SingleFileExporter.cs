@@ -17,11 +17,14 @@ public static partial class SingleFileExporter
     public static string ExportView(DocProject project, ViewDefinition view, MarkdownPipeline pipeline)
     {
         var m = project.Manifest;
+        // slides.html links its assets as {{BASE}}_dw/…; resolve them in site context (→ _dw/…)
+        // so InlineAssets' patterns match.
         string html = view.Mode == "slides"
-            ? SiteTemplates.Read("slides.html")
+            ? HandoverBuilder.ApplyBase(SiteTemplates.Read("slides.html")
                 .Replace("{{TABS}}", "")
-                .Replace("{{SLIDES}}", ViewRenderer.RenderSlides(project, view, pipeline))
-            : DocumentShell(ViewRenderer.RenderDocument(project, view, pipeline, linkSources: false));
+                .Replace("{{SLIDES}}", ViewRenderer.RenderSlides(project, view, pipeline, standalone: true)),
+                HandoverBuilder.SiteBase, HandoverBuilder.SiteHome)
+            : DocumentShell(ViewRenderer.RenderDocument(project, view, pipeline, standalone: true));
 
         html = html
             .Replace("{{TITLE}}", Escape(view.Title))
@@ -79,12 +82,14 @@ public static partial class SingleFileExporter
 
     private static string InlineAssets(string html, DocProject project)
     {
-        // CSS → inline <style>; JS → inline <script>; search dropped (irrelevant in one file).
+        // CSS → inline <style>; JS → inline <script>; search and the dev-only visual probe
+        // dropped (irrelevant in one file).
         html = html
             .Replace("<link rel=\"stylesheet\" href=\"_dw/tokens.css\">", Style("tokens.css"))
             .Replace("<link rel=\"stylesheet\" href=\"_dw/site.css\">", Style("site.css"))
             .Replace("<script src=\"_dw/search-index.js\"></script>", "")
             .Replace("<script src=\"_dw/search.js\"></script>", "")
+            .Replace("<script src=\"_dw/probe.js\" defer></script>", "")
             .Replace("<script src=\"_dw/site.js\"></script>", Script("site.js"))
             .Replace("<script src=\"_dw/slides.js\"></script>", Script("slides.js"));
 

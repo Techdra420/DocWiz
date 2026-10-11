@@ -24,11 +24,14 @@ live surface IS the page) and DocWiz publishes as a self-contained single-file
   "Export PDF or HTML…" action (the project menu → dialog with native folder picker, default
   `<project>/output/Export/`). Pick the **full manual, individual chapters (grouped by section),
   and/or each view**, and a **format**: **PDF** or a **single self-contained HTML file** (CSS/JS
-  inlined, images base64 — HTML mode needs no Edge). It runs as a non-blocking background job with a
+  inlined, images base64 — HTML mode needs no Edge; slide decks included — they exported unstyled
+  until the 2026-10-10 fix). It runs as a non-blocking background job with a
   completion toast. Chapters export as one combined file in book order; the manual is A4 portrait
   with a cover, "Page X of Y" footers, PDF bookmarks, and a page break per chapter; slides views are
-  16:9 (one page per slide); document views portrait; attached PDFs (which single-file HTML
-  can't embed) become a "see attachment" note. The engine is another rendering of the ONE Markdig
+  16:9 (one page per slide); document views portrait, with each title printed once; a heading
+  never ends a page on its own. Links work inside the exported file: one to a chapter or section
+  the file contains jumps there, any other becomes plain text, and a link to an attachment becomes
+  a "see attachment" note. The engine is another rendering of the ONE Markdig
   pipeline (ADR-004/008) — a shared `ChapterDocumentAssembler` feeds both the native Chromium print
   path (`Page.printToPDF`, paginates in C++ so it stays fast at any scale) and the single-file HTML
   exporter.
@@ -46,7 +49,9 @@ alongside the pilot: trust fixes first, then an editable structure (folder name 
 history + autosave, a calmer shell, first-class audiences, the outputs editor, and a
 consolidation pass — followed by a toolbar design pass (one-row formatting toolbar with Link,
 Insert and Align menus; named groups and a ⋯ menu in the context bars; scroll bars in the
-theme). Decisions and steps are in [docs/ROADMAP.md](docs/ROADMAP.md).
+theme), then two outputs-editor data-loss fixes (Insert › Linked section… no longer replaces
+the block the cursor is in; a whole-chapter `- chapter:` slide survives a save). Decisions and
+steps are in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 | Stage | Scope | Status |
 |-------|-------|--------|
@@ -56,7 +61,7 @@ theme). Decisions and steps are in [docs/ROADMAP.md](docs/ROADMAP.md).
 | 3 | Editor app MVP: live-surface chapters, images, links, templates, single exe | Complete (single exe verified on a clean machine) |
 | 4 | View manager in editor, single-file export, packaging | Complete |
 | 5 | Pilot on a real customer project (incl. Word import: editor Import… + New project from Word) | In progress (pilot loop) |
-| 6 | Editor redesign: trust fixes, editable structure, history + autosave, shell, audiences, outputs, consolidation, toolbar design pass | Steps 1–7 done (plus the toolbar design pass); awaiting the stakeholder's check of the success criteria |
+| 6 | Editor redesign: trust fixes, editable structure, history + autosave, shell, audiences, outputs, consolidation, toolbar design pass | Steps 1–7 done (plus the toolbar design pass and two outputs-editor data-loss fixes); awaiting the stakeholder's check of the success criteria |
 | — | Live editor: one surface that IS the page (M0–M5 ✓ — flipped 2026-06-12 after stakeholder sign-off; ADRs in ARCHITECTURE.md) | Shipped |
 
 ## Start here
@@ -139,7 +144,7 @@ samples/     example DocWiz content projects used for development and tests
 src/         DocWiz.Core, DocWiz.Build, DocWiz.App (editor), DocWiz.Cli
 templates/   handover site templates (embedded into DocWiz.Build) + project templates
 tests/       unit tests
-tools/       authoring-time conversion tools and the fidelity/probe harness
+tools/       authoring-time conversion tools and the fidelity/probe harness (layout, overflow, contrast)
 output/      generated handovers — git-ignored
 dist/        published DocWiz.exe — git-ignored
 ```
