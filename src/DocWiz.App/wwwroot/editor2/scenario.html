@@ -275,10 +275,10 @@
       const rows = () => fig.querySelectorAll('tbody tr').length
         || document.querySelector('#editor2 .dw-table-figure').querySelectorAll('tbody tr').length;
       const before = rows();
-      // Phase 4: table tools moved into the main toolbar shell's context track (.e2-tb-ctx)
-      // when a table is selected. The same behavioral assertion holds — clicking the
-      // + Row button adds a row; the selector changed to match the new DOM location.
-      const addRow = Array.from(document.querySelectorAll('.e2-maintoolbar button'))
+      // Table tools render in the .e2-contextbar sub-row (a sibling of .e2-maintoolbar inside
+      // .e2-top), not in the main toolbar. The behavioral assertion is unchanged — clicking
+      // the + Row button adds a row.
+      const addRow = Array.from(document.querySelectorAll('.e2-contextbar button'))
         .find((b) => (b.getAttribute('data-tip') || '').includes('Insert a row'));
       if (!addRow) throw new Error('context bar +Row button not found');
       addRow.click();
@@ -412,8 +412,10 @@
       if (!liveImg) throw new Error('image gone after the cell editor opened');
       mouse(liveImg, 'click');                          // shows the cell-image tools
       await sleep(40);
-      const alignBtn = Array.from(document.querySelectorAll('.e2-contextbar button'))
-        .find((b) => b.getAttribute('data-tip') === 'Align right');
+      // Align-right is the third button of the place capability group (box glyphs); its
+      // tooltip was reworded ("Align this picture to the right of the cell."), so locate it
+      // by capability rather than label, as figalignleft does (the assertion is unchanged).
+      const alignBtn = document.querySelectorAll('.e2-contextbar [data-cap="place"] button')[2];
       if (!alignBtn) throw new Error('cell-image Align right tool not shown');
       alignBtn.click();
       await sleep(40);
