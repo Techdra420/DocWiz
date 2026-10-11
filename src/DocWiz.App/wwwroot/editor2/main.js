@@ -22,6 +22,7 @@ import { serializeBlock } from './serialize.js';
 import { icon, sep } from './icons.js';
 import { BADGES, menuItem, menuCheck, menuSep, ibLabel, openContextMenu, closeOpenMenu } from './contexttools.js';
 import { INSERTS } from './inserts.js';
+import { insertLinkedElement } from './slashmenu.js';
 import { routePastedImage, dataImageGuard } from './pasteimage.js';
 
 const schema = createSchema();
@@ -1115,8 +1116,8 @@ function copySectionLink() {
   contextBar.flash('Copied ' + ref + ' — paste it into any text or chapter-link dialog.');
 }
 
-/* opts.linkTool marks the slide canvas: its Insert menu offers a Linked section (turn the block
-   you are in into a live-linked chapter section, Task 9), and it has no Readers button or
+/* opts.linkTool marks the slide canvas: its Insert menu offers a Linked section (a live-linked
+   chapter section, inserted like the slash menu's — Task 9), and it has no Readers button or
    section-link copy (a deck is already for one audience; a slide has no heading anchors).
    Edit · Source · Read lives in the document bar (app.js, Stage 6) and calls setMode() below. */
 function buildMainToolbar(opts) {
@@ -1435,7 +1436,8 @@ function buildMainToolbar(opts) {
     },
     block: () => { if (!blockedInCell() && bridge().element) bridge().element(); },
     group: () => { if (!blockedInCell()) createGroup(); },
-    linked: () => relinkSelection(),
+    // The slash menu's insert, not relinkSelection: it never replaces the block you are in.
+    linked: () => { if (!blockedInCell()) insertLinkedElement({ audience: contextBar.audience }); },
     character: () => showSymbolPalette(),
     divider: () => { if (!blockedInCell()) insertBlockAfterSelection(schema.nodes.horizontal_rule.create()); },
   };
@@ -2096,8 +2098,8 @@ window.DocWizEditor2 = {
   // runs block-type/list/quote commands through here so they behave exactly like the
   // toolbar buttons, which also act on getActiveView()).
   runActiveCmd: runCmd,
-  // Turn the selected block into a live-linked embed (Task 9 relink). Used by the slide
-  // toolbar's Link… button and the container context-bar Link… tool (views.js).
+  // Turn the selected block into a live-linked embed (Task 9 relink). Used by the container
+  // context-bar Link… tool (views.js), which says it replaces the block.
   relinkSelection,
   // Wrap the selected blocks in a group container, NodeSelect it, and open the naming
   // dialog (Task 10). The right-click menu can also call DocWizEditor2.createGroup().

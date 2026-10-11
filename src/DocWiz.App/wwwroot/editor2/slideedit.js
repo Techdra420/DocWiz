@@ -204,8 +204,8 @@ function unmountToolbar() {
 
 /* Pair each .slide-region with its working-model markdown and mount an editor.
    slides[] is the deck's working-model slides in render order (NOT including the auto
-   title slide); the rendered .slide elements are [title, slides[0], slides[1], …], so
-   region markdown for a .slide-region is slides[domSlideIndex-1].regions[name]. */
+   title slide); region markdown for a .slide-region is slides[i].regions[name], where i is
+   its card's data-slide-index. */
 export function mountAll(o) {
   opts = o || {};
   const surfaceEl = opts.surface;
@@ -215,8 +215,9 @@ export function mountAll(o) {
 
   // cardSelector: '.slide' for the slides surface, '.view-sec' for the document surface.
   // Each editable card carries an explicit data-slide-index (set by RenderSlides/RenderDocument
-  // edit mode) = its slides[] slot. Cards WITHOUT it — the auto title slide, the document lead,
-  // chapter-expansion slides — are read-only and skipped.
+  // edit mode) = its slides[] slot. Cards WITHOUT it — the auto title slide, the document lead —
+  // are read-only and skipped, and so are a whole-chapter entry's slides (they carry its slot,
+  // but their content is the chapter's: an edit here would have nowhere to be saved).
   const cardSelector = opts.cardSelector || '.slide';
   const cardEls = Array.prototype.slice.call(surfaceEl.querySelectorAll(cardSelector));
   const slides = opts.slides || [];
@@ -226,7 +227,7 @@ export function mountAll(o) {
     if (idxAttr === null) return;
     const slideIndex = parseInt(idxAttr, 10);
     const slide = slides[slideIndex];
-    if (!slide) return;
+    if (!slide || slide.chapter) return;
     // Editable title/subtitle on the card (every layout, incl. section-header which has
     // no regions) so a brand-new entry is authorable rather than a dead blank page.
     const titleEl = cardEl.querySelector('[data-slide-title]');
@@ -274,22 +275,17 @@ export function markClean() {
   dirty = false;
 }
 
-/* Re-derive a zone's working-model slide index from its CURRENT DOM position rather than
-   trusting the index cached at mount (Task 7c review I2). The surface renders slides as
-   [auto title slide, slides[0], slides[1], …]; a zone lives inside the (i)-th rendered
-   .slide, which maps to slides[i-1]. Today every deck mutation fully re-renders +
-   remounts, so the cached index is always correct — but Task 8's mid-deck insert could
-   leave mounted zones with stale cached indices, which would silently write an edit to
-   the wrong slide (or hit the `if (!slide)` guard and vanish). Reading the live DOM
-   position makes collect correct regardless of how the deck changed under the mounts.
-   Falls back to the cached index if the zone is somehow detached from the surface. */
+/* Re-derive a zone's working-model slide index from the LIVE card it sits in rather than
+   trusting the index cached at mount (Task 7c review I2): the card's data-slide-index, which
+   the renderer stamps from the slides[] slot itself. NOT the card's DOM position — a
+   whole-chapter entry renders as one slide per chapter section, so every slide after it
+   would map one or more slots too far and its edit would land on the wrong slide or vanish.
+   Every deck mutation collects zone edits first and then fully re-renders + remounts, so
+   the stamp is current. Falls back to the cached index if the zone is detached. */
 function liveSlideIndex(z) {
-  const slideEl = z.regionEl && z.regionEl.closest('.slide');
-  if (!slideEl || !slideEl.parentNode) return z.slideIndex;
-  const slideEls = slideEl.parentNode.querySelectorAll('.slide');
-  const domIndex = Array.prototype.indexOf.call(slideEls, slideEl);
-  if (domIndex < 0) return z.slideIndex;
-  return domIndex - 1; // subtract the auto title slide at DOM index 0
+  const card = z.regionEl && z.regionEl.closest('[data-slide-index]');
+  const idx = card ? parseInt(card.getAttribute('data-slide-index'), 10) : NaN;
+  return Number.isNaN(idx) ? z.slideIndex : idx;
 }
 
 /* Apply each EDITED zone's content back into the slides working model in place (Task 7c

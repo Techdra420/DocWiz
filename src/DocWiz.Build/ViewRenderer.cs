@@ -46,7 +46,7 @@ public static class ViewRenderer
             // Whole-chapter link expands to one slide per H2/H3 (always current with the manual).
             if (!string.IsNullOrWhiteSpace(slide.Chapter))
             {
-                AppendChapterSlides(project, view, slide.Chapter!, pipeline, sb, total, i);
+                AppendChapterSlides(project, view, slide.Chapter!, pipeline, sb, total, i, edit);
                 continue;
             }
 
@@ -56,8 +56,9 @@ public static class ViewRenderer
             var srcAnchor = SingleSourceRef(slide, pipeline);
             var anchorAttr = srcAnchor is null ? "" : $" data-src-anchor=\"{Escape(srcAnchor)}\"";
             // data-slide-index (edit only): the explicit slides[] slot the zone-mounter
-            // (DocWizSlideEdit.mountAll) reads. Chapter-expansion slides carry none (they
-            // derive from a chapter → read-only in the editor). Inert in read/handover.
+            // (DocWizSlideEdit.mountAll) reads. Chapter-expansion slides carry their entry's
+            // slot too, plus data-chapter-slide (read-only — see AppendChapterSlides). Inert
+            // in read/handover.
             var indexAttr = edit ? $" data-slide-index=\"{i}\"" : "";
 
             sb.AppendLine($"    <div class=\"slide\" data-layout=\"{Escape(layout)}\"{anchorAttr}{indexAttr}>");
@@ -122,9 +123,13 @@ public static class ViewRenderer
     /// <see cref="TransclusionResolver"/>, which bounds to the next same-or-higher level and would
     /// pull an H2's H3 children into the H2 slide). Each slide carries
     /// data-src-anchor="chapter#anchor"; content is audience-filtered like all transclusion.
-    /// Preamble under the chapter H1 (before the first H2) is intentionally dropped.</summary>
+    /// Preamble under the chapter H1 (before the first H2) is intentionally dropped.
+    /// <paramref name="edit"/>: every expanded slide carries the ONE slides[] slot it came from
+    /// (data-slide-index) so the editor's rail and canvas map it back to its entry, and
+    /// data-chapter-slide so the editor treats it as read-only — the content is the chapter's,
+    /// changed by editing the chapter (the zone-mounter skips chapter entries).</summary>
     private static void AppendChapterSlides(DocProject project, ViewDefinition view, string chapterId,
-        MarkdownPipeline pipeline, StringBuilder sb, int total, int index)
+        MarkdownPipeline pipeline, StringBuilder sb, int total, int index, bool edit)
     {
         var chapter = project.FindChapter(chapterId)
             ?? throw new DocWizBuildException($"View '{view.Id}': chapter '{chapterId}' not found — run 'docwiz check'.");
@@ -132,6 +137,7 @@ public static class ViewRenderer
         var body = chapter.Markdown;
         var lines = body.Replace("\r\n", "\n").Split('\n');
         var headings = HeadingScanner.Scan(body);
+        var editAttrs = edit ? $" data-slide-index=\"{index}\" data-chapter-slide" : "";
         for (var k = 0; k < headings.Count; k++)
         {
             var h = headings[k];
@@ -142,7 +148,7 @@ public static class ViewRenderer
             var sectionMd = string.Join("\n", lines[startLine..endLine]).Trim();
             var anchor = !string.IsNullOrWhiteSpace(h.Anchor) ? h.Anchor! : HeadingScanner.Slug(h.Text);
 
-            sb.AppendLine($"    <div class=\"slide\" data-layout=\"{SlideLayout.TitleContent}\" data-src-anchor=\"{Escape(chapterId)}#{Escape(anchor)}\">");
+            sb.AppendLine($"    <div class=\"slide\" data-layout=\"{SlideLayout.TitleContent}\" data-src-anchor=\"{Escape(chapterId)}#{Escape(anchor)}\"{editAttrs}>");
             sb.AppendLine($"      <h1>{Escape(h.Text)}</h1>");
             sb.AppendLine("      <div class=\"slide-region\" data-region=\"body\">");
             sb.AppendLine(RenderRegionContent(project, view, StripLeadingHeading(sectionMd), pipeline));

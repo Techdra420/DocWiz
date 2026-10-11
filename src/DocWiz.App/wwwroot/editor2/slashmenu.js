@@ -77,8 +77,10 @@ function items(opts) {
 
 /* Linked element: reuse the dw: section picker, resolve the directive through the one
    pipeline, and insert the resolved raw atom. All async — happens AFTER the '/query'
-   text was already removed by the caller. */
-function insertLinkedElement(opts) {
+   text was already removed by the caller. The ONE way to insert a linked section: the
+   toolbar's Insert ▾ › Linked section… calls it too (main.js), so both land it the same
+   way — on an empty line in place of it, otherwise after the block, never over text. */
+export function insertLinkedElement(opts) {
   const b = bridge();
   if (!b.pickSection) return;
   b.pickSection((ref) => {
