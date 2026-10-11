@@ -28,7 +28,7 @@ live surface IS the page) and DocWiz publishes as a self-contained single-file
   until the 2026-10-10 fix). It runs as a non-blocking background job with a
   completion toast. Chapters export as one combined file in book order; the manual is A4 portrait
   with a cover, "Page X of Y" footers, PDF bookmarks, and a page break per chapter; slides views are
-  16:9 (one page per slide); document views portrait. Links work inside the exported file: one
+  16:9 (one page per slide); document views portrait, with each title printed once. Links work inside the exported file: one
   to a chapter or section the file contains jumps there, any other becomes plain text, and a
   link to an attachment becomes a "see attachment" note. The engine is another rendering of the ONE Markdig
   pipeline (ADR-004/008) — a shared `ChapterDocumentAssembler` feeds both the native Chromium print
