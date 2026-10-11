@@ -191,4 +191,26 @@ public class PrintHtmlBuilderTests
         System.Text.RegularExpressions.Regex.Matches(
             html[html.IndexOf("<body", System.StringComparison.Ordinal)..],
             System.Text.RegularExpressions.Regex.Escape(text)).Count;
+
+    [Fact]
+    public void ManualAndDocumentView_KeepEveryHeadingWithWhatFollows()
+    {
+        // A table or figure may not split (break-inside: avoid), so without break-after: avoid
+        // on headings it moved to the next page and left its heading alone at the bottom of
+        // this one (DocWiz Guide quick reference, page 1). Every heading level, both page kinds.
+        var (project, pipeline) = TestRepo.LoadDemoProject();
+        var view = project.Views.First(v => v.Mode == "document");
+        foreach (var html in new[] { Builder(project).BuildManual(project, pipeline),
+                                     Builder(project).BuildView(project, view, pipeline) })
+        {
+            var css = System.Text.RegularExpressions.Regex.Replace(html, @"/\*.*?\*/", "",
+                System.Text.RegularExpressions.RegexOptions.Singleline);
+            var rules = System.Text.RegularExpressions.Regex.Matches(css, @"([^{}]*)\{([^{}]*)\}")
+                .Where(m => m.Groups[2].Value.Contains("break-after: avoid"))
+                .Select(m => m.Groups[1].Value.Split(',').Select(s => s.Trim()).ToHashSet())
+                .ToList();
+            foreach (var h in new[] { "h1", "h2", "h3", "h4", "h5", "h6" })
+                Assert.Contains(rules, selectors => selectors.Contains(h));
+        }
+    }
 }

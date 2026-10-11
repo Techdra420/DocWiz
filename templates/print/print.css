@@ -16,6 +16,10 @@ html, body { background: #fff; }
 
 figure, table, .dw-figure, .dw-table-figure { break-inside: avoid; }
 
+/* Keep a heading with what follows it: without this, a block that may not split (above)
+   moves to the next page and leaves its heading alone at the bottom of this one. */
+h1, h2, h3, h4, h5, h6 { break-after: avoid; }
+
 /* Printed code must wrap, not scroll: headless Edge bakes an overflow:auto scroll
    track into the PDF for lines wider than the text column. */
 pre { overflow: visible; white-space: pre-wrap; overflow-wrap: anywhere; }
