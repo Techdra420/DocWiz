@@ -7,6 +7,13 @@
       "runtimeArgs": ["run", "--project", "src/DocWiz.Cli", "--", "edit", "samples/stockroom-demo", "--port", "5230", "--no-browser"],
       "port": 5230,
       "url": "http://127.0.0.1:5230"
+    },
+    {
+      "name": "docwiz-app",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "src/DocWiz.Cli", "--", "edit", "--port", "5231", "--no-browser"],
+      "port": 5231,
+      "url": "http://127.0.0.1:5231"
     }
   ]
 }
