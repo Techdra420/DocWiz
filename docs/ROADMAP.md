@@ -10,15 +10,20 @@ check of the success criteria.
 merged to `main`. Remaining for the v1.0 tag: close the pilot loop + release hygiene (tag, prune).
 ADR-004 (amended), ADR-005, ADR-006, ADR-007, and ADR-008 are all written in
 [ARCHITECTURE.md](ARCHITECTURE.md).
-**Last Updated:** 2026-10-11 — a second in-app browser preview (`docwiz-app`: the welcome
-screen, port 5231). 2026-10-10 — Stage 6 (editor redesign) steps 1–7 shipped: trust fixes,
+**Last Updated:** 2026-10-11 — seven fixes of 2026-10-10 merged into `docwiz-guide` in one
+branch: the visual probe measures contrast against the background actually painted, and the
+light-theme Tip callout label it found below AA (darker `--dw-ok`); exported PDFs without dead
+links or the local user name, with each title printed once and every heading kept with what
+follows (the Guide's quick-reference PDF rebuilt with all three); single-file HTML export of
+slides views (opened unstyled); two outputs-editor data-loss fixes (Insert › Linked section… on
+a slide; `- chapter:` slides dropped on save); stale control selectors in two editor scenario
+modes. Also a second in-app browser preview (`docwiz-app`: the welcome screen, port 5231).
+2026-10-10 — Stage 6 (editor redesign) steps 1–7 shipped: trust fixes,
 structure you can edit, history then autosave, shell and document bar, audiences, outputs
 editor, consolidation; approved with its decisions and steps the same day; Claude desktop app
 setup; then a toolbar design pass (formatting toolbar, context bars, document bar, slide
 toolbar; scroll bars in the theme); then the DocWiz Guide template — the user manual,
-written in DocWiz, as a demo of every feature; then a visual-probe fix — text contrast is
-measured against the background actually painted (translucent callout tints no longer fail);
-then the light-theme Tip callout label it found below AA (darker `--dw-ok`).
+written in DocWiz, as a demo of every feature.
 
 Stage transitions require human approval. Success criteria are the checkpoints.
 
@@ -240,6 +245,7 @@ Open items (everything shipped is in Recent Changes):
 
 | Date | Stage | Description |
 |------|-------|-------------|
+| 2026-10-11 | Stage 5 | The seven fixes of 2026-10-10 below merged into `docwiz-guide` one at a time (branch `merge/docwiz-fixes`), each keeping its own tests. Where two touched the same code both still work: the single-file HTML export of a slides view inlines its assets (slides fix) and follows the standalone link rule (dead-links fix); a whole-chapter slide carries the editor's `data-slide-index`/`data-chapter-slide` (outputs-editor fix) and the standalone links; a document view's PDF prints its title once on top of the standalone render. `attachments/quick-reference.pdf` rebuilt once from the merged code |
 | 2026-10-11 | Tooling | `.claude/launch.json` gains `docwiz-app`: the editor on the welcome screen (no project preloaded, like double-clicking the exe) on port 5231, for the Claude desktop app's in-app browser; `docwiz-editor` (Stockroom demo, 5230) unchanged |
 | 2026-10-10 | Stage 5 | PDF export keeps a heading with what follows it: a table or figure may not split across pages (`break-inside: avoid`), so when one didn't fit it moved to the next page and left its heading alone at the bottom of the previous one (the DocWiz Guide's quick reference ended page 1 on "Building blocks"; 11 such pages across the guide's and the Stockroom demo's PDFs). `templates/print/print.css` gives h1–h6 `break-after: avoid`, for the manual, chapter exports and document views (slides are one page per slide). Page counts are unchanged; `PrintHtmlBuilderTests` checks the rule reaches the manual and a document view; the DocWiz Guide's `attachments/quick-reference.pdf` is regenerated |
 | 2026-10-10 | Stage 5 | PDF export prints each title once: a document view's PDF showed its title three times at the top of page 1 (an unstyled `pdf-doc-title` span left in the print templates, an `<h1>` added by `PrintHtmlBuilder.BuildView`, and the `<h1>` `ViewRenderer.RenderDocument` already emits), and the manual showed the project name as a stray line above its cover. The span is gone from `templates/print/document.print.html` and `manual.print.html`, and `BuildView` relies on `RenderDocument`'s heading; the manual keeps its cover. `PrintHtmlBuilderTests` asserts each title appears once on the printed page; the DocWiz Guide's `attachments/quick-reference.pdf` is regenerated |
